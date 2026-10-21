@@ -6,3 +6,8 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+
+# GHSA-67mh-4wv8-2f99: drizzle-kit's @esbuild-kit loader pins esbuild 0.18.x.
+# Force the patched release already used elsewhere in the tree.
+overrides:
+  "@esbuild-kit/core-utils>esbuild": 0.25.12

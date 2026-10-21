@@ -6,7 +6,11 @@ export const unitConfig = defineConfig({
     include: ["tests/unit/**/*.test.{ts,mjs}"],
     coverage: {
       provider: "v8",
-      include: ["packages/config/env.ts", "scripts/start.mjs"],
+      include: [
+        "packages/config/env.ts",
+        "scripts/start.mjs",
+        "packages/core/src/**/*.ts",
+      ],
       reporter: ["text", "json-summary", "html"],
     },
   },

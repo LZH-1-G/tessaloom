@@ -111,6 +111,8 @@ gantt
 
 ### M1 — Domain schemas and database (D1)
 
+> **Status: COMPLETED 2026-10-21.** Zod domain schemas and deterministic keys in `@tessaloom/core`; Drizzle schema (28 tables, 30 enums), migrations `0000`–`0001`, repositories, and the role script in `@tessaloom/db`; 91 unit and 23 PostgreSQL integration tests; `drizzle-kit check` in CI. V1-driven refinements are in DATABASE_SCHEMA §11 and ADR-020.
+
 - **Objective:** shared domain contracts and a migrated database with repositories.
 - **Inputs:** DATABASE_SCHEMA (all); AGENT_WORKFLOW §4, §14, §18; API_CONTRACTS §3, §4, §9.
 - **Scope:**

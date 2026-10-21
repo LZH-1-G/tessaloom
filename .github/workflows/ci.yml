@@ -19,6 +19,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # Schema/migration drift (M1): fails if migrations do not match the Drizzle schema.
+      - run: pnpm db:check
   unit:
     runs-on: ubuntu-latest
     steps:

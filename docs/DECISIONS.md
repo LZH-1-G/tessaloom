@@ -28,6 +28,7 @@
 | ADR-017 | **Single deployment service: one container, two supervised processes** | **Accepted** (supersedes the two-app deployment in ADR-001/002) | 2026-10-20 (review) |
 | ADR-018 | LLM model verification, configurable fallback model, cost model, and credentials | **Accepted** | 2026-10-20 (review) |
 | ADR-019 | V1-observed Qloo contract: endpoint configuration, transports, disambiguation, and evaluator redefinitions | **Accepted** | 2026-10-21 (V1) |
+| ADR-020 | M1 data-layer decisions: raw retention off by default, trigger-enforced immutability, pure-TS hashing, esbuild override | **Accepted** | 2026-10-21 (M1) |
 
 ---
 
@@ -272,6 +273,19 @@
   - Evaluator rules change before M6.
   - Raw recordings for contract fixtures cannot be committed until R-08 is resolved, so contract tests in CI rely on hand-written fixtures that mirror the observed shapes (labeled synthetic), plus the manually run live suite.
 
+### ADR-020: M1 data-layer decisions
+
+- **Date:** 2026-10-21 (M1).
+- **Decisions:**
+  1. **Raw Qloo payload retention is off by default.** Until Qloo or the organizers confirm storage and redistribution rights (R-08), the database stores only structural summaries and the normalized facts needed for traceability. Pointers are verified at ingest (`verifiedAtIngest`). Turning retention on is a deliberate configuration change, and the schema enforces consistency (`raw_retained` ⇔ `raw` present).
+  2. **Immutability by triggers.** Append-only tables reject `UPDATE` through triggers, which apply to every role and are testable, while role grants (`sql/roles.sql`) stay as defense in depth.
+  3. **Pure-TS SHA-256 and RFC 8785 JCS in `@tessaloom/core`.** This keeps `core` free of Node imports (lint-enforced) and makes deterministic keys synchronous. It is verified against FIPS 180-4 vectors and against system `shasum` for the golden experiment key.
+  4. **`drizzle-kit` transitive `esbuild` override.** `drizzle-kit@0.31.11` pulls `esbuild@0.18.20` through `@esbuild-kit/core-utils` (GHSA-67mh-4wv8-2f99, dev-server only). A pnpm override pins that path to the patched `esbuild@0.25.12` instead of adding an OSV exception. `drizzle-kit generate` and `check` were verified to work afterwards.
+  5. **Exhaustive role configuration.** `RunConfig.effortByRole` must name all six roles (Zod 4 enum-keyed records are exhaustive), so every run snapshot is complete.
+- **Consequences:**
+  - Contract tests cannot rely on stored raw recordings while retention is off.
+  - Without raw snapshots, replay of sample projects depends on R-08: either permission arrives, or samples run live within the quota guard (IMPLEMENTATION_PLAN §5).
+
 ---
 
 ## 3. Key trade-offs
@@ -346,4 +360,5 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | M1 implemented: Zod domain schemas, Drizzle schema (28 tables), migrations, repositories; ADR-020 recorded | DATABASE_SCHEMA §11 |
 | 2026-10-21 | V1 live Qloo validation (20 calls, hackathon endpoint); ADR-019 recorded; U-1, U-5, U-6, U-7 resolved; U-12 opened; R-02 handled; R-18 added | research/QLOO_V1_VALIDATION.md, API_CONTRACTS §5.5 |
