@@ -97,9 +97,16 @@ try {
     "postgres:16",
   );
   await until(() =>
-    docker("exec", db, "pg_isready", "-U", "tessaloom").includes(
-      "accepting connections",
-    ),
+    // TCP check: during initdb the temporary server listens only on the Unix socket.
+    docker(
+      "exec",
+      db,
+      "pg_isready",
+      "-h",
+      "127.0.0.1",
+      "-U",
+      "tessaloom",
+    ).includes("accepting connections"),
   );
   // M2: the image's release-step migrator applies the schema (forward-only, idempotent).
   const migrated = docker(
