@@ -19,3 +19,16 @@ ALTER DEFAULT PRIVILEGES FOR ROLE tessaloom_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO tessaloom_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tessaloom_app;
 REVOKE TRUNCATE ON ALL TABLES IN SCHEMA public FROM tessaloom_app;
+
+-- pg-boss job queue (schema created by the migrator, M4/ADR-023). The app role enqueues,
+-- fetches, and settles jobs but cannot alter the queue schema. Run this section after the first
+-- release migration has created the `pgboss` schema (re-running it is harmless).
+GRANT USAGE ON SCHEMA pgboss TO tessaloom_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE tessaloom_migrator IN SCHEMA pgboss
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tessaloom_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE tessaloom_migrator IN SCHEMA pgboss
+  GRANT USAGE, SELECT ON SEQUENCES TO tessaloom_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE tessaloom_migrator IN SCHEMA pgboss
+  GRANT EXECUTE ON FUNCTIONS TO tessaloom_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA pgboss TO tessaloom_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pgboss TO tessaloom_app;

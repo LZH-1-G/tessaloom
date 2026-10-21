@@ -31,6 +31,7 @@
 | ADR-020 | M1 data-layer decisions: raw retention off by default, trigger-enforced immutability, pure-TS hashing, esbuild override | **Accepted** | 2026-10-21 (M1) |
 | ADR-021 | M2 live Qloo adapter decisions: endpoint variables in the worker, MCP SDK version, routing, local unsupported answers, in-memory cache | **Accepted** | 2026-10-21 (M2) |
 | ADR-022 | M3 LLM gateway decisions: dependency direction (injected validators), SDK call shape, typed claim params, prompts in code, policies | **Accepted** | 2026-10-21 (M3) |
+| ADR-023 | M4 orchestrator decisions: machine in core, pure step handlers with commit plans, pg-boss topology, grading at collection, worker-published run config, retry and budget termination | **Accepted** | 2026-10-21 (M4) |
 
 ---
 
@@ -333,6 +334,52 @@
 
 ---
 
+### ADR-023: M4 orchestrator decisions
+
+- **Date:** 2026-10-21 (M4).
+- **Decisions:**
+  1. **The state machine lives in `packages/core`.** The worker applies transitions at step commits, and the web process applies them at human gates, cancellation, and retry. The web may import only `core` and `db`, so the transition table moved from `packages/agent/src/machine.ts` (AGENT_WORKFLOW §5.2) to `packages/core/src/machine.ts`; `packages/agent` re-exports it.
+  2. **Pure handlers, one commit per step.**
+     - `executeStep` (`packages/agent/src/steps.ts`) reads a read-only `StepContext` and calls Qloo and the LLM only through structural ports, which `QlooAdapter` and `LlmGateway` satisfy without casts.
+     - It returns a `CommitPlan` and never writes. The worker loads the context, runs the handler, re-checks `state_version` under a row lock, and persists in **one** transaction: the plan, the run events, the transition, usage, the experiment status, and the next `run.step` job (a transactional pg-boss `send` through the same client, `withPgTx`).
+     - Tool and LLM invocation rows are written when each call happens, as an audit trail (§6.2), so a crashed attempt keeps its invocations and quota usage.
+  3. **pg-boss 12.37.0 topology.**
+     - The release migrator installs the `pgboss` schema and the queues, because the app role has no DDL rights (`roles.sql` grants DML on `pgboss`).
+     - `run.step` uses policy `exclusive` with singleton key `run:<id>:<version>`, `retryLimit 2`, `retryDelay 15 s`, and `expireInSeconds 600`.
+     - Maintenance queues: `maintenance.expire-paused-runs` (every 15 min) and `maintenance.recover-runs` (every 5 min; re-enqueues runnable runs idle for more than 15 min).
+     - The worker supervises and schedules. The web process only sends.
+  4. **Deterministic grading happens at collection time.** Raw responses are not retained (R-08), so evaluators grade each claim in `COLLECTING_EVIDENCE` from the in-memory response and record facts with `verifiedAtIngest`. `EVALUATING_EVIDENCE` then computes statuses and scores, runs the R4 critique, and checks termination. The critique is stored in `hypotheses.score_breakdown.critique`, because evidence rows are append-only.
+  5. **Deterministic evidence planning.** Typed `ClaimParams` (ADR-022) fully determine each query. The planner maps claims to allowlisted methods, deduplicates identical queries, and trims by hypothesis priority to the remaining Qloo budget (`UNTESTED_BUDGET`). R4 uses the LLM for critique only, which saves one LLM call per iteration.
+  6. **The worker publishes its run configuration.**
+     - Each heartbeat carries the worker's `RunConfig`: models, efforts, prompt `version+hash`, adapter, harness, and ruleset (`worker_heartbeats.run_config`, migration 0002).
+     - The web stamps new runs with it and takes the experiment mode (`fixture` or `live`) from the worker. Without a fresh heartbeat, a start returns `503 WORKER_OFFLINE`.
+     - `/api/health/ready` requires a heartbeat younger than 30 s, judged by the database clock.
+     - The worker beats only once its job consumer is running.
+  7. **Root EXPLORATION definitions have no seeds.** Seeds are resolved from the brief during the run and recorded in `experiment_seeds` at `DISCOVERING`. The brief content hash already pins them in the experiment key.
+  8. **The wall-clock budget counts only runnable time**, summed from `STATE_ENTERED` events. Time spent paused at a gate is not charged.
+  9. **Retry after a transient failure.**
+     - A failure is transient when it is `LLM_UNAVAILABLE` or `STEP_RETRIES_EXHAUSTED`. Such failures store `error.transient` and `error.failedState`.
+     - A guarded `RETRY` event, the only transition out of a terminal state, re-enters `failedState` from `FAILED` (UI_UX_SPEC §6, "Retry step").
+     - Permanent failures return `409`.
+  10. **Budget termination (§12 rule 4).** The run emits `BUDGET_EXHAUSTED` and ends `COMPLETED_WITH_LIMITS` when no planned query fits the remaining Qloo budget, or when another revision round cannot be afforded.
+  11. **SSE by database polling.** The stream polls every 1 s and resumes from `Last-Event-ID` or `?after=`. It sends a `: ping` every 15 s and ends with `event: run-terminal` on a paused or terminal state. Each connection lasts at most 10 min, after which the client reconnects. LISTEN/NOTIFY is a later optimization.
+  12. **Web API security.**
+      - The `tl_ws` cookie holds a random secret; only its HMAC is stored.
+      - CSRF protection uses a double-submit `tl_csrf` token plus an `Origin`/`Host` match on every mutation.
+      - Rate limits run in process (single service): 6/min per workspace and 20/min per IP hash for starts; 60/min for other mutations.
+      - Bodies are limited to 64 KB.
+      - Error envelopes carry a `requestId` and no internals.
+- **Consequences and M4 limits (deliberate, for M5/M6):**
+  - R2 uses no LLM: an exact single candidate is auto-accepted, and anything else goes to H2.
+  - Tags are not fetched yet, so collision novelty is `REDUCED_INPUTS`.
+  - Feasibility is a flat 0.6 baseline.
+  - The V1 evaluator thresholds are placeholders until the M6 calibration.
+  - COUNTERFACTUAL, COMPOSITION, and REVALIDATION states fail with `STATE_NOT_IMPLEMENTED` (M7/M8).
+  - After a failed repair, an ungrounded element is not yet dropped; the run fails with `LLM_INVALID_OUTPUT`.
+  - The worker's `ScriptedLlmProvider` has no scripted outputs, so a scripted deployment fails closed with `LLM_NOT_CONFIGURED`. Deterministic scripted runs exist in the test harness only.
+
+---
+
 ## 3. Key trade-offs
 
 | Trade-off | Chosen side | Cost accepted |
@@ -405,6 +452,7 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | M4 implemented: state machine (core), pure step handlers, pg-boss worker with idempotent commits, budgets, cancellation, gates, expiry, recovery, retry, SSE, run API, heartbeat readiness; full scripted EXPLORATION passes; ADR-023 recorded | IMPLEMENTATION_PLAN M4 |
 | 2026-10-21 | M3 implemented: provider-agnostic LLM gateway (Anthropic + scripted providers), prompt registry, repair/refusal/truncation/fallback/budget policies, §13.2 validators in `packages/agent`; ADR-022 recorded | IMPLEMENTATION_PLAN M3 |
 | 2026-10-21 | M2 implemented: worker endpoint settings, live Qloo adapter (MCP/CLI routing, envelope parsing, normalizers, quota, cache, provenance), worker readiness and heartbeat; ADR-021 recorded; 3-call live smoke passed | API_CONTRACTS §6.7 |
 | 2026-10-21 | M1 implemented: Zod domain schemas, Drizzle schema (28 tables), migrations, repositories; ADR-020 recorded | DATABASE_SCHEMA §11 |

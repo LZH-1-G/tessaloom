@@ -121,6 +121,7 @@ export async function setClaimOutcome(
 export async function insertEvidence(
   db: Executor,
   input: {
+    id?: string; // pre-generated so the critic can cite evidence before it is committed
     claimId: string;
     hypothesisId: string;
     experimentId: string;
@@ -147,7 +148,7 @@ export async function insertEvidence(
   const [row] = await db
     .insert(evidenceRecords)
     .values({
-      id: uuidv7(),
+      id: input.id ?? uuidv7(),
       claimId: input.claimId,
       hypothesisId: input.hypothesisId,
       experimentId: input.experimentId,

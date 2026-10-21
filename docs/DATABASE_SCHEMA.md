@@ -634,3 +634,12 @@ The schema is implemented with Drizzle ORM (`packages/db/src/schema.ts`), plus a
 | Circular pointers | `projects.current_brief_version_id` and `experience_blueprints.current_revision_id` are `DEFERRABLE INITIALLY DEFERRED` foreign keys. |
 | Small additions | Enums `workspace_kind`, `experiment_mode`, `agent_role`; `usage_counters.day` is `YYYY-MM-DD` text with a format check; `consumeWithinLimit` is a single atomic upsert that never exceeds the limit. |
 
+### 11.1 M4 additions (2026-10-21)
+
+| Change | Detail |
+|---|---|
+| `worker_heartbeats.run_config` (jsonb, migration `0002_worker_run_config`) | The worker's runtime `RunConfig`, published with every beat. The web stamps new runs with it (ADR-023). |
+| `pgboss` schema | Installed by the release migrator (`installQueues`) with queues `run.step` (policy `exclusive`), `maintenance.expire-paused-runs`, and `maintenance.recover-runs`. `roles.sql` grants the app role DML on it after the first migration. |
+| Root EXPLORATION definitions | `ExperimentDefinition.seeds` may be empty. Seeds are written to `experiment_seeds` at `DISCOVERING`, and the brief hash pins them in the key. |
+| Critique storage | The R4 critique per hypothesis lives in `hypotheses.score_breakdown.critique`, because `evidence_records` is append-only. |
+

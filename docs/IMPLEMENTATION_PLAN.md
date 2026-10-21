@@ -181,6 +181,14 @@ gantt
 
 ### M4 — Orchestrator core, worker, SSE (D3)
 
+> **Status: COMPLETED 2026-10-21** with scripted LLM and fixture Qloo only (no paid or live calls). Decisions: ADR-023. **Deviations from the plan below:**
+> - The transition table lives in `packages/core/src/machine.ts`, so the web process can apply gate transitions.
+> - Handlers are functional for EXPLORATION, not stubs: intent, resolution, discovery, collision pool, generation, deterministic planning, collection with grading, critique, and revision. A full scripted EXPLORATION, including one revision round, passes in the integration suite.
+> - Handlers for the other run kinds return `STATE_NOT_IMPLEMENTED` until M7/M8.
+> - A guarded `RETRY` event leaves `FAILED` after transient failures.
+> - Readiness also requires the heartbeat's run configuration before runs can start.
+> - The screen capture of raw SSE events is not produced. SSE reconnection is covered by integration tests, and the container smoke reads the stream from the real image.
+
 - **Objective:** a durable state machine executing runs step by step, with events streamed to the browser.
 - **Inputs:** AGENT_WORKFLOW §4–§11, §17; API_CONTRACTS §4.3, §8, §10; DATABASE_SCHEMA §6.
 - **Scope:**

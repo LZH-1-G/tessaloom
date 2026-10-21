@@ -15,6 +15,13 @@
       "when": 1792552375451,
       "tag": "0001_integrity_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792566526914,
+      "tag": "0002_worker_run_config",
+      "breakpoints": true
     }
   ]
 }

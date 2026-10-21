@@ -967,6 +967,9 @@ export const workerHeartbeats = pgTable("worker_heartbeats", {
   qlooReady: boolean("qloo_ready").notNull().default(false),
   harnessVersion: text("harness_version"),
   transport: text("transport"),
+  // M4: the worker's runtime RunConfig (models, efforts, prompt versions, adapter/harness and
+  // ruleset versions). The web stamps new runs with it, so it never needs worker-only packages.
+  runConfig: jsonb("run_config"),
 });
 
 export const idempotencyKeys = pgTable(

@@ -248,6 +248,94 @@ try {
     20_000,
   );
   log("worker_heartbeat_passed");
+  // M4: one run travels web → pg-boss → worker inside the image. The scripted provider has no
+  // scripted outputs here, so the first LLM step fails closed with LLM_NOT_CONFIGURED.
+  /** @param {string} query */
+  const psql = (query) =>
+    docker(
+      "exec",
+      db,
+      "psql",
+      "-U",
+      "tessaloom",
+      "-d",
+      "tessaloom",
+      "-tAc",
+      query,
+    );
+  const workspaceResponse = await fetch(`${url}/api/v1/workspace`);
+  assert.equal(workspaceResponse.status, 200);
+  const cookies = workspaceResponse.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0]);
+  const csrf = String(
+    cookies.find((cookie) => cookie?.startsWith("tl_csrf=")),
+  ).slice("tl_csrf=".length);
+  const { id: workspaceId } = /** @type {{ id: string }} */ (
+    await workspaceResponse.json()
+  );
+  assert.match(workspaceId, /^[0-9a-f-]{36}$/);
+  const projectId = psql(
+    `INSERT INTO projects (id, workspace_id, name, use_case) VALUES (gen_random_uuid(), '${workspaceId}', 'Smoke', 'cafe') RETURNING id`,
+  ).split("\n")[0];
+  const brief = JSON.stringify({
+    title: "Smoke brief",
+    challenge: "A container smoke test brief with enough words.",
+    interests: [{ text: "Alpha" }, { text: "Beta" }],
+    venue: { type: "cafe" },
+    constraints: {},
+    goals: [],
+  });
+  const briefVersionId = psql(
+    `INSERT INTO brief_versions (id, project_id, version, content, content_hash) VALUES (gen_random_uuid(), '${projectId}', 1, '${brief}'::jsonb, repeat('a', 64)) RETURNING id`,
+  ).split("\n")[0];
+  const host = new URL(url).host;
+  const started = await fetch(
+    `${url}/api/v1/projects/${projectId}/experiments`,
+    {
+      method: "POST",
+      headers: {
+        cookie: cookies.join("; "),
+        origin: url,
+        host,
+        "x-tessaloom-csrf": csrf,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ briefVersionId, mode: "live" }),
+    },
+  );
+  assert.equal(started.status, 202);
+  const { runId, reused } = /** @type {{ runId: string; reused: boolean }} */ (
+    await started.json()
+  );
+  assert.equal(reused, false);
+  /** @type {{ state: string; terminalReason: string | null }} */
+  let finalRun = { state: "QUEUED", terminalReason: null };
+  await until(async () => {
+    finalRun = /** @type {typeof finalRun} */ (
+      await (
+        await fetch(`${url}/api/v1/runs/${runId}`, {
+          headers: { cookie: cookies.join("; ") },
+        })
+      ).json()
+    );
+    return finalRun.state === "FAILED";
+  }, 30_000);
+  assert.equal(finalRun.terminalReason, "LLM_NOT_CONFIGURED");
+  const sse = await (
+    await fetch(`${url}/api/v1/runs/${runId}/events`, {
+      headers: { cookie: cookies.join("; ") },
+      signal: AbortSignal.timeout(10_000),
+    })
+  ).text();
+  for (const type of ["RUN_STARTED", "STATE_ENTERED", "RUN_FAILED"])
+    assert(sse.includes(`"type":"${type}"`), `SSE stream lacks ${type}`);
+  assert(sse.includes("event: run-terminal"));
+  const mode = psql(
+    `SELECT e.mode FROM experiments e JOIN agent_runs r ON r.experiment_id = e.id WHERE r.id = '${runId}'`,
+  );
+  assert.equal(mode, "fixture");
+  log("run_queue_roundtrip_passed", { runId, state: finalRun.state });
   docker(
     "exec",
     "--user",

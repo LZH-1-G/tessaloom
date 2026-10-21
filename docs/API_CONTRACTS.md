@@ -602,6 +602,17 @@ type QlooProvenance = {
 | Readiness | `checkQlooReadiness`: `qloo --version` + `qloo doctor --json` (no network); ready only with a configured credential **and** the trusted hackathon endpoint. |
 | Live verification | A 3-call smoke through the real adapter on 2026-10-21: search (CLI) OK; "Lisbon"/locality → `NEEDS_INPUT` with 4 candidates (no disambiguation text); recommend (MCP) OK with `subtype` category, affinity, and harness provenance; trends/book → local `UNSUPPORTED`. |
 
+### 6.8 M4 run API status (2026-10-21)
+
+Implemented: `GET /api/v1/workspace`, `POST /api/v1/projects/:projectId/experiments`, `GET /api/v1/runs/:runId`, `GET /api/v1/runs/:runId/events`, and `POST /api/v1/runs/:runId/{confirmations,cancel,retry}`, plus heartbeat-aware `/api/health/ready` (ADR-023).
+
+- **Workspace and CSRF.** `GET /api/v1/workspace` issues the `tl_ws` cookie (HttpOnly) and the `tl_csrf` double-submit cookie. Every mutation requires `X-Tessaloom-CSRF` and a matching `Origin`/`Host`.
+- **Starting a run.** The experiment `mode` and the `RunConfig` come from the worker's latest heartbeat, never from the client (`mode: "live"` in the body is accepted as specified). Without a heartbeat younger than 30 s, the start returns `503 WORKER_OFFLINE`.
+- **Retry.** `POST /retry` returns `409` unless the run `FAILED` transiently.
+- **SSE.** The stream polls every 1 s and resumes from `Last-Event-ID` or `?after=`. It sends a `: ping` every 15 s and closes with `event: run-terminal` (`{ state, lastSeq }`) on a paused or terminal state.
+- **Queue topology (§8).** `run.step` uses policy `exclusive`. The migrator creates the `pgboss` schema and queues. `maintenance.recover-runs` (every 5 min) is added.
+- **Not yet implemented.** The project, brief, and other endpoints in §4.1–§4.7 arrive with their milestones (M5+).
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts
