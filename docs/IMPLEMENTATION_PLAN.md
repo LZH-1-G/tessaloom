@@ -1,6 +1,6 @@
 # Tessaloom — Implementation Plan (Codex-Executable Milestones)
 
-> **Status:** v1.1 · 2026-10-20 (review: single-service deployment ADR-017, LLM fallback ADR-018, verified rules, design emphasis)
+> **Status:** v1.2 · 2026-10-21 (V1 completed; M2 prerequisite from ADR-019; earlier: ADR-017, ADR-018, verified rules, design emphasis)
 > **Deadline:** **Friday 2026-10-30, 23:45 EDT** (= 2026-10-31 03:45 UTC). **Internal code freeze: 2026-10-30 18:00 EDT. Target submission: 2026-10-30 21:00 EDT** (a 2 h 45 min buffer).
 > **Capacity:** one developer, about 10 working days (Oct 21–30), assisted by Claude Code and OpenAI Codex.
 > **Related:** every document in `docs/`. Acceptance criteria refer to [TEST_PLAN.md](TEST_PLAN.md).
@@ -37,7 +37,7 @@ Each milestone is a **self-contained, independently verifiable** engineering tas
 |---|---|---|---|
 | D1 | Wed Oct 21 | **M0** Foundation · **M1** Domain schemas & database | CI green; migrations apply; core schemas tested |
 | D2 | Thu Oct 22 | **M2** Qloo adapter · **M3** LLM gateway | Fixture contract suite green; scripted LLM gateway green |
-| ASAP | When the key arrives | **V1** Live Qloo validation spike | LC-0…LC-12 recorded; normalizers updated; DECISIONS updated |
+| ASAP | When the key arrives | **V1** Live Qloo validation spike | **Done 2026-10-21:** LC-0…LC-12 (+13–16) executed; contract specified; ADR-019 |
 | D3 | Fri Oct 23 | **M4** Orchestrator core + worker + SSE | A full scripted EXPLORATION run in integration tests |
 | D4 | Sat Oct 24 | **M5** Brief, intent, resolution, discovery + pages | E2E-02/03/04 green |
 | D5 | Sun Oct 25 | **M6** Collision Engine + Hypothesis Loop + Hypothesis Lab | E2E-05/06 green; HL-A1…A5 |
@@ -127,20 +127,23 @@ gantt
 ### M2 — Qloo adapter (D2)
 
 - **Objective:** a `QlooPort` with harness MCP, harness CLI, and fixture transports, plus envelope mapping, caching, rate limiting, quota guard, and provenance.
-- **Inputs:** API_CONTRACTS §5, §6; AGENT_WORKFLOW §10; SECURITY §3.2, §8; TEST_PLAN §5.1.
+- **Inputs:** API_CONTRACTS §5 (**§5.5 observed contract prevails**), §6; DECISIONS ADR-019; AGENT_WORKFLOW §10; SECURITY §3.2, §8; TEST_PLAN §5.1, §5.2.
 - **Scope:**
+  - **Prerequisite from V1 (ADR-019 §1; needs a targeted re-review of the M0 supervisor):** add `QLOO_BASE_URL` and `QLOO_TRUSTED_BASE_URL` (non-secret) to the worker allowlist in `scripts/start.mjs` and to `workerEnvSchema`; update the ADR-017/SECURITY text and the allowlist unit tests; extend the container smoke so that `qloo doctor --json` under the supervised worker environment reports the hackathon endpoint as trusted; add both variables to `.env.example` and the Dockerfile `ENV`.
   - `HarnessMcpTransport`: MCP SDK client; spawns `qloo mcp` with `env: process.env`; `listTools()` logged and cached; `qloo_capabilities` readiness; restart with backoff; `AbortSignal` per call; 30 s timeout.
   - `HarnessCliTransport`: `execFile` without a shell; allowlisted commands (`exec <workflow> --input-file`, `api search … --json`); temp file cleanup.
   - `FixtureTransport` with the production guard; a fixture file format with the `_fixture` header; synthetic fixtures for the S1–S3 flows (fictional entity names).
-  - Envelope → `QlooOutcome` mapping; permissive normalizers (opaque items + `missingFields`).
+  - Envelope → `QlooOutcome` mapping for **both** shapes (result envelope and bare `{ error, operation, correlation_id }` with exit 1/4). Normalizers follow the observed mapping in API_CONTRACTS §6.2 (category from `subtype`; `compare_audiences` object results; trends `series`), with all fields optional and `missingFields` recorded. Harness `provenance.requests`, `interpretation`, `query_intent`, `resolution`, and `correlation_id` are copied into `tool_invocations`.
   - The snapshot cache (TTL per workflow); the in-flight dedup; the token bucket; the quota guard via `usage_counters`.
   - Every call writes `tool_invocations` (+ a snapshot).
   - A worker boot readiness check → `worker_heartbeats.qloo_ready`.
-- **Out of scope:** evaluators; any guessed field mappings beyond the confirmed envelope.
+- **Out of scope:** evaluators; any field mappings beyond those observed in V1 (API_CONTRACTS §5.5).
 - **Acceptance:** the TEST_PLAN §5.1 suite is green; the fixture-firewall tests are green; lint proves no import from live transports to fixtures.
 - **Evidence:** test output; a log excerpt of a fixture run showing provenance fields.
 
 ### V1 — Live Qloo validation spike (as soon as the key arrives; about 2–3 hours)
+
+> **Status: COMPLETED 2026-10-21** — 20 calls against `https://hackathon.api.qloo.com`. Report: [research/QLOO_V1_VALIDATION.md](research/QLOO_V1_VALIDATION.md); decisions: ADR-019. **Deviations from the plan below:** the tool schemas and envelopes were summarized in the report instead of being saved as raw JSON, and no recordings were written to `fixtures/qloo-recorded/` (R-08 unresolved). No normalizer code existed, so the observed mapping was specified in API_CONTRACTS §6.2 for M2. Evaluators were redefined, with numeric calibration deferred to M6. The rate-limit error code was not observed.
 
 - **Objective:** replace assumptions with recorded facts.
 - **Inputs:** TEST_PLAN §5.2; API_CONTRACTS §5.3.

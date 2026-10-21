@@ -1,6 +1,6 @@
 # Tessaloom — Architecture Decisions, Trade-offs, and Risks
 
-> **Status:** v1.1 · 2026-10-20 (architecture review: ADR-017, ADR-018 added) · ADR format: Context → Decision → Alternatives → Consequences
+> **Status:** v1.2 · 2026-10-21 (ADR-019 from V1 live validation; earlier: ADR-017, ADR-018) · ADR format: Context → Decision → Alternatives → Consequences
 > **Rule:** New decisions are appended with a date. Superseded decisions are marked, not deleted. Never record secrets here.
 
 ---
@@ -27,6 +27,7 @@
 | ADR-016 | Managed PostgreSQL (default Neon) and Fly.io (default host) | Confirmed engineering target in M0; provisioning remains M10. (Single service per ADR-017.) | 2026-10-21 |
 | ADR-017 | **Single deployment service: one container, two supervised processes** | **Accepted** (supersedes the two-app deployment in ADR-001/002) | 2026-10-20 (review) |
 | ADR-018 | LLM model verification, configurable fallback model, cost model, and credentials | **Accepted** | 2026-10-20 (review) |
+| ADR-019 | V1-observed Qloo contract: endpoint configuration, transports, disambiguation, and evaluator redefinitions | **Accepted** | 2026-10-21 (V1) |
 
 ---
 
@@ -247,6 +248,30 @@
   - API rate limits depend on the organization's usage tier; check them in the Console before judging (not verified here).
 - **Consequences:** Cost and availability risks are bounded and configurable. Model choice remains an owner decision, recorded per experiment.
 
+### ADR-019: V1-observed Qloo contract
+
+- **Date:** 2026-10-21 (V1 live validation; evidence in [research/QLOO_V1_VALIDATION.md](research/QLOO_V1_VALIDATION.md); 20 harness calls to `https://hackathon.api.qloo.com`).
+- **Context:** Before V1, tool schemas, item fields, and several capability semantics were assumptions (U-1, U-5, U-6, U-7). V1 observed them through the official harness only.
+- **Decisions:**
+  1. **Endpoint configuration.** Every process that runs `qloo` sets `QLOO_BASE_URL=https://hackathon.api.qloo.com` and `QLOO_TRUSTED_BASE_URL=https://hackathon.api.qloo.com`. **M2 prerequisite:** add both (non-secret) variables to the worker allowlist in `scripts/start.mjs` and to `workerEnvSchema`, update ADR-017 and SECURITY.md §3.2, extend the allowlist unit tests, and add a container-smoke assertion that `qloo doctor --json` reports the hackathon endpoint as trusted under the supervised worker environment. The web allowlist is unchanged.
+  2. **Transports.** Workflows use `qloo mcp` (primary) or `qloo exec` (fallback). They are proven equivalent (LC-12). `searchEntities` always uses `qloo api search`, because no search workflow exists. Endpoint checks never rely on `qloo api --dry-run`, whose printed URL ignores `QLOO_BASE_URL`.
+  3. **Envelope parsing.** Parse both the result envelope and the bare failure object `{ error, operation, correlation_id }`, and map exit codes 1 (`QLOO_CONTRACT`) and 4 (`QLOO_AUTH`). Copy the harness's `provenance.requests`, `interpretation`, `query_intent`, `resolution`, and `execution.correlation_id` into the evidence trace.
+  4. **Disambiguation.** `match: "exact"` is not sufficient for auto-acceptance: in LC-3 it selected a 0.21-popularity edition while the canonical entity (≈ 0.999) was an alternative. Gate H2 shows the selected entity plus its alternatives. Locality candidates are enriched with `searchEntities` `disambiguation` strings. Legacy `urn:entity:author` IDs are accepted as signals (LC-16) and labeled as legacy.
+  5. **Evaluator redefinitions** (ruleset version bump, AGENT_WORKFLOW §8.2):
+     - `AUDIENCE_BRIDGE` uses overlap lists and shared tag subtypes; there is no similarity score.
+     - `LOCATION_FIT` becomes intra-locality concentration over geohash cells.
+     - `MOMENTUM` is restricted to type and window combinations that return points; `book` → UNTESTABLE.
+     - `TAG_RESONANCE` uses an observed tag-type allowlist that excludes `endorsement`.
+     - `CROSS_DOMAIN_AFFINITY` reads `subtype` and uses relative affinity, preferring ≥ 2 signals.
+  6. **Honesty about face validity.** Single-seed cross-domain results can be culturally surprising (LC-5a, LC-5b). The UI labels them as aggregate audience affinity. Claim tests (`CROSS_DOMAIN_AFFINITY`) prefer combined entity and tag signals. The per-seed discovery threads of the Collision Engine (AGENT_WORKFLOW §16) stay single-seed by design and are labeled as such.
+- **Alternatives rejected:**
+  - Calling REST directly to obtain names for geohash cells: rejected, not a supported event surface.
+  - Trusting `describe` exact matches: rejected because of LC-3.
+- **Consequences:**
+  - M2 has a small, well-defined prerequisite in reviewed M0 code (decision 1), which needs a targeted re-review.
+  - Evaluator rules change before M6.
+  - Raw recordings for contract fixtures cannot be committed until R-08 is resolved, so contract tests in CI rely on hand-written fixtures that mirror the observed shapes (labeled synthetic), plus the manually run live suite.
+
 ---
 
 ## 3. Key trade-offs
@@ -269,13 +294,14 @@
 
 | # | Question | Blocking? | Resolution path |
 |---|---|---|---|
-| U-1 | Exact MCP tool input schemas and result item fields | Yes, for the evaluators | V1 (`listTools()` + recordings) |
+| U-1 | Exact MCP tool input schemas and result item fields | **Resolved 2026-10-21** (V1; API_CONTRACTS §5.5) | — |
 | U-2 | Event quota, rate limit, credential expiry | Yes, for budget tuning | Organizer publication / kit Q&A |
 | U-3 | Is storing/replaying Qloo responses allowed? | Yes, for the samples | Qloo terms review; ask the organizers |
 | U-4 | Official rules: video, criteria, eligibility | **Resolved 2026-10-20** (externally verified by the owner: deadline, individual participation, demo/repo/license/English requirements, video not mandatory, judging Nov 2–16, four equal criteria). Personal eligibility details remain for the owner to confirm. | HACKATHON_CHECKLIST §1.1 |
-| U-5 | Entity type token format accepted by the harness (`urn:entity:book` vs `book`) | Yes, for M5 | V1 |
-| U-6 | Does `qloo_recommend` support tag/location filters? | Partly (test kinds degrade) | V1 |
-| U-7 | Is an MCP tool available for plain entity search, or only `qloo api search`? | No (the CLI fallback exists) | V1 |
+| U-5 | Entity type token format accepted by the harness (`urn:entity:book` vs `book`) | **Resolved 2026-10-21:** workflows take short names (`book`, `tv_show`, `videogame`, …); outputs use URNs; `qloo api search --type` accepts both aliases and URNs | — |
+| U-6 | Does `qloo_recommend` support tag/location filters? | **Resolved 2026-10-21:** the schema supports `signal_tags`, `include_tags`/`exclude_tags` with operators, `signal_location`, `filter_location`, `demographic`. Tag signals were exercised live (LC-5b); location and demographic parameters were not exercised. | M2 live suite |
+| U-7 | Is an MCP tool available for plain entity search, or only `qloo api search`? | **Resolved 2026-10-21:** only `qloo api search` | — |
+| U-12 | Event quota, rate-limit error code, credential expiry (still unpublished) | Yes, for budget tuning | Organizers / kit Q&A |
 | U-8 | The runtime LLM budget the owner will fund | Yes, for the hosted demo | The owner, by M3. Recommendation: $150 prepaid (ADR-018). |
 | U-9 | Final hosting vendor choice (single service per ADR-017) | **Resolved 2026-10-21** as the engineering target: Fly.io + Neon; paid provisioning remains subject to owner authorization | ADR-016; hosted validation in M10 |
 | U-10 | Does the hosting platform allow a root container start (needed for per-process UIDs)? | No (fallback: one non-root user + documented residual risk) | M0 / M10 |
@@ -290,7 +316,7 @@ Likelihood and impact use H/M/L.
 | ID | Risk | L | I | Mitigation | Owner | Trigger / check date |
 |---|---|---|---|---|---|---|
 | R-01 | The Qloo key arrives late or never | M | H | Fixture-based development; V1 prepared; escalation via kit channels; an honest public demo state (no fixtures in production) | Owner | Oct 26 |
-| R-02 | Harness tool schemas differ from the assumptions | M | H | Permissive normalizers, optional fields, per-test-kind degradation, a V1 spike | Dev | V1 |
+| R-02 | Harness tool schemas differ from the assumptions | **Materialized and handled** (2026-10-21) | M | Differences documented in ADR-019 and API_CONTRACTS §5.5; evaluators redefined; normalizer mapping specified for M2 | Dev | Closed after M2 contract tests |
 | R-03 | Event quota too small for judging traffic | M | H | Cache, the quota guard, replay samples, per-workspace limits | Dev | After the quota is published |
 | R-04 | The schedule (10 days, solo) is too tight for all eight modules | H | H | A daily milestone plan; depth reductions (IMPLEMENTATION_PLAN §4); AI-assisted parallel work on M7/M9; a hard freeze | Owner | Daily |
 | R-05 | Runtime LLM costs or provider access | M | M | ADR-018: cost model (≈ $1.09 per typical exploration on Opus 5.5), $150 prepaid budget with a Console spend limit, a global daily cap, the Sonnet 5.5 fallback / economy mode, replay samples at $0 | Owner | M3 |
@@ -306,6 +332,7 @@ Likelihood and impact use H/M/L.
 | R-15 | Process-level secret isolation is weaker than separate services (ADR-017) | L | M | Env allowlists, UID separation, the web env deny-list, provider spend limits, the Qloo quota guard; the option to split via `TL_ROLE` | Dev | M10 |
 | R-16 | Memory pressure from three Node processes in one container (web, worker, `qloo mcp`) | M | M | Start with 2 GB RAM; measure in M10; restart policy; heap limits per child (`--max-old-space-size`) | Dev | M10 |
 | R-17 | "Design" is 25% of judging but at risk of being squeezed by backend work | M | H | Reserve UI polish time in M7/M9/M10; design acceptance in TEST_PLAN; no design work moved to stretch | Owner | Daily |
+| R-18 | Cross-domain Qloo affinities can look culturally implausible for single seeds (V1 LC-5a/5b), which hurts perceived quality | M | M | Claim tests prefer combined entity and tag signals; per-seed threads labeled; relative-affinity evaluators; aggregate-affinity labeling; collision tension keeps selection deliberate | Dev | M6 |
 
 ---
 
@@ -319,3 +346,4 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | V1 live Qloo validation (20 calls, hackathon endpoint); ADR-019 recorded; U-1, U-5, U-6, U-7 resolved; U-12 opened; R-02 handled; R-18 added | research/QLOO_V1_VALIDATION.md, API_CONTRACTS §5.5 |
