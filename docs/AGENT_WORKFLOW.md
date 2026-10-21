@@ -57,6 +57,7 @@ export const RunState = z.enum([
   "AWAITING_ENTITY_CONFIRMATION",   // human gate H2 (only if ambiguous)
   "DISCOVERING",                    // R2 (cross-domain expansion)
   "BUILDING_COLLISION_POOL",        // deterministic Collision Engine stage
+  "AWAITING_POOL_CONFIRMATION",     // human gate H2b (pool + tension; ADR-025)
   "GENERATING_HYPOTHESES",          // R3
   "PLANNING_EVIDENCE",              // R4 (plan) + orchestrator validation
   "COLLECTING_EVIDENCE",            // orchestrator executes Qloo queries
@@ -270,6 +271,8 @@ Each hypothesis claim declares a `testKind`. The test kind determines which tool
 | `MOMENTUM` | Is an element rising, making the concept timely? | `trends(entityType, entities[1..5], dateRange)` | SUPPORTS if `population_rank_velocity` > 0 and `velocity_fold_change` ≥ `φ` over the latest points; NEUTRAL if flat. **Empty `points` → INSUFFICIENT; `book` → UNTESTABLE.** | 🟨 **V1 partial:** `movie` returned 10 points with the documented fields; `book` → `QLOO_CONTRACT`; a 2026 `artist` window returned 0 points (LC-9…9d). |
 | `AUDIENCE_PROFILE` | What aggregate audience characteristics does the combined concept attract? (Planning context only) | `audienceDemographics(entity)` | Descriptive only: NEUTRAL stance with aggregate facts. Values are **relative indices in [−1, 1]**, never shown as shares of people. **Never** used to exclude or target individuals. | ✅ **V1 confirmed:** `age` (6 bands) and `gender` indices (LC-10). |
 
+**M6 implementation (`ruleset-2026.10-m6`, ADR-025):** the shipped evaluators are rank- and structure-based. `δ` and `σ_min` are replaced by top-quartile rank and a tie rule (spread < 0.005). `ω`, `α`, `r`, and `φ` are not yet calibrated: those tests return INSUFFICIENT with "evaluator pending live calibration" instead of an invented threshold. `MOMENTUM` uses the sign of the rank velocity over the latest 3 points. Each evidence record stores the applied rule in plain language (`rationale`).
+
 `K`, `m`, `δ`, `σ_min`, `ω`, `α`, `r`, and `φ` are versioned in `EVALUATION_RULESET_VERSION`. Starting defaults: `K = 20` (the harness maximum per call), `m = 3`. The new V1 parameters start as placeholders and are calibrated in M6 from live observations; the calibration is recorded in DECISIONS.md. Every evidence record stores the ruleset version that graded it. The test-kind semantics above follow [ADR-019](DECISIONS.md#adr-019-v1-observed-qloo-contract).
 
 ---
@@ -299,7 +302,7 @@ Each hypothesis claim declares a `testKind`. The test kind determines which tool
 | Remaining cost budget too small for the primary model | Gateway pre-check | Use `LLM_FALLBACK_MODEL` for the step if its estimate fits | `BUDGET_EXHAUSTED` → `COMPLETED_WITH_LIMITS` |
 | LLM `stop_reason: refusal` | Gateway | Server-side fallback (if enabled) handles it once; otherwise no retry | Step outcome `REFUSED` → run `FAILED` with a neutral user message suggesting the brief be rephrased |
 | LLM `stop_reason: max_tokens` | Gateway | 1 retry with a 1.5× `max_tokens` cap if within budget | `FAILED` (`LLM_OUTPUT_TRUNCATED`) |
-| LLM output fails schema or semantic validation | Gateway / validators | 1 **repair attempt**: the validation errors are sent back as a user message; the conversation is append-only | Step fails. The invalid output is stored for debugging (`llm_invocations.validation_status = INVALID`). Run `FAILED` (`LLM_INVALID_OUTPUT`). |
+| LLM output fails schema or semantic validation | Gateway / validators | 1 **repair attempt**: the validation errors are sent back as a user message; the conversation is append-only | If the output is schema-valid, R3/R4 **salvage** it (ADR-025): ungrounded elements, invalid claims, and invalid critique entries are dropped and logged as `VALIDATION_FAILED`; the step continues with what survives. If nothing survives, or the output is not schema-valid, the step fails. The invalid output is stored for debugging (`llm_invocations.validation_status = INVALID`). Run `FAILED` (`LLM_INVALID_OUTPUT`). |
 | DB serialization or stale `stateVersion` | Commit | Abort the commit; drop the stale job | The latest run state wins |
 | Worker crash mid-step | pg-boss visibility timeout | Job retried (max 2) | `FAILED` (`STEP_RETRIES_EXHAUSTED`) |
 
@@ -313,6 +316,7 @@ Each hypothesis claim declares a `testKind`. The test kind determines which tool
 |---|---|---|---|
 | **H1 — Brief confirmation** | After R1 | The `IntentFrame` as editable chips: interests, domains, venue, constraints, goals, plus detected ambiguities | Confirm · Edit brief (creates a new brief version) |
 | **H2 — Entity confirmation** | When an interest is ambiguous, unresolved, or returned `needs_input` | Candidate entities and tags with Qloo type, disambiguating details, and **only** the fields Qloo actually returned | Pick a candidate · Refine search text · Exclude the interest |
+| **H2b — Pool confirmation** (ADR-025) | After the Collision Engine builds the pool | The selected collision candidates with relevance, novelty, tension fit, and `REDUCED_INPUTS` flags; a Harmonious ↔ Unexpected tension slider that re-selects the pool in the browser from stored scores | Commit the pool at a tension (the server re-selects with the same engine; ≥ 3 candidates) |
 | **H3 — Hypothesis selection** | End of EXPLORATION | Ranked hypothesis cards with evidence status | Select 1–3 for composition · Branch (what-if) · Finish without selecting |
 | **H4 — Counterfactual cost confirmation** | A delta needs more than 6 Qloo calls | The dirty query list, estimated calls, remaining daily quota | Run · Reduce scope · Cancel |
 | **Blueprint review** | After COMPOSITION | Draft blueprint with traceability markers | Accept · Edit (creates a user revision) · Recompose section |

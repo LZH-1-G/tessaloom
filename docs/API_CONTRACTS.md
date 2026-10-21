@@ -135,6 +135,7 @@ type ConfirmationResponse =
         | { type: "candidate"; candidateId: UUID }
         | { type: "refine"; text: string }
         | { type: "exclude" } }[] }
+  | { kind: "POOL"; tension: number /* 0.2–0.9, gate H2b (ADR-025) */ }
   | { kind: "HYPOTHESIS_SELECTION"; selectedHypothesisIds: UUID[] /* 0–3 */ }
   | { kind: "COUNTERFACTUAL_COST"; action: "run" | "cancel"; maxQlooCalls?: number };
 ```
@@ -623,6 +624,12 @@ Added:
 - `GET /api/v1/system/status` (worker online, mode, Qloo readiness).
 
 Every read is workspace-scoped, and a production build refuses to serialize `DEVELOPMENT_FIXTURE` records (AGENT_WORKFLOW §13.1). The BRIEF confirmation accepts `interestDomains` edits, and an ENTITIES `candidate` choice may name a tag ID.
+
+### 6.10 M6 API status (2026-10-21)
+
+- **Gate H2b.** A run pauses at `AWAITING_POOL_CONFIRMATION` with `pendingConfirmation = { kind: "POOL", tension }`. `POST /runs/:runId/confirmations` with `{ kind: "POOL", tension }` re-selects the stored pool with core `selectPool`, updates `collision_candidates.selected/rank/tension_fit`, and continues the run. It returns `422` when the tension leaves fewer than 3 candidates.
+- **Hypothesis selection.** `{ kind: "HYPOTHESIS_SELECTION", selectedHypothesisIds }` (0–3, active hypotheses only) sets `user_pinned` and completes the EXPLORATION run.
+- **Experiment read model.** Evidence now carries `rationale` (the evaluator's plain-language rule). `scoreBreakdown` carries `feasibility { version, rules[] }`, `noveltyInputs`, and the critic's `critique`, labeled as interpretation.
 
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 

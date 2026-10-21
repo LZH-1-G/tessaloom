@@ -200,6 +200,7 @@ export type LlmResult<T> = {
         | "CANCELLED"
         | "CONFIGURATION";
       issues?: ValidationIssue[];
+      salvage?: T;
     }
 );
 

@@ -1,4 +1,9 @@
-import type { LlmPort, Ports, QlooPort } from "@tessaloom/agent";
+import {
+  EVALUATION_RULESET,
+  type LlmPort,
+  type Ports,
+  type QlooPort,
+} from "@tessaloom/agent";
 import { RunConfig } from "@tessaloom/core";
 import type { Db } from "@tessaloom/db";
 import type { LlmGateway } from "@tessaloom/llm-gateway";
@@ -13,7 +18,8 @@ import {
 } from "@tessaloom/qloo-adapter";
 
 export const QLOO_ADAPTER_VERSION = "qloo-adapter-0.2.0";
-export const EVALUATION_RULESET_VERSION = "ruleset-2026.10-m4";
+/** Pinned in every run config; it is the evaluators' own version (ADR-025). */
+export const EVALUATION_RULESET_VERSION = EVALUATION_RULESET.version;
 
 /** AGENT_WORKFLOW §2 starting efforts. */
 export const EFFORT_BY_ROLE = {
@@ -75,6 +81,8 @@ export function createQlooAdapter(
     fixtureRoot?: string;
     transport?: HarnessTransport;
     env?: NodeJS.ProcessEnv;
+    /** Raw response retention; "off" until storage permission is confirmed (R-08). */
+    rawRetention?: "off" | "on";
   },
 ): QlooAdapter | null {
   let transport = input.transport;
@@ -93,7 +101,9 @@ export function createQlooAdapter(
   return new QlooAdapter({
     transport,
     harnessVersion: input.harnessVersion ?? "fixture",
-    recorder: createDbRecorder(db),
+    recorder: createDbRecorder(db, {
+      rawRetention: input.rawRetention ?? "off",
+    }),
     quota: createDbQuotaGuard(db, { dailyLimit: input.dailyLimit }),
     // The limiter protects the shared Qloo quota; fixtures generate no Qloo traffic.
     rateLimitPerMin:

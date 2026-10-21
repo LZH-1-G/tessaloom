@@ -107,8 +107,17 @@ export function planEvidence(input: {
   ordered.forEach((claim, order) => {
     const p = claim.params;
     const signals = p.signalEntityIds.map(q);
+    // Tag seeds are signals too, but recommend takes them as signal_tags (V1 contract).
+    const isTag = (id: string) => input.entities.get(id)?.kind === "tag";
     const params: ResolvedParams = {
-      signalQlooIds: signals.filter((s): s is string => !!s),
+      signalQlooIds: p.signalEntityIds
+        .filter((id) => !isTag(id))
+        .map(q)
+        .filter((s): s is string => !!s),
+      signalTagQlooIds: p.signalEntityIds
+        .filter(isTag)
+        .map(q)
+        .filter((s): s is string => !!s),
       targetDomain: p.targetDomain,
       targetQlooId: p.targetEntityId ? q(p.targetEntityId) : undefined,
       tagQlooIds: p.tagEntityIds?.map(q).filter((s): s is string => !!s),
@@ -122,6 +131,19 @@ export function planEvidence(input: {
       unsupported.push({
         claimId: claim.claimId,
         reason: "Unknown entity reference",
+      });
+      return;
+    }
+    const tagSignals = params.signalTagQlooIds ?? [];
+    // Only recommend accepts tag signals; the other workflows need entity signals.
+    if (
+      claim.testKind !== "CROSS_DOMAIN_AFFINITY" &&
+      params.signalQlooIds.length === 0
+    ) {
+      unsupported.push({
+        claimId: claim.claimId,
+        reason:
+          "This test needs an entity signal; tag-only signals are accepted by recommend alone",
       });
       return;
     }
@@ -139,7 +161,10 @@ export function planEvidence(input: {
         method = "recommend";
         args = {
           targetType: p.targetDomain,
-          signals: params.signalQlooIds,
+          ...(params.signalQlooIds.length
+            ? { signals: params.signalQlooIds }
+            : {}),
+          ...(tagSignals.length ? { signalTags: tagSignals } : {}),
           ...(params.tagQlooIds?.length
             ? { includeTags: params.tagQlooIds }
             : {}),

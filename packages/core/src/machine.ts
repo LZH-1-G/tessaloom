@@ -19,6 +19,7 @@ export const RUN_EVENTS = [
   "DISCOVERY_DONE",
   "DISCOVERY_EMPTY",
   "POOL_READY",
+  "USER_CONFIRMED_POOL",
   "HYPOTHESES_READY",
   "PLAN_READY",
   "COLLECTION_DONE",
@@ -169,9 +170,17 @@ export const TRANSITIONS: readonly Transition[] = [
   {
     from: "BUILDING_COLLISION_POOL",
     event: "POOL_READY",
-    to: "GENERATING_HYPOTHESES",
+    to: "AWAITING_POOL_CONFIRMATION",
     guard: (c) => (c.poolSize ?? 0) >= 3,
     description: "pool size ≥ 3",
+  },
+  {
+    // Gate H2b (ADR-025): the user reviews the pool with the tension slider, then commits.
+    from: "AWAITING_POOL_CONFIRMATION",
+    event: "USER_CONFIRMED_POOL",
+    to: "GENERATING_HYPOTHESES",
+    guard: (c) => (c.poolSize ?? 0) >= 3,
+    description: "the committed pool has ≥ 3 candidates",
   },
   {
     from: "GENERATING_HYPOTHESES",

@@ -105,7 +105,14 @@ export function TraceDialog({
           <X aria-hidden className="size-4" />
         </Button>
       </div>
-      <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4 text-sm">
+      {/* Focusable so keyboard users can scroll long traces (axe: scrollable-region-focusable). */}
+      <div
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be keyboard-reachable
+        tabIndex={0}
+        role="region"
+        aria-label="Trace details"
+        className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+      >
         {error ? (
           <p role="alert" className="text-rust">
             {error}

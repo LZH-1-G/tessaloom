@@ -9,9 +9,10 @@ import {
   ReactFlow,
   type Edge,
   type Node,
+  type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   laneItems,
   type DiscoveryGraph,
@@ -106,6 +107,29 @@ export function DiscoveryCanvas({
 }) {
   const [announce, setAnnounce] = useState("");
   const container = useRef<HTMLDivElement>(null);
+  // Controlled nodes are rebuilt whenever the graph or pool changes; React Flow resets a node's
+  // measurement when its object changes and hides it until re-measured, which can stall.
+  // Feeding the measured sizes back keeps rebuilt nodes visible.
+  const [measured, setMeasured] = useState<
+    ReadonlyMap<string, { width: number; height: number }>
+  >(new Map());
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setMeasured((prev) => {
+      let next: Map<string, { width: number; height: number }> | null = null;
+      for (const c of changes) {
+        if (c.type !== "dimensions" || !c.dimensions) continue;
+        const old = prev.get(c.id);
+        if (
+          old?.width === c.dimensions.width &&
+          old?.height === c.dimensions.height
+        )
+          continue;
+        next ??= new Map(prev);
+        next.set(c.id, c.dimensions);
+      }
+      return next ?? prev;
+    });
+  }, []);
   // Keyboard: Enter or Space on a focused node opens the inspector (UI_UX_SPEC §8).
   useEffect(() => {
     const element = container.current;
@@ -215,8 +239,15 @@ export function DiscoveryCanvas({
           },
           ariaLabel: "Selected collision",
         });
-    return { nodes, edges };
+    return {
+      nodes: nodes.map((n) => {
+        const size = measured.get(n.id);
+        return size ? { ...n, measured: size } : n;
+      }),
+      edges,
+    };
   }, [
+    measured,
     graph,
     visibleLanes,
     bridgesOnly,
@@ -238,6 +269,7 @@ export function DiscoveryCanvas({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.1, minZoom: 0.6 }}

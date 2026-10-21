@@ -12,6 +12,7 @@ import {
   isRunnable,
   isTerminal,
   nextState,
+  selectPool,
   type GuardContext,
   type RunEventName,
   type RunState,
@@ -31,6 +32,7 @@ import {
 import {
   latestResolutions,
   lockRun,
+  updateCollisionCandidate,
   updateHypothesis,
 } from "./repositories/orchestrator";
 import { getToolInvocation } from "./repositories/qloo";
@@ -47,6 +49,7 @@ import {
 } from "./repositories/workspace";
 import {
   agentRuns,
+  collisionCandidates,
   culturalEntities,
   experiments,
   hypotheses,
@@ -558,6 +561,79 @@ export async function confirmRun(
             "USER_CONFIRMED_ENTITIES",
             { seedDomains: seedRows.map((r) => r.domain ?? "unknown") },
             { events: [received] },
+          ),
+        );
+      }
+      case "POOL": {
+        // Gate H2b: re-select the stored pool at the committed tension with the same engine
+        // and candidate keys the browser previews with (ADR-025).
+        const rows = await tx
+          .select()
+          .from(collisionCandidates)
+          .where(eq(collisionCandidates.experimentId, experiment.id));
+        const ids = [...new Set(rows.flatMap((r) => r.elementEntityIds))];
+        const domains = new Map(
+          (ids.length
+            ? await tx
+                .select({
+                  id: culturalEntities.id,
+                  domain: culturalEntities.domain,
+                })
+                .from(culturalEntities)
+                .where(inArray(culturalEntities.id, ids))
+            : []
+          ).map((e) => [e.id, e.domain ?? "unknown"]),
+        );
+        const candidates = rows.map((r) => ({
+          key: r.elementEntityIds.join("|"),
+          elementEntityIds: [
+            r.elementEntityIds[0]!,
+            r.elementEntityIds[1]!,
+          ] as [string, string],
+          domains: [
+            domains.get(r.elementEntityIds[0]!) ?? "unknown",
+            domains.get(r.elementEntityIds[1]!) ?? "unknown",
+          ] as [string, string],
+          relevance: r.relevance,
+          novelty: r.novelty,
+        }));
+        const selection = new Map(
+          selectPool(candidates, response.tension).map((s) => [s.key, s]),
+        );
+        if (selection.size < 3)
+          throw new DomainRuleError(
+            "This tension leaves fewer than 3 collisions; choose another value.",
+          );
+        for (const r of rows) {
+          const chosen = selection.get(r.elementEntityIds.join("|"));
+          await updateCollisionCandidate(tx, r.id, {
+            selected: !!chosen,
+            rank: chosen?.rank ?? null,
+            tensionFit: Number(
+              (1 - Math.abs(r.novelty - response.tension)).toFixed(4),
+            ),
+          });
+        }
+        return runView(
+          await commitTransition(
+            tx,
+            raw,
+            boss,
+            run,
+            "USER_CONFIRMED_POOL",
+            { poolSize: selection.size },
+            {
+              events: [
+                {
+                  ...received,
+                  payload: {
+                    kind: response.kind,
+                    tension: response.tension,
+                    selected: selection.size,
+                  },
+                },
+              ],
+            },
           ),
         );
       }

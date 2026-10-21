@@ -93,7 +93,26 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       ],
     });
 
-    // DISCOVERING → … → EVALUATING (REVISE) → REVISING → … → AWAITING_HYPOTHESIS_SELECTION (H3)
+    // DISCOVERING → BUILDING_COLLISION_POOL → AWAITING_POOL_CONFIRMATION (H2b)
+    const toPool = await drain(deps);
+    expect(
+      toPool.map((o) =>
+        o.outcome === "committed" ? `${o.from}>${o.to}` : o.outcome,
+      ),
+    ).toEqual([
+      "DISCOVERING>BUILDING_COLLISION_POOL",
+      "BUILDING_COLLISION_POOL>AWAITING_POOL_CONFIRMATION",
+    ]);
+    expect((await getRun(handle.db, runId)).pendingConfirmation).toEqual({
+      kind: "POOL",
+      tension: 0.5,
+    });
+    await confirmRun(handle, boss, workspace.id, runId, {
+      kind: "POOL",
+      tension: 0.5,
+    });
+
+    // GENERATING → … → EVALUATING (REVISE) → REVISING → … → AWAITING_HYPOTHESIS_SELECTION (H3)
     const outcomes = await drain(deps);
     run = await getRun(handle.db, runId);
     expect(run.state).toBe("AWAITING_HYPOTHESIS_SELECTION");
@@ -102,8 +121,6 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
         o.outcome === "committed" ? `${o.from}>${o.to}` : o.outcome,
       ),
     ).toEqual([
-      "DISCOVERING>BUILDING_COLLISION_POOL",
-      "BUILDING_COLLISION_POOL>GENERATING_HYPOTHESES",
       "GENERATING_HYPOTHESES>PLANNING_EVIDENCE",
       "PLANNING_EVIDENCE>COLLECTING_EVIDENCE",
       "COLLECTING_EVIDENCE>EVALUATING_EVIDENCE",
@@ -215,7 +232,7 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       expect(e).toMatchObject({
         provenance_class: "DEVELOPMENT_FIXTURE",
         data_origin: "FIXTURE",
-        ruleset_version: "ruleset-2026.10-m4",
+        ruleset_version: "ruleset-2026.10-m6",
       });
 
     // LLM invocations: R1, R3, R4, R3 (revise), R4 — all VALID, scripted, linked to the run.
@@ -260,6 +277,17 @@ async function startRun() {
     runConfig: RUN_CONFIG,
   });
   return { ...ids, ...started };
+}
+
+async function confirmPool(
+  r: Awaited<ReturnType<typeof startRun>>,
+  deps: ReturnType<typeof makeDeps>,
+) {
+  await drain(deps);
+  await confirmRun(handle, boss, r.workspace.id, r.runId, {
+    kind: "POOL",
+    tension: 0.5,
+  });
 }
 
 async function passGates(
@@ -395,6 +423,7 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
     const ports = { ...base.ports, qloo };
     const deps = { ...base, ports };
     await passGates(deps, r);
+    await confirmPool(r, deps);
     await drain(deps);
     const run = await getRun(handle.db, r.runId);
     expect(run.state).toBe("CANCELLED");
@@ -449,6 +478,7 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
     );
     const deps = makeDeps(handle, boss, lib, scriptedExplorationLlm());
     await passGates(deps, r);
+    await confirmPool(r, deps);
     await drain(deps);
     const run = await getRun(handle.db, r.runId);
     expect(run).toMatchObject({

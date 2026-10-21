@@ -193,6 +193,8 @@ export interface EvidenceView {
   quality: string;
   provenanceClass: Provenance;
   criticNote: string | null;
+  /** Plain-language rule the evaluator applied (APP_DERIVED). */
+  rationale: string | null;
   toolInvocationId: string | null;
   dataOrigin: DataOrigin | null;
   retrievedAt: string | null;

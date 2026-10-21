@@ -140,6 +140,7 @@ export async function insertEvidence(
       | "UNSUPPORTED"
       | "ERROR";
     provenanceClass: "QLOO_SOURCED" | "APP_DERIVED" | "DEVELOPMENT_FIXTURE";
+    rationale?: string | null;
     criticNote?: string | null;
     criticDowngrade?: boolean;
   },
@@ -161,6 +162,7 @@ export async function insertEvidence(
       primaryMeasure: input.primaryMeasure,
       quality: input.quality,
       provenanceClass: input.provenanceClass,
+      rationale: input.rationale ?? null,
       criticNote: input.criticNote ?? null,
       criticDowngrade: input.criticDowngrade ?? false,
     })

@@ -115,6 +115,7 @@ async function startQueues() {
     harnessVersion: harnessVersion(),
     dailyLimit: env.GLOBAL_DAILY_QLOO_CALLS,
     rateLimitPerMin: env.QLOO_RATE_LIMIT_PER_MIN,
+    rawRetention: env.QLOO_RAW_RETENTION,
   });
   const deps: RunnerDeps = {
     handle,

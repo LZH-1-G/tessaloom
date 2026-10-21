@@ -224,6 +224,7 @@ export interface CommitPlan {
     stance: EvidenceStance;
     evaluatorId: string;
     rulesetVersion: string;
+    rationale: string;
     facts: EvidenceFact[];
     primaryMeasure: QlooMeasure;
     quality:

@@ -11,6 +11,7 @@ import {
 import type { EntityView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { EntityConfirmation } from "./entity-confirmation";
+import { PoolPanel, poolRows, poolSelection } from "./pool-panel";
 import { useProject } from "./project-context";
 import {
   DOMAIN_LABEL,
@@ -154,6 +155,7 @@ export function DiscoveryPage() {
   const [trace, setTrace] = useState<string | null>(null);
   const [bridgesOnly, setBridgesOnly] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [tensionChoice, setTension] = useState<number | null>(null);
   const graph = useMemo(
     () => (view ? buildDiscoveryGraph(view) : null),
     [view],
@@ -174,6 +176,18 @@ export function DiscoveryPage() {
     () => false,
   );
   const mode = chosenMode ?? (narrow ? "list" : "canvas");
+  const rows = useMemo(() => (view ? poolRows(view) : []), [view]);
+  const poolGateOpen = run?.state === "AWAITING_POOL_CONFIRMATION";
+  const proposed = run?.pendingConfirmation?.tension;
+  const tension =
+    tensionChoice ??
+    (typeof proposed === "number"
+      ? proposed
+      : (view?.experiment.definition.variables.collisionTension ?? 0.55));
+  const selection = useMemo(
+    () => poolSelection(rows, poolGateOpen, tension),
+    [rows, poolGateOpen, tension],
+  );
 
   if (loading) return <Skeleton className="h-96" />;
   if (!view || !graph)
@@ -191,13 +205,25 @@ export function DiscoveryPage() {
         )
       : [];
   const byId = new Map(view.entities.map((e) => [e.id, e]));
-  const pool = view.pool
-    .filter((p) => p.selected)
-    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
-  const poolPairs = pool.map(
-    (p) => [p.elementEntityIds[0]!, p.elementEntityIds[1]!] as [string, string],
+  const poolPairs = selection.map(
+    (s) => s.key.split("|").slice(0, 2) as [string, string],
   );
   const selectedItem = selected ? graph.entities.get(selected) : undefined;
+  // Gate H2b is the task at hand while it is open, so the review sits above the canvas.
+  const poolPanel = selection.length ? (
+    <PoolPanel
+      rows={rows}
+      selection={selection}
+      gateOpen={poolGateOpen}
+      runId={run?.id ?? null}
+      tension={tension}
+      onTension={setTension}
+      onDone={() => {
+        setTension(null);
+        void refresh();
+      }}
+    />
+  ) : null;
   const discovering =
     run && ["RESOLVING_ENTITIES", "DISCOVERING"].includes(run.state);
 
@@ -277,6 +303,8 @@ export function DiscoveryPage() {
           })}
         </ul>
       </section>
+
+      {poolGateOpen ? poolPanel : null}
 
       {discovering ? (
         <p
@@ -436,6 +464,7 @@ export function DiscoveryPage() {
           Confirm your entities to start discovery.
         </EmptyState>
       ) : null}
+      {!poolGateOpen ? poolPanel : null}
       {trace ? (
         <TraceDialog invocationId={trace} onClose={() => setTrace(null)} />
       ) : null}

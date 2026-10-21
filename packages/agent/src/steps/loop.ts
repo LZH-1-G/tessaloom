@@ -17,9 +17,11 @@ import {
 } from "../hypothesis";
 import { planEvidence, type PlanEntity, type PlannedQuery } from "../planner";
 import type { QlooResult } from "../ports";
+import { assessFeasibility } from "../feasibility";
 import {
   combine,
   critiqueValidator,
+  salvageDrafts,
   hypothesisBatchValidator,
   hypothesisRevisionValidator,
   safeUseValidator,
@@ -166,8 +168,23 @@ export async function generateHypotheses(
     maxOutputTokens: MAX_OUTPUT.R3,
     validate: combine(hypothesisBatchValidator(grounding), safeUseValidator),
   });
-  if (!result.ok) return failLlm(result, "R3 hypothesis generation", acc);
-  const drafts = result.value.hypotheses.slice(
+  let output = result.ok ? result.value : null;
+  if (!result.ok) {
+    // TEST_PLAN §8: after the single repair, ungrounded elements and invalid claims are
+    // dropped and logged; the step fails only if nothing valid remains.
+    const salvaged =
+      result.reason === "INVALID_OUTPUT" && result.salvage
+        ? salvageDrafts(result.salvage.hypotheses, grounding)
+        : null;
+    if (!salvaged?.kept.length)
+      return failLlm(result, "R3 hypothesis generation", acc);
+    logSalvage(acc, "R3", salvaged);
+    output = {
+      hypotheses: salvaged.kept,
+      decisionSummary: result.salvage!.decisionSummary,
+    };
+  }
+  const drafts = output!.hypotheses.slice(
     0,
     Math.max(1, ctx.run.budget.maxHypotheses),
   );
@@ -184,7 +201,7 @@ export async function generateHypotheses(
   acc.events.push({
     type: "DECISION_SUMMARY",
     role: "R3",
-    summary: truncate(result.value.decisionSummary),
+    summary: truncate(output!.decisionSummary),
   });
   return acc;
 }
@@ -365,6 +382,7 @@ export async function collect(
           stance: evaluation.stance,
           evaluatorId: evaluation.evaluatorId,
           rulesetVersion: EVALUATION_RULESET.version,
+          rationale: evaluation.note,
           facts: evaluation.facts,
           primaryMeasure: evaluation.primaryMeasure,
           quality: evaluation.quality,
@@ -427,15 +445,27 @@ export async function evaluate(
   const hyps = active(ctx);
   const computed = hyps.map((h) => {
     const states = claimStates(h);
-    const novelty =
-      ctx.pool.find((p) => p.id === h.collisionCandidateId)?.novelty ?? 0.5;
+    const candidate = ctx.pool.find((p) => p.id === h.collisionCandidateId);
+    const feasibility = assessFeasibility({
+      text: [h.title, h.premise, h.experienceSketch].join(" \n"),
+      brief: ctx.brief.content,
+      locationStances: h.claims
+        .filter((c) => c.testKind === "LOCATION_FIT")
+        .map((c) => c.stance),
+    });
     const scores = scoreHypothesis({
       claims: states,
-      novelty,
-      feasibility: 0.6,
+      novelty: candidate?.novelty ?? 0.5,
+      feasibility: feasibility.score,
       weights: ctx.experiment.scoringWeights,
     });
-    return { h, status: computeStatus(states), scores };
+    return {
+      h,
+      status: computeStatus(states),
+      scores,
+      feasibility,
+      noveltyInputs: candidate?.noveltyInputs ?? "DEFAULT",
+    };
   });
 
   const result = await llmCall(ctx, ports, acc, {
@@ -465,48 +495,67 @@ export async function evaluate(
     },
     schema: CritiqueReport,
     maxOutputTokens: MAX_OUTPUT.R4,
-    validate: combine(
-      critiqueValidator({
-        hypothesisIds: new Set(hyps.map((h) => h.id)),
-        evidenceByHypothesis: new Map(
-          hyps.map((h) => [h.id, new Set(h.evidence.map((e) => e.id))]),
-        ),
-      }),
-      safeUseValidator,
-    ),
+    validate: combine(critiqueValidatorFor(hyps), safeUseValidator),
   });
-  if (!result.ok) return failLlm(result, "R4 evidence critique", acc);
-  const critique = new Map(
-    result.value.perHypothesis.map((p) => [p.hypothesisId, p]),
-  );
+  let critiqueEntries = result.ok ? result.value.perHypothesis : [];
+  let critiqueSummary = result.ok ? result.value.decisionSummary : null;
+  if (!result.ok) {
+    // The critique is interpretation only (§13.2): an invalid critique never blocks the loop.
+    // Entries that pass on their own are kept; the rest are dropped and logged.
+    if (result.reason !== "INVALID_OUTPUT")
+      return failLlm(result, "R4 evidence critique", acc);
+    const validate = critiqueValidatorFor(hyps);
+    critiqueEntries = (result.salvage?.perHypothesis ?? []).filter(
+      (entry) =>
+        validate({
+          perHypothesis: [entry],
+          continueLoop: false,
+          decisionSummary: "x",
+        }).length === 0 && safeUseValidator(entry).length === 0,
+    );
+    critiqueSummary = `Critique partly rejected by validators; kept ${critiqueEntries.length} of ${result.salvage?.perHypothesis.length ?? 0} notes`;
+    acc.events.push({
+      type: "VALIDATION_FAILED",
+      role: "R4",
+      summary: truncate(critiqueSummary),
+      payload: { kept: critiqueEntries.length },
+    });
+  }
+  const critique = new Map(critiqueEntries.map((p) => [p.hypothesisId, p]));
 
-  acc.commit.hypothesisUpdates = computed.map(({ h, status, scores }) => {
-    const c = critique.get(h.id);
-    return {
-      id: h.id,
-      status,
-      supportScore: scores.support,
-      noveltyScore: scores.novelty,
-      feasibilityScore: scores.feasibility,
-      compositeScore: scores.composite,
-      scoreBreakdown: {
-        ...scores.breakdown,
-        feasibilityRule: "baseline-m4",
-        // The critic can only add interpretation or a downgrade; it never changes a stance.
-        ...(c
-          ? {
-              critique: {
-                recommendation: c.recommendation,
-                confidenceNote: c.confidenceNote ?? null,
-                downgrade: c.downgrade ?? null,
-                citedEvidenceIds: c.citedEvidenceIds,
-                refinementHint: c.refinementHint ?? null,
-              },
-            }
-          : {}),
-      },
-    };
-  });
+  acc.commit.hypothesisUpdates = computed.map(
+    ({ h, status, scores, feasibility, noveltyInputs }) => {
+      const c = critique.get(h.id);
+      return {
+        id: h.id,
+        status,
+        supportScore: scores.support,
+        noveltyScore: scores.novelty,
+        feasibilityScore: scores.feasibility,
+        compositeScore: scores.composite,
+        scoreBreakdown: {
+          ...scores.breakdown,
+          feasibility: {
+            version: feasibility.version,
+            rules: feasibility.rules,
+          },
+          noveltyInputs,
+          // The critic can only add interpretation or a downgrade; it never changes a stance.
+          ...(c
+            ? {
+                critique: {
+                  recommendation: c.recommendation,
+                  confidenceNote: c.confidenceNote ?? null,
+                  downgrade: c.downgrade ?? null,
+                  citedEvidenceIds: c.citedEvidenceIds,
+                  refinementHint: c.refinementHint ?? null,
+                },
+              }
+            : {}),
+        },
+      };
+    },
+  );
 
   const previous = new Map<string, HypothesisStatus>();
   for (const { h } of computed) {
@@ -536,7 +585,7 @@ export async function evaluate(
   acc.events.push({
     type: "DECISION_SUMMARY",
     role: "R4",
-    summary: truncate(result.value.decisionSummary),
+    summary: truncate(critiqueSummary ?? "Critique unavailable"),
   });
   const left = remaining(
     ctx.run.budget,
@@ -627,12 +676,42 @@ export async function revise(
       safeUseValidator,
     ),
   });
-  if (!result.ok) return failLlm(result, "R3 hypothesis revision", acc);
+  let revision = result.ok ? result.value : null;
+  if (!result.ok) {
+    if (result.reason !== "INVALID_OUTPUT" || !result.salvage)
+      return failLlm(result, "R3 hypothesis revision", acc);
+    const known = new Set(hyps.map((h) => h.id));
+    const refined = salvageDrafts(
+      result.salvage.refined.filter((r) => known.has(r.revisionOfId)),
+      grounding,
+    );
+    const spawned = salvageDrafts(
+      result.salvage.spawned.slice(0, 2),
+      grounding,
+    );
+    const refinedIds = new Set(refined.kept.map((r) => r.revisionOfId));
+    logSalvage(acc, "R3", {
+      kept: [...refined.kept, ...spawned.kept],
+      dropped: [...refined.dropped, ...spawned.dropped],
+      trimmed: [...refined.trimmed, ...spawned.trimmed],
+    });
+    revision = {
+      refined: refined.kept.filter(
+        (r, i, all) =>
+          all.findIndex((x) => x.revisionOfId === r.revisionOfId) === i,
+      ),
+      retiredIds: [...new Set(result.salvage.retiredIds)].filter(
+        (id) => known.has(id) && !refinedIds.has(id),
+      ),
+      spawned: spawned.kept,
+      decisionSummary: result.salvage.decisionSummary,
+    };
+  }
   const next = ctx.run.iteration + 1;
   const invocationId = result.invocationIds.at(-1)!;
   const byId = new Map(hyps.map((h) => [h.id, h]));
   acc.commit.hypotheses = [
-    ...result.value.refined.map(({ revisionOfId, ...draft }) => ({
+    ...revision!.refined.map(({ revisionOfId, ...draft }) => ({
       draft,
       llmInvocationId: invocationId,
       iteration: next,
@@ -640,7 +719,7 @@ export async function revise(
       lineageId: byId.get(revisionOfId)!.lineageId,
       collisionCandidateId: byId.get(revisionOfId)!.collisionCandidateId,
     })),
-    ...result.value.spawned.map((draft) => ({
+    ...revision!.spawned.map((draft) => ({
       draft,
       llmInvocationId: invocationId,
       iteration: next,
@@ -651,15 +730,44 @@ export async function revise(
   ];
   // Superseded and retired hypotheses stay visible (retired = true); their stances never change.
   acc.commit.hypothesisUpdates = [
-    ...result.value.refined.map((r) => ({ id: r.revisionOfId, retired: true })),
-    ...result.value.retiredIds.map((id) => ({ id, retired: true })),
+    ...revision!.refined.map((r) => ({ id: r.revisionOfId, retired: true })),
+    ...revision!.retiredIds.map((id) => ({ id, retired: true })),
   ];
   acc.iteration = next;
   acc.guard = { iterationIncremented: true };
   acc.events.push({
     type: "DECISION_SUMMARY",
     role: "R3",
-    summary: truncate(result.value.decisionSummary),
+    summary: truncate(revision!.decisionSummary),
   });
   return acc;
+}
+
+function critiqueValidatorFor(hyps: HypothesisView[]) {
+  return critiqueValidator({
+    hypothesisIds: new Set(hyps.map((h) => h.id)),
+    evidenceByHypothesis: new Map(
+      hyps.map((h) => [h.id, new Set(h.evidence.map((e) => e.id))]),
+    ),
+  });
+}
+
+function logSalvage(
+  acc: StepResult,
+  role: "R3",
+  report: {
+    kept: unknown[];
+    dropped: { tempId: string; title: string; reasons: string[] }[];
+    trimmed: { tempId: string; removed: string[] }[];
+  },
+) {
+  const removed = report.trimmed.reduce((n, t) => n + t.removed.length, 0);
+  acc.events.push({
+    type: "VALIDATION_FAILED",
+    role,
+    summary: truncate(
+      `After one repair, kept ${report.kept.length} hypotheses: dropped ${report.dropped.length} and removed ${removed} invalid elements or claims`,
+    ),
+    payload: { dropped: report.dropped, trimmed: report.trimmed },
+  });
 }

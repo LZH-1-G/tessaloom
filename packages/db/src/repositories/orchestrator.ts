@@ -203,7 +203,7 @@ export async function updateHypothesis(
 
 // --- Maintenance queries ---
 
-const PAUSED = sql`${agentRuns.state} IN ('AWAITING_BRIEF_CONFIRMATION','AWAITING_ENTITY_CONFIRMATION','AWAITING_HYPOTHESIS_SELECTION','AWAITING_COUNTERFACTUAL_CONFIRMATION')`;
+const PAUSED = sql`${agentRuns.state} IN ('AWAITING_BRIEF_CONFIRMATION','AWAITING_ENTITY_CONFIRMATION','AWAITING_POOL_CONFIRMATION','AWAITING_HYPOTHESIS_SELECTION','AWAITING_COUNTERFACTUAL_CONFIRMATION')`;
 const TERMINAL = sql`${agentRuns.state} IN ('COMPLETED','COMPLETED_WITH_LIMITS','FAILED','CANCELLED')`;
 
 const lastEventTs = sql<Date>`(SELECT max(${runEvents.ts}) FROM ${runEvents} WHERE ${runEvents.runId} = ${agentRuns.id})`;

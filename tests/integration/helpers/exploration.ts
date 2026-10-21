@@ -479,7 +479,10 @@ export const BRIEF = {
   goals: ["Attract new weekday visitors"],
 };
 
-export async function seedProject(handle: DbHandle) {
+export async function seedProject(
+  handle: DbHandle,
+  content: Record<string, unknown> = BRIEF,
+) {
   const workspace = await createWorkspace(handle.db, {
     secretHash: Math.random()
       .toString(16)
@@ -493,7 +496,7 @@ export async function seedProject(handle: DbHandle) {
     useCase: "cafe",
   });
   const brief = await withTx(handle.db, (tx) =>
-    createBriefVersion(tx, { projectId: project.id, content: BRIEF }),
+    createBriefVersion(tx, { projectId: project.id, content }),
   );
   return { workspace, project, brief };
 }

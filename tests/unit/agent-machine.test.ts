@@ -30,6 +30,7 @@ const PASS: Record<RunEventName, GuardContext> = {
   DISCOVERY_DONE: { discoveryOkQueries: 1 },
   DISCOVERY_EMPTY: { discoveryOkQueries: 0 },
   POOL_READY: { poolSize: 3 },
+  USER_CONFIRMED_POOL: { poolSize: 3 },
   HYPOTHESES_READY: { validHypotheses: 1 },
   PLAN_READY: { planWithinBudget: true },
   COLLECTION_DONE: { allQueriesFinal: true },
@@ -74,6 +75,7 @@ const FAIL: Partial<Record<RunEventName, GuardContext>> = {
   DISCOVERY_DONE: { discoveryOkQueries: 0 },
   DISCOVERY_EMPTY: { discoveryOkQueries: 2 },
   POOL_READY: { poolSize: 2 },
+  USER_CONFIRMED_POOL: { poolSize: 2 },
   HYPOTHESES_READY: { validHypotheses: 0 },
   PLAN_READY: { planWithinBudget: false },
   COLLECTION_DONE: { allQueriesFinal: false },
@@ -254,6 +256,7 @@ describe("global events (TEST_PLAN §4 item 5)", () => {
     expect(STATES.filter(isPaused)).toEqual([
       "AWAITING_BRIEF_CONFIRMATION",
       "AWAITING_ENTITY_CONFIRMATION",
+      "AWAITING_POOL_CONFIRMATION",
       "AWAITING_HYPOTHESIS_SELECTION",
       "AWAITING_COUNTERFACTUAL_CONFIRMATION",
     ]);

@@ -88,6 +88,11 @@ export const ConfirmationResponse = z.discriminatedUnion("kind", [
       .min(1),
   }),
   z.object({
+    kind: z.literal("POOL"),
+    // Collision Tension τ: Harmonious (0.2) ↔ Unexpected (0.9) (AGENT_WORKFLOW §16).
+    tension: z.number().min(0.2).max(0.9),
+  }),
+  z.object({
     kind: z.literal("HYPOTHESIS_SELECTION"),
     selectedHypothesisIds: z.array(z.uuid()).max(3),
   }),
