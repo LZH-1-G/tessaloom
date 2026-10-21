@@ -10,6 +10,8 @@ export const unitConfig = defineConfig({
         "packages/config/env.ts",
         "scripts/start.mjs",
         "packages/core/src/**/*.ts",
+        "packages/llm-gateway/src/**/*.ts",
+        "packages/agent/src/**/*.ts",
       ],
       reporter: ["text", "json-summary", "html"],
     },

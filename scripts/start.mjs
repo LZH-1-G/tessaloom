@@ -40,6 +40,7 @@ const allowlists = {
     "LLM_PROVIDER",
     "LLM_MODEL",
     "LLM_FALLBACK_MODEL",
+    "LLM_MODE",
   ],
 };
 
