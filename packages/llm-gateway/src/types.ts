@@ -123,6 +123,8 @@ export type GenerateResult<T> =
       ok: false;
       reason: FailureReason;
       issues?: ValidationIssue[];
+      /** INVALID_OUTPUT only: the schema-valid output whose semantic checks failed. */
+      salvage?: T;
     } & GenerateMeta);
 
 /** Persists one provider call (repairs and retries are separate rows linked by repairOfId). */

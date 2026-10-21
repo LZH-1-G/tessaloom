@@ -22,6 +22,20 @@
       "when": 1792566526914,
       "tag": "0002_worker_run_config",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792582838847,
+      "tag": "0003_fixture_coupling_through_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792584894289,
+      "tag": "0004_pool_gate_and_evidence_rationale",
+      "breakpoints": true
     }
   ]
 }

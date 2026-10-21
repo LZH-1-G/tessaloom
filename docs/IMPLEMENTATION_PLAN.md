@@ -201,6 +201,12 @@ gantt
 
 ### M5 — Brief, intent, resolution, discovery (D4)
 
+> **Status: COMPLETED 2026-10-21** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-024. **Deviations from the plan below:**
+> - Resolution also uses `find_tags` for untyped interests and resolves the venue locality.
+> - Tag enrichment is budgeted (at most 8 thread items).
+> - The design tokens and components are hand-built on Tailwind and native elements (dialog, radio, select), not generated shadcn components.
+> - E2E runs on a synthetic Qloo transport (`QLOO_MODE=synthetic`), because interactive journeys change the requests and file fixtures cannot anticipate them. File fixtures remain for the integration suite.
+
 - **Objective:** a real R1 and R2 and the first two product pages.
 - **Inputs:** PRD §6.1; UI_UX_SPEC §4.2, §4.3; AGENT_WORKFLOW §2, §8, §11 (H1, H2), §16 step 1.
 - **Scope:**
@@ -211,6 +217,13 @@ gantt
 - **Evidence:** screenshots of the brief, H2, and canvas pages in fixture mode, with the FIXTURE banner visible.
 
 ### M6 — Collision Engine and Creative Hypothesis Loop (D5)
+
+> **Status: COMPLETED 2026-10-21** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-025. **Deviations from the plan below:**
+> - The tension slider commits through a new paused state, `AWAITING_POOL_CONFIRMATION` (gate H2b), so "commit continues the run" is an explicit human decision. Migration `0004` adds the state.
+> - Evaluators are rank- and structure-based (`ruleset-2026.10-m6`). Thresholds that need live data (`ω`, `α`, `r`, `φ`) return INSUFFICIENT with "evaluator pending live calibration". Live calibration still needs an authorized LC run.
+> - Feasibility is rule-based (`feasibility-1.0.0`) rather than a constant. After a failed repair, R3/R4 salvage the valid part of a schema-valid output instead of failing the run (TEST_PLAN §8).
+> - The weights control is disabled with an explanation until M8, as planned. Compose blueprint is disabled until M9, and the H3 selection is saved (`user_pinned`) for it.
+> - The Hypothesis Lab ships the card board. The graph tab belongs to M7.
 
 - **Objective:** evidence-graded hypotheses.
 - **Inputs:** AGENT_WORKFLOW §8.2, §12, §13, §16; PRD §6.2, §6.3; UI_UX_SPEC §4.4.

@@ -116,10 +116,12 @@ export class LlmGateway {
     const fail = (
       reason: FailureReason,
       issues?: ValidationIssue[],
+      salvage?: z.output<S>,
     ): GenerateResult<z.output<S>> => ({
       ok: false,
       reason,
       ...(issues ? { issues } : {}),
+      ...(salvage !== undefined ? { salvage } : {}),
       ...meta,
     });
 
@@ -287,6 +289,7 @@ export class LlmGateway {
               },
             ];
       let value: unknown;
+      let schemaValid: z.output<S> | undefined;
       if (issues.length === 0) {
         const parsed = parseAndValidate(
           response.text,
@@ -294,7 +297,10 @@ export class LlmGateway {
           req.validate,
         );
         if (parsed.ok) value = parsed.value;
-        else issues.push(...parsed.issues);
+        else {
+          issues.push(...parsed.issues);
+          schemaValid = parsed.schemaValid;
+        }
       }
 
       if (issues.length === 0) {
@@ -307,7 +313,10 @@ export class LlmGateway {
         safeJson(response.text),
         issues,
       );
-      if (repairs >= this.maxRepairs) return fail("INVALID_OUTPUT", issues);
+      // After the repair budget, a schema-valid output that only fails semantic checks is
+      // returned as `salvage`, so the caller can drop the invalid parts (TEST_PLAN §8).
+      if (repairs >= this.maxRepairs)
+        return fail("INVALID_OUTPUT", issues, schemaValid);
       repairs += 1;
       repairOfId = invalidId;
       // Append-only repair: the model sees its own output and the validation errors.
@@ -392,7 +401,9 @@ export function parseAndValidate<S extends z.ZodType>(
   text: string,
   schema: S,
   validate?: (value: z.output<S>) => ValidationIssue[],
-): { ok: true; value: z.output<S> } | { ok: false; issues: ValidationIssue[] } {
+):
+  | { ok: true; value: z.output<S> }
+  | { ok: false; issues: ValidationIssue[]; schemaValid?: z.output<S> } {
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -415,7 +426,7 @@ export function parseAndValidate<S extends z.ZodType>(
   }
   const semantic = validate?.(parsed.data) ?? [];
   return semantic.length > 0
-    ? { ok: false, issues: semantic.slice(0, 20) }
+    ? { ok: false, issues: semantic.slice(0, 20), schemaValid: parsed.data }
     : { ok: true, value: parsed.data };
 }
 

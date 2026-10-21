@@ -93,7 +93,26 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       ],
     });
 
-    // DISCOVERING → … → EVALUATING (REVISE) → REVISING → … → AWAITING_HYPOTHESIS_SELECTION (H3)
+    // DISCOVERING → BUILDING_COLLISION_POOL → AWAITING_POOL_CONFIRMATION (H2b)
+    const toPool = await drain(deps);
+    expect(
+      toPool.map((o) =>
+        o.outcome === "committed" ? `${o.from}>${o.to}` : o.outcome,
+      ),
+    ).toEqual([
+      "DISCOVERING>BUILDING_COLLISION_POOL",
+      "BUILDING_COLLISION_POOL>AWAITING_POOL_CONFIRMATION",
+    ]);
+    expect((await getRun(handle.db, runId)).pendingConfirmation).toEqual({
+      kind: "POOL",
+      tension: 0.5,
+    });
+    await confirmRun(handle, boss, workspace.id, runId, {
+      kind: "POOL",
+      tension: 0.5,
+    });
+
+    // GENERATING → … → EVALUATING (REVISE) → REVISING → … → AWAITING_HYPOTHESIS_SELECTION (H3)
     const outcomes = await drain(deps);
     run = await getRun(handle.db, runId);
     expect(run.state).toBe("AWAITING_HYPOTHESIS_SELECTION");
@@ -102,8 +121,6 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
         o.outcome === "committed" ? `${o.from}>${o.to}` : o.outcome,
       ),
     ).toEqual([
-      "DISCOVERING>BUILDING_COLLISION_POOL",
-      "BUILDING_COLLISION_POOL>GENERATING_HYPOTHESES",
       "GENERATING_HYPOTHESES>PLANNING_EVIDENCE",
       "PLANNING_EVIDENCE>COLLECTING_EVIDENCE",
       "COLLECTING_EVIDENCE>EVALUATING_EVIDENCE",
@@ -215,7 +232,7 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       expect(e).toMatchObject({
         provenance_class: "DEVELOPMENT_FIXTURE",
         data_origin: "FIXTURE",
-        ruleset_version: "ruleset-2026.10-m4",
+        ruleset_version: "ruleset-2026.10-m6",
       });
 
     // LLM invocations: R1, R3, R4, R3 (revise), R4 — all VALID, scripted, linked to the run.
@@ -243,7 +260,8 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       sql`SELECT count(*) AS n FROM tool_invocations WHERE run_id = ${runId} AND data_origin <> 'CACHE'`,
     );
     expect(usage.qlooCalls).toBe(qlooCalls);
-    expect(usage.qlooCalls).toBe(2 + 6 + 3 + 1); // resolve + discovery + evidence (it. 0) + evidence (it. 1)
+    // resolve + seed tags + discovery + tag enrichment + evidence (it. 0) + evidence (it. 1)
+    expect(usage.qlooCalls).toBe(2 + 2 + 6 + 8 + 3 + 1);
     expect(usage.llmCalls).toBe(5);
     expect(provider.remaining()).toBe(0);
   });
@@ -259,6 +277,17 @@ async function startRun() {
     runConfig: RUN_CONFIG,
   });
   return { ...ids, ...started };
+}
+
+async function confirmPool(
+  r: Awaited<ReturnType<typeof startRun>>,
+  deps: ReturnType<typeof makeDeps>,
+) {
+  await drain(deps);
+  await confirmRun(handle, boss, r.workspace.id, r.runId, {
+    kind: "POOL",
+    tension: 0.5,
+  });
 }
 
 async function passGates(
@@ -352,11 +381,11 @@ describe("idempotency and recovery (TEST_PLAN §4 items 7–8)", () => {
       sql`SELECT count(*) AS n FROM run_events WHERE run_id = ${r.runId} AND type = 'STATE_ENTERED' AND state = 'BUILDING_COLLISION_POOL'`,
     );
     expect(entered).toBe(1);
-    // Quota counters include both attempts (6 discovery calls each); invocations are kept.
+    // Quota counters include both attempts (2 seed tags + 6 threads + 8 enrichments each).
     const qlooAfter = await count(
       sql`SELECT coalesce(sum(value), 0) AS n FROM usage_counters WHERE scope = 'global' AND scope_id = 'qloo'`,
     );
-    expect(qlooAfter - qlooBefore).toBe(12);
+    expect(qlooAfter - qlooBefore).toBe(32);
     expect(
       await count(
         sql`SELECT count(*) AS n FROM tool_invocations WHERE run_id = ${r.runId} AND method = 'recommend'`,
@@ -366,7 +395,7 @@ describe("idempotency and recovery (TEST_PLAN §4 items 7–8)", () => {
     expect(
       ((await getRun(handle.db, r.runId)).usage as { qlooCalls: number })
         .qlooCalls,
-    ).toBe(2 + 6);
+    ).toBe(2 + 16);
   });
 });
 
@@ -394,6 +423,7 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
     const ports = { ...base.ports, qloo };
     const deps = { ...base, ports };
     await passGates(deps, r);
+    await confirmPool(r, deps);
     await drain(deps);
     const run = await getRun(handle.db, r.runId);
     expect(run.state).toBe("CANCELLED");
@@ -441,12 +471,14 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
 
   it("ends with COMPLETED_WITH_LIMITS and UNTESTED_BUDGET claims when the Qloo budget runs out", async () => {
     const r = await startRun();
-    // Resolution (2) + discovery (6) consume the whole budget; no evidence query fits.
+    // Resolution (2) + seed tags (2) + threads (6) use all 10 calls (enrichment yields to the
+    // evidence reserve); no evidence query fits.
     await handle.db.execute(
-      sql`UPDATE agent_runs SET budget = jsonb_set(budget, '{maxQlooCalls}', '8') WHERE id = ${r.runId}`,
+      sql`UPDATE agent_runs SET budget = jsonb_set(budget, '{maxQlooCalls}', '10') WHERE id = ${r.runId}`,
     );
     const deps = makeDeps(handle, boss, lib, scriptedExplorationLlm());
     await passGates(deps, r);
+    await confirmPool(r, deps);
     await drain(deps);
     const run = await getRun(handle.db, r.runId);
     expect(run).toMatchObject({

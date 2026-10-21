@@ -5,7 +5,7 @@ import {
   type DbHandle,
   type PgBoss,
 } from "@tessaloom/db";
-import { RateLimiter } from "./http";
+import { RateLimiter, secureCookiesFor } from "./http";
 
 /** Everything an API handler needs; tests construct their own instance. */
 export interface Services {
@@ -13,6 +13,7 @@ export interface Services {
   /** Lazily started pg-boss sender (the web process never runs maintenance). */
   boss: () => Promise<PgBoss>;
   sessionSecret: string;
+  appEnv: string;
   pepper: string;
   secureCookies: boolean;
   limiter: RateLimiter;
@@ -46,8 +47,9 @@ export function services(): Services {
         throw error;
       })),
     sessionSecret: env.SESSION_SECRET,
+    appEnv: env.APP_ENV,
     pepper: env.SHARE_TOKEN_PEPPER,
-    secureCookies: env.NODE_ENV === "production",
+    secureCookies: secureCookiesFor(env.APP_ENV),
     limiter: new RateLimiter(),
     now: () => new Date(),
     heartbeatMaxAgeMs: 30_000,

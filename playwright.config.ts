@@ -1,15 +1,36 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Browser E2E (TEST_PLAN §10) runs the production build in fixture mode: synthetic, labeled
+// Qloo fixtures and the scripted AI stand-ins. The FIXTURE banner is asserted in every test.
+const DATABASE_URL =
+  process.env.E2E_DATABASE_URL ??
+  "postgresql://tessaloom:local-development-only@127.0.0.1:5432/tessaloom_e2e";
+
 export default defineConfig({
   testDir: "./e2e",
-  use: { baseURL: "http://127.0.0.1:3100" },
+  timeout: 90_000,
+  expect: { timeout: 20_000 },
+  use: { baseURL: "http://127.0.0.1:3100", trace: "retain-on-failure" },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: "webkit",
+      use: {
+        ...devices["Desktop Safari"],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
   ],
   webServer: {
-    command: "node scripts/start.mjs",
-    url: "http://127.0.0.1:3100/api/health",
+    command: "node scripts/e2e-db.mjs && node scripts/start.mjs",
+    url: "http://127.0.0.1:3100/api/health/ready",
+    timeout: 120_000,
     reuseExistingServer: false,
     gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
     env: {
@@ -18,9 +39,9 @@ export default defineConfig({
       APP_ENV: "test",
       PORT: "3100",
       HOSTNAME: "127.0.0.1",
-      QLOO_MODE: "fixture",
+      QLOO_MODE: "synthetic",
       LLM_PROVIDER: "scripted",
-      DATABASE_URL: "postgresql://local:placeholder@127.0.0.1:5432/tessaloom",
+      DATABASE_URL,
       SESSION_SECRET: "playwright-placeholder-session-32-bytes",
       SHARE_TOKEN_PEPPER: "playwright-placeholder-pepper-32-bytes",
     },

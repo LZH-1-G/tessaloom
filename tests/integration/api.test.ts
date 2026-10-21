@@ -59,6 +59,7 @@ beforeAll(async () => {
     handle,
     boss: async () => boss,
     sessionSecret: "test-session-secret-at-least-32-bytes!!",
+    appEnv: "test",
     pepper: "test-pepper-at-least-32-bytes-long!!!!",
     secureCookies: false,
     limiter: new RateLimiter(),

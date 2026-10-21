@@ -53,6 +53,12 @@ export function buildStepContext(
       name: e.name,
       domain: e.domain,
     });
+  const tags = new Map<string, string[]>();
+  for (const r of snap.hasTag) {
+    const list = tags.get(r.fromEntityId) ?? [];
+    if (!list.includes(r.toEntityId)) list.push(r.toEntityId);
+    tags.set(r.fromEntityId, list);
+  }
   const hypotheses: HypothesisView[] = snap.hypotheses.map((h) => ({
     id: h.id,
     lineageId: h.lineageId,
@@ -112,10 +118,18 @@ export function buildStepContext(
       interestIndex: r.interestIndex ?? -1,
       inputText: r.inputText,
       domainHint: r.domainHint,
+      requestedKind: r.requestedKind,
       status: r.status,
       selectedEntityId: r.selectedEntityId,
     })),
-    seeds: snap.seeds.map((e) => entities.get(e.id)!),
+    seeds: snap.seeds
+      .filter((e) => e.role === "seed")
+      .map((e) => entities.get(e.id)!),
+    location:
+      snap.seeds
+        .filter((e) => e.role === "location")
+        .map((e) => entities.get(e.id)!)[0] ?? null,
+    tags,
     entities,
     threads: snap.threads.map((t) => ({
       seedId: t.fromEntityId,
@@ -125,9 +139,12 @@ export function buildStepContext(
     pool: snap.pool.map((p) => ({
       id: p.id,
       elementEntityIds: p.elementEntityIds,
+      relevance: p.relevance,
       novelty: p.novelty,
+      tensionFit: p.tensionFit,
+      noveltyInputs: p.noveltyInputs as "FULL" | "REDUCED_INPUTS",
+      selected: p.selected,
       rank: p.rank,
-      noveltyInputs: p.noveltyInputs,
     })),
     hypotheses,
     today: now.toISOString().slice(0, 10),

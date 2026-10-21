@@ -21,3 +21,4 @@ export * from "./repositories/qloo";
 export * from "./repositories/hypothesis";
 export * from "./repositories/ops";
 export { sql } from "drizzle-orm";
+export * from "./repositories/views";

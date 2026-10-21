@@ -32,6 +32,8 @@
 | ADR-021 | M2 live Qloo adapter decisions: endpoint variables in the worker, MCP SDK version, routing, local unsupported answers, in-memory cache | **Accepted** | 2026-10-21 (M2) |
 | ADR-022 | M3 LLM gateway decisions: dependency direction (injected validators), SDK call shape, typed claim params, prompts in code, policies | **Accepted** | 2026-10-21 (M3) |
 | ADR-023 | M4 orchestrator decisions: machine in core, pure step handlers with commit plans, pg-boss topology, grading at collection, worker-published run config, retry and budget termination | **Accepted** | 2026-10-21 (M4) |
+| ADR-024 | M5 discovery decisions: V1-based resolution strategy, tag enrichment budget, synthetic fixtures and scripted AI for development/E2E, fixture firewall through the cache, collision engine in core | **Accepted** | 2026-10-21 (M5) |
+| ADR-025 | M6 hypothesis-loop decisions: pool gate H2b, evaluation ruleset `ruleset-2026.10-m6` (rank/structure-based, honest INSUFFICIENT where calibration is pending), rule-based feasibility, salvage after a failed repair, tag signals in the planner, evidence rationale | **Accepted** | 2026-10-21 (M6) |
 
 ---
 
@@ -380,6 +382,88 @@
 
 ---
 
+### ADR-024: M5 brief, resolution, and discovery decisions
+
+- **Date:** 2026-10-21 (M5).
+- **Decisions:**
+  1. **Resolution follows the V1-observed contract (ADR-019).**
+     - Typed interests use `describe(entity, type)`. `qloo api search` (the only plain search) is called only when `describe` finds nothing or asks for input.
+     - Untyped interests use `describe(entity)` plus `find_tags`, because an interest may be a tag and one concept maps to several tags (V1 findings 2 and 5).
+     - The venue locality uses `describe(…, locality)`, then `api search --type locality`, which supplies the disambiguation strings `describe` omits (V1 finding 3).
+     - All candidates are merged without duplicates. **Exact-single** auto-accepts only one candidate whose name equals the user's text, ignoring case and accents. A harness `exact` pick alone is never trusted (V1 finding 1; CI-A1).
+  2. **H1 edits are user input.** Changing an interest's world at gate H1 creates a `PENDING` resolution record with the user's type hint, so the edit is stored as `USER_PROVIDED` and the model's `IntentFrame` stays unchanged. Editing the brief creates a new version and a new experiment.
+  3. **H2 covers tags and the locality.** A tag can be chosen as a seed; tag seeds thread through `recommend(signal_tags=…)`. The locality row uses index `interests.length` and becomes the experiment's `location` seed, which `LOCATION_FIT` uses.
+  4. **Tag enrichment is budgeted.**
+     - Seeds get one `entity_tags` call each.
+     - Thread items get per-entity `entity_tags` calls, because a multi-entity call merges tags without attribution (V1). At most 8 such calls are made, prioritized by bridge items, then by rank.
+     - Discovery never spends into the half of the Qloo budget reserved for evidence.
+     - Candidates whose elements lack tags are flagged `REDUCED_INPUTS` (CC-5).
+  5. **Grounding scope (§13.2).** R3 is grounded in every entity of the experiment (seeds, thread results, tags), not only the pool. R3 still weaves from the pool and receives the other entities as `discovered`, for example as shortlist options. Prompt `r3.generate` was bumped to 1.1.0.
+  6. **Collision engine in core.** `buildCollisionCandidates` / `selectPool` are pure and shared by the worker and the browser, so the tension slider can re-select the pool from stored scores. All candidates are stored, capped at 40 per domain pair.
+  7. **Development and E2E data are synthetic and labeled.**
+     - `QLOO_MODE=synthetic` uses a deterministic `SyntheticFixtureTransport`: fictional names, `FX-` IDs, transport `FIXTURE`, so every record is `DEVELOPMENT_FIXTURE`. It mirrors the V1 quirks and is refused in production by the environment schema and the supervisor. It is never a fallback for live failures.
+     - `LLM_PROVIDER=scripted` uses deterministic R1/R3/R4 stand-ins, which report the model id `scripted-demo` at $0 (never a real model name).
+     - The UI shows the FIXTURE banner, and the experiment view lists the LLM providers used.
+  8. **Fixture firewall through the cache.**
+     - The adapter no longer caches fixture-transport results.
+     - Migration `0003_fixture_coupling_through_cache` makes the coupling triggers resolve a CACHE invocation's effective origin through `cache_source_invocation_id`.
+     - Before this fix, cached fixture data could be labeled `QLOO_SOURCED`. The bug was found by the WebKit E2E run.
+  9. **The Qloo rate limiter applies to live traffic only.** Fixture transports bypass it.
+- **Consequences:** Resolution can take two calls per interest (`describe` + `search`/`find_tags`), and locality resolution takes two. M6 calibration must account for this in the Qloo budget.
+
+### ADR-025: M6 collision pool gate, evaluators, feasibility, and failed-repair handling
+
+- **Date:** 2026-10-21 (M6).
+- **Context:** M4 shipped placeholder evaluators (an affinity-median threshold), a constant feasibility of 0.5, and a failed repair that always failed the run. V1 showed that absolute affinities are not comparable across calls and can be flat (0.883–0.899 for one book → movies, finding 7), that some tag types are noise (finding 6), that `compare` has no similarity score, that `trends` is empty for several types, and that `where_popular` returns unnamed geohash cells. No live calibration run has been authorized yet.
+- **Decisions:**
+  1. **Gate H2b — pool confirmation.**
+     - The plan says the tension slider previews the pool client-side and "commit continues the run".
+     - A new paused state, `AWAITING_POOL_CONFIRMATION`, sits between `BUILDING_COLLISION_POOL` and `GENERATING_HYPOTHESES`, with the event `USER_CONFIRMED_POOL` (guard: pool ≥ 3). Migration `0004` adds the enum value.
+     - The browser previews with core `selectPool` over the stored candidate scores. The server re-selects with the same function and candidate key (`elementEntityIds.join("|")`), so preview and commit cannot diverge.
+     - The committed τ is recorded in the `CONFIRMATION_RECEIVED` event, not in the experiment key: a human gate answer is a decision on a run, not a new experiment.
+  2. **Evaluation ruleset `ruleset-2026.10-m6`.** It replaces the placeholders. Every rule is either rank- or structure-based, or it returns INSUFFICIENT with the note "evaluator pending live calibration". No threshold was invented.
+     - `CROSS_DOMAIN_AFFINITY`:
+       - SUPPORTS: the target is in the top quartile of K = 20.
+       - NEUTRAL: the target is present below the top quartile, or the affinities are effectively tied (spread < 0.005, the published precision).
+       - CONTRADICTS: the target is absent from a full top K.
+       - INSUFFICIENT: fewer than K results came back.
+       - `FIELD_UNAVAILABLE`: no affinity values were returned.
+       - A tag-filtered claim with ≥ m = 3 results SUPPORTS; a domain-only claim is NEUTRAL, because Qloo returns results for any signal.
+     - `SHORTLIST_FIT`: top third → SUPPORTS, bottom third → CONTRADICTS, otherwise NEUTRAL. It needs n ≥ 3 options.
+     - `AUDIENCE_BRIDGE`: shared tags or matching entities → SUPPORTS. Otherwise INSUFFICIENT (the subtype-overlap test is pending calibration). It never CONTRADICTS.
+     - `TAG_RESONANCE`: the theme tag is present with an allowlisted content tag type → SUPPORTS; otherwise NEUTRAL.
+     - `LOCATION_FIT`: INSUFFICIENT, descriptive only. The concentration threshold is pending calibration, and venue coordinates are unknown.
+     - `MOMENTUM`: SUPPORTS when the rank velocity is positive in a majority of the latest 3 points; NEUTRAL otherwise; INSUFFICIENT for an empty series.
+     - `AUDIENCE_PROFILE`: always NEUTRAL (descriptive).
+     - Every fact is pointer-verified against the response at ingest. Each evidence record stores the rule in plain language in the new `evidence_records.rationale` column (APP_DERIVED), which the UI shows as "SUPPORTS because …".
+  3. **Audience affinity is never creative fit.**
+     - Evaluators only grade the claim's typed question.
+     - The UI labels every number as an aggregate audience signal.
+     - The concept text is `CREATIVE_SPECULATION`; the critic's notes are `MODEL_INTERPRETATION`.
+  4. **Rule-based feasibility (`feasibility-1.0.0`).** It replaces the constant 0.5.
+     - Base score 0.8 ("plausible, not proven"). Penalties:
+       - CAPACITY −0.3: the format's minimum audience exceeds the venue capacity;
+       - BUDGET −0.2: a low budget band with costly elements;
+       - DURATION −0.2: a multi-day format in a slot under 4 hours;
+       - VENUE −0.2: physical needs at an online venue.
+     - Bonus: LOCATION_EVIDENCE +0.1.
+     - The result is clamped to [0.1, 1]. Every applied rule is stored in `scoreBreakdown.feasibility` and shown in the score breakdown. Unknown constraints are never penalized.
+  5. **Failed repair (TEST_PLAN §8 "LLM ungrounded entity").**
+     - When the one repair attempt still fails semantic validation but the output is schema-valid, the gateway returns it as `salvage`.
+     - R3 keeps only drafts that pass grounding and safe-use. Ungrounded elements and invalid claims are dropped, as are drafts with fewer than 2 elements or no claims. Every drop is logged as a `VALIDATION_FAILED` event.
+     - The R4 critique keeps only entries that pass the critique validator, so the critic still cannot upgrade a stance (HL-A3).
+     - If nothing survives, the step fails with `LLM_INVALID_OUTPUT`, as before ("LLM invalid twice").
+  6. **Planner tag signals.**
+     - Tag seeds are sent as `signal_tags`.
+     - A non-recommend test whose only signals are tags is marked `UNSUPPORTED`, so the claim is `UNTESTABLE` and no request is made.
+     - Claims the planner drops are never sent to Qloo.
+  7. **Raw retention stays off.** The worker now passes `QLOO_RAW_RETENTION` (default `off`, R-08) to the recorder. The §7.1 pointer-verification test turns it on only inside its own test database.
+- **Consequences:**
+  - Without live calibration, many claims grade INSUFFICIENT or NEUTRAL, and hypotheses often settle as `PARTIALLY_SUPPORTED`. This is honest, but less conclusive in demos.
+  - Live calibration (LC runs with owner authorization) must set the subtype-overlap ω, the location α/r, and the momentum φ, then bump the ruleset version. Stored evidence keeps the version that graded it.
+
+---
+
 ## 3. Key trade-offs
 
 | Trade-off | Chosen side | Cost accepted |
@@ -452,6 +536,8 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | M6 implemented: pool gate H2b with a client-side tension preview, evaluation ruleset `ruleset-2026.10-m6`, rule-based feasibility, salvage after a failed repair, planner tag signals, evidence rationale, Hypothesis Lab (cards, status groups, retired group, evidence drawer, trace, score breakdown, iteration timeline, gate H3); ADR-025 recorded | IMPLEMENTATION_PLAN M6 |
+| 2026-10-21 | M5 implemented: Creative Brief (form, preview, H1 chips, versions), V1-based resolution with tags and locality (H2), budgeted tag enrichment, Discovery Canvas (lanes, list, inspector, trace), synthetic fixtures and scripted AI for development and E2E, fixture-firewall-through-cache fix; ADR-024 recorded | IMPLEMENTATION_PLAN M5 |
 | 2026-10-21 | M4 implemented: state machine (core), pure step handlers, pg-boss worker with idempotent commits, budgets, cancellation, gates, expiry, recovery, retry, SSE, run API, heartbeat readiness; full scripted EXPLORATION passes; ADR-023 recorded | IMPLEMENTATION_PLAN M4 |
 | 2026-10-21 | M3 implemented: provider-agnostic LLM gateway (Anthropic + scripted providers), prompt registry, repair/refusal/truncation/fallback/budget policies, §13.2 validators in `packages/agent`; ADR-022 recorded | IMPLEMENTATION_PLAN M3 |
 | 2026-10-21 | M2 implemented: worker endpoint settings, live Qloo adapter (MCP/CLI routing, envelope parsing, normalizers, quota, cache, provenance), worker readiness and heartbeat; ADR-021 recorded; 3-call live smoke passed | API_CONTRACTS §6.7 |

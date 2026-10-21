@@ -12,6 +12,7 @@ import {
   isRunnable,
   isTerminal,
   nextState,
+  selectPool,
   type GuardContext,
   type RunEventName,
   type RunState,
@@ -31,6 +32,7 @@ import {
 import {
   latestResolutions,
   lockRun,
+  updateCollisionCandidate,
   updateHypothesis,
 } from "./repositories/orchestrator";
 import { getToolInvocation } from "./repositories/qloo";
@@ -47,6 +49,7 @@ import {
 } from "./repositories/workspace";
 import {
   agentRuns,
+  collisionCandidates,
   culturalEntities,
   experiments,
   hypotheses,
@@ -391,6 +394,24 @@ export async function confirmRun(
             "Confirmation references a different brief version",
           );
         await confirmBriefVersion(tx, experiment.briefVersionId);
+        const brief = await getBriefVersion(tx, experiment.briefVersionId);
+        const interests = (brief.content as { interests: { text: string }[] })
+          .interests;
+        for (const edit of response.interestDomains ?? []) {
+          const interest = interests[edit.interestIndex];
+          if (!interest)
+            throw new DomainRuleError(`Unknown interest ${edit.interestIndex}`);
+          // A PENDING record carries the user's type hint into resolution (USER_PROVIDED).
+          await createResolution(tx, {
+            projectId: experiment.projectId,
+            briefVersionId: experiment.briefVersionId,
+            runId: run.id,
+            interestIndex: edit.interestIndex,
+            inputText: interest.text,
+            domainHint: edit.domain === "unknown" ? null : edit.domain,
+            requestedKind: "entity",
+          });
+        }
         return runView(
           await commitTransition(
             tx,
@@ -437,7 +458,10 @@ export async function confirmRun(
             const candidate = candidates.entities.find(
               (c) => c.qlooId === choice.qlooId,
             );
-            if (!candidate)
+            const tag = candidate
+              ? undefined
+              : candidates.tags.find((t) => t.tagId === choice.qlooId);
+            if (!candidate && !tag)
               throw new DomainRuleError(
                 "Selected entity was not among the offered candidates",
               );
@@ -445,28 +469,46 @@ export async function confirmRun(
             const source = sourceId
               ? await getToolInvocation(tx, sourceId)
               : null;
-            const domain =
-              /^urn:entity:([a-z_]+)$/.exec(candidate.type ?? "")?.[1] ?? null;
-            const entity = await upsertCulturalEntity(tx, {
-              workspaceId: project!.workspaceId,
-              kind: domain === "locality" ? "locality" : "entity",
-              qlooId: candidate.qlooId,
-              name: candidate.name,
-              qlooType: candidate.type ?? null,
-              domain,
-              disambiguation: candidate.disambiguation ?? null,
-              legacyType: candidate.legacyType,
-              snapshot: {
-                popularity: candidate.popularity ?? null,
-                description: candidate.description ?? null,
-                source: candidate.source,
-              },
-              sourceToolInvocationId: sourceId,
-              provenanceClass:
-                source?.dataOrigin === "FIXTURE"
-                  ? "DEVELOPMENT_FIXTURE"
-                  : "QLOO_SOURCED",
-            });
+            const provenanceClass =
+              source?.dataOrigin === "FIXTURE"
+                ? "DEVELOPMENT_FIXTURE"
+                : "QLOO_SOURCED";
+            const domain = candidate
+              ? (/^urn:entity:([a-z_]+)$/.exec(candidate.type ?? "")?.[1] ??
+                null)
+              : "tag";
+            const entity = candidate
+              ? await upsertCulturalEntity(tx, {
+                  workspaceId: project!.workspaceId,
+                  kind: domain === "locality" ? "locality" : "entity",
+                  qlooId: candidate.qlooId,
+                  name: candidate.name,
+                  qlooType: candidate.type ?? null,
+                  domain,
+                  disambiguation: candidate.disambiguation ?? null,
+                  legacyType: candidate.legacyType,
+                  snapshot: {
+                    popularity: candidate.popularity ?? null,
+                    description: candidate.description ?? null,
+                    source: candidate.source,
+                  },
+                  sourceToolInvocationId: sourceId,
+                  provenanceClass,
+                })
+              : await upsertCulturalEntity(tx, {
+                  workspaceId: project!.workspaceId,
+                  kind: "tag",
+                  qlooId: tag!.tagId,
+                  name: tag!.name,
+                  qlooType: tag!.tagType ?? null,
+                  domain: "tag",
+                  snapshot: {
+                    popularity: tag!.popularity ?? null,
+                    tagType: tag!.tagType ?? null,
+                  },
+                  sourceToolInvocationId: sourceId,
+                  provenanceClass,
+                });
             await selectResolutionCandidate(tx, {
               resolutionId: record.id,
               entityId: entity.id,
@@ -497,7 +539,12 @@ export async function confirmRun(
         )
           throw new DomainRuleError("Every ambiguous interest needs a choice");
         const selectedIds = after
-          .filter((r) => r.status === "RESOLVED" && r.selectedEntityId)
+          .filter(
+            (r) =>
+              r.status === "RESOLVED" &&
+              r.selectedEntityId &&
+              r.requestedKind !== "locality",
+          )
           .map((r) => r.selectedEntityId!);
         const seedRows = selectedIds.length
           ? await tx
@@ -514,6 +561,79 @@ export async function confirmRun(
             "USER_CONFIRMED_ENTITIES",
             { seedDomains: seedRows.map((r) => r.domain ?? "unknown") },
             { events: [received] },
+          ),
+        );
+      }
+      case "POOL": {
+        // Gate H2b: re-select the stored pool at the committed tension with the same engine
+        // and candidate keys the browser previews with (ADR-025).
+        const rows = await tx
+          .select()
+          .from(collisionCandidates)
+          .where(eq(collisionCandidates.experimentId, experiment.id));
+        const ids = [...new Set(rows.flatMap((r) => r.elementEntityIds))];
+        const domains = new Map(
+          (ids.length
+            ? await tx
+                .select({
+                  id: culturalEntities.id,
+                  domain: culturalEntities.domain,
+                })
+                .from(culturalEntities)
+                .where(inArray(culturalEntities.id, ids))
+            : []
+          ).map((e) => [e.id, e.domain ?? "unknown"]),
+        );
+        const candidates = rows.map((r) => ({
+          key: r.elementEntityIds.join("|"),
+          elementEntityIds: [
+            r.elementEntityIds[0]!,
+            r.elementEntityIds[1]!,
+          ] as [string, string],
+          domains: [
+            domains.get(r.elementEntityIds[0]!) ?? "unknown",
+            domains.get(r.elementEntityIds[1]!) ?? "unknown",
+          ] as [string, string],
+          relevance: r.relevance,
+          novelty: r.novelty,
+        }));
+        const selection = new Map(
+          selectPool(candidates, response.tension).map((s) => [s.key, s]),
+        );
+        if (selection.size < 3)
+          throw new DomainRuleError(
+            "This tension leaves fewer than 3 collisions; choose another value.",
+          );
+        for (const r of rows) {
+          const chosen = selection.get(r.elementEntityIds.join("|"));
+          await updateCollisionCandidate(tx, r.id, {
+            selected: !!chosen,
+            rank: chosen?.rank ?? null,
+            tensionFit: Number(
+              (1 - Math.abs(r.novelty - response.tension)).toFixed(4),
+            ),
+          });
+        }
+        return runView(
+          await commitTransition(
+            tx,
+            raw,
+            boss,
+            run,
+            "USER_CONFIRMED_POOL",
+            { poolSize: selection.size },
+            {
+              events: [
+                {
+                  ...received,
+                  payload: {
+                    kind: response.kind,
+                    tension: response.tension,
+                    selected: selection.size,
+                  },
+                },
+              ],
+            },
           ),
         );
       }

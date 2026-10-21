@@ -792,6 +792,8 @@ export const evidenceRecords = pgTable(
     primaryMeasure: qlooMeasure("primary_measure").notNull(),
     quality: evidenceQuality("quality").notNull(),
     provenanceClass: provenanceClass("provenance_class").notNull(),
+    // The evaluator's plain-language rule (APP_DERIVED), e.g. "SUPPORTS because B ranked 4 of 20".
+    rationale: text("rationale"),
     criticNote: text("critic_note"),
     criticDowngrade: boolean("critic_downgrade").notNull().default(false),
     createdAt: createdAt(),

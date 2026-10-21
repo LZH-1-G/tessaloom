@@ -81,6 +81,51 @@ function paramIds(p: ClaimParams): string[] {
   ];
 }
 
+/** Issues of one claim: grounded params, tag kinds, required params per test kind. */
+export function claimIssues(
+  c: HypothesisDraft["claims"][number],
+  ctx: GroundingContext,
+  cpath: string,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const id of paramIds(c.params)) {
+    if (!ctx.entityIds.has(id))
+      issues.push({
+        code: "UNGROUNDED_PARAM",
+        path: `${cpath}.params`,
+        message: `Param entity ${id} is not in the collision pool`,
+      });
+  }
+  if (ctx.tagIds) {
+    for (const id of c.params.tagEntityIds ?? [])
+      if (ctx.entityIds.has(id) && !ctx.tagIds.has(id))
+        issues.push({
+          code: "NOT_A_TAG",
+          path: `${cpath}.params.tagEntityIds`,
+          message: `${id} is an entity, not a tag`,
+        });
+  }
+  const missing = REQUIRED_PARAMS[c.testKind](c.params);
+  if (missing)
+    issues.push({
+      code: "CLAIM_PARAMS",
+      path: `${cpath}.params`,
+      message: `${c.testKind}: ${missing}`,
+    });
+  if (c.testKind === "MOMENTUM" && ctx.domainOf) {
+    const domains = new Set(
+      c.params.signalEntityIds.map((id) => ctx.domainOf!.get(id)),
+    );
+    if (domains.size > 1)
+      issues.push({
+        code: "CLAIM_PARAMS",
+        path: `${cpath}.params`,
+        message: "MOMENTUM: all entities must share one domain",
+      });
+  }
+  return issues;
+}
+
 export function validateHypothesisDraft(
   h: HypothesisDraft,
   ctx: GroundingContext,
@@ -121,41 +166,7 @@ export function validateHypothesisDraft(
         message: "Claim tempIds must be unique",
       });
     claimIds.add(c.tempId);
-    for (const id of paramIds(c.params)) {
-      if (!ctx.entityIds.has(id))
-        issues.push({
-          code: "UNGROUNDED_PARAM",
-          path: `${cpath}.params`,
-          message: `Param entity ${id} is not in the collision pool`,
-        });
-    }
-    if (ctx.tagIds) {
-      for (const id of c.params.tagEntityIds ?? [])
-        if (ctx.entityIds.has(id) && !ctx.tagIds.has(id))
-          issues.push({
-            code: "NOT_A_TAG",
-            path: `${cpath}.params.tagEntityIds`,
-            message: `${id} is an entity, not a tag`,
-          });
-    }
-    const missing = REQUIRED_PARAMS[c.testKind](c.params);
-    if (missing)
-      issues.push({
-        code: "CLAIM_PARAMS",
-        path: `${cpath}.params`,
-        message: `${c.testKind}: ${missing}`,
-      });
-    if (c.testKind === "MOMENTUM" && ctx.domainOf) {
-      const domains = new Set(
-        c.params.signalEntityIds.map((id) => ctx.domainOf!.get(id)),
-      );
-      if (domains.size > 1)
-        issues.push({
-          code: "CLAIM_PARAMS",
-          path: `${cpath}.params`,
-          message: "MOMENTUM: all entities must share one domain",
-        });
-    }
+    issues.push(...claimIssues(c, ctx, cpath));
   });
   return issues;
 }
@@ -412,3 +423,87 @@ export const safeUseValidator: Validator<unknown> = (value) => {
         });
   return issues;
 };
+
+// ---------------------------------------------------------------------------
+// Failed-repair salvage (TEST_PLAN §8: "still invalid → the element is dropped and logged")
+
+export interface SalvageReport<T> {
+  kept: T[];
+  /** Hypotheses removed entirely, with the reasons. */
+  dropped: { tempId: string; title: string; reasons: string[] }[];
+  /** Kept hypotheses that lost elements or claims. */
+  trimmed: { tempId: string; removed: string[] }[];
+}
+
+/**
+ * Keep only what is valid in a schema-valid R3 output that still failed semantic validation
+ * after its single repair: ungrounded elements and invalid claims are dropped; a hypothesis
+ * left with < 2 elements or no claims is dropped; unsafe text is never salvaged.
+ */
+export function salvageDrafts<T extends HypothesisDraft>(
+  drafts: T[],
+  ctx: GroundingContext,
+): SalvageReport<T> {
+  const report: SalvageReport<T> = { kept: [], dropped: [], trimmed: [] };
+  const seenTempIds = new Set<string>();
+  for (const draft of drafts) {
+    const unsafe = safeUseValidator(draft);
+    if (unsafe.length) {
+      report.dropped.push({
+        tempId: draft.tempId,
+        title: draft.title,
+        reasons: [...new Set(unsafe.map((i) => i.code))],
+      });
+      continue;
+    }
+    if (seenTempIds.has(draft.tempId)) {
+      report.dropped.push({
+        tempId: draft.tempId,
+        title: draft.title,
+        reasons: ["DUPLICATE_HYPOTHESIS_ID"],
+      });
+      continue;
+    }
+    seenTempIds.add(draft.tempId);
+    const removed: string[] = [];
+    const elementIds = new Set<string>();
+    const elementRefs = draft.elementRefs.filter((ref) => {
+      if (!ctx.entityIds.has(ref.entityId)) {
+        removed.push(`element ${ref.entityId} (not in this experiment)`);
+        return false;
+      }
+      if (elementIds.has(ref.entityId)) return false;
+      elementIds.add(ref.entityId);
+      return true;
+    });
+    const claimIds = new Set<string>();
+    const claims = draft.claims
+      .filter((claim) => {
+        const problems = claimIssues(claim, ctx, "claim");
+        if (problems.length || claimIds.has(claim.tempId)) {
+          removed.push(
+            `claim "${claim.statement.slice(0, 60)}" (${[...new Set(problems.map((p) => p.code))].join(", ") || "duplicate"})`,
+          );
+          return false;
+        }
+        claimIds.add(claim.tempId);
+        return true;
+      })
+      .slice(0, ctx.maxClaimsPerHypothesis ?? 3);
+    if (elementRefs.length < 2 || claims.length === 0) {
+      report.dropped.push({
+        tempId: draft.tempId,
+        title: draft.title,
+        reasons: [
+          elementRefs.length < 2
+            ? "FEWER_THAN_2_GROUNDED_ELEMENTS"
+            : "NO_VALID_CLAIMS",
+        ],
+      });
+      continue;
+    }
+    if (removed.length) report.trimmed.push({ tempId: draft.tempId, removed });
+    report.kept.push({ ...draft, elementRefs, claims });
+  }
+  return report;
+}

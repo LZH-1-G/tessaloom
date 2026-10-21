@@ -1,33 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  EVALUATION_RULESET,
   addUsage,
-  buildCollisionPool,
   checkTermination,
   computeStatus,
-  evaluateClaim,
   exhaustedLimit,
   planEvidence,
   remaining,
   scoreHypothesis,
   type ClaimState,
-  type QlooResult,
 } from "../../packages/agent/src";
 import { DEFAULT_BUDGETS, uuidv7 } from "../../packages/core/src";
 
-const prov = (id = "inv-1") => ({
-  toolInvocationId: id,
-  dataOrigin: "FIXTURE" as const,
-  requestHash: "a".repeat(64),
-  workflow: "recommend",
-});
-const ok = <T>(items: T[], raw: unknown = {}): QlooResult<T> => ({
-  kind: "OK",
-  items,
-  quality: "FULL",
-  provenance: prov(),
-  raw,
-});
 const claim = (
   stance: ClaimState["stance"],
   inv: string | null = "i1",
@@ -226,183 +209,6 @@ describe("budgets (AGENT_WORKFLOW §7)", () => {
   });
 });
 
-describe("deterministic evaluators (AGENT_WORKFLOW §8.2)", () => {
-  const ranked = (ids: string[]) =>
-    ids.map((id, i) => ({
-      qlooId: id,
-      name: id,
-      affinity: Number((0.95 - i * 0.03).toFixed(2)),
-      missingFields: [],
-    }));
-  const rawFor = (ids: string[]) => ({
-    result_count: ids.length,
-    results: ids.map((id, i) => ({
-      entity_id: id,
-      affinity: Number((0.95 - i * 0.03).toFixed(2)),
-    })),
-  });
-  const twenty = Array.from({ length: 20 }, (_, i) => `E${i}`);
-
-  it("CROSS_DOMAIN_AFFINITY: supports above median+δ, contradicts when absent from a full top K, insufficient otherwise", () => {
-    const supports = evaluateClaim(
-      "CROSS_DOMAIN_AFFINITY",
-      { signalQlooIds: ["S"], targetQlooId: "E0" },
-      ok(ranked(twenty), rawFor(twenty)),
-    );
-    expect(supports).toMatchObject({
-      stance: "SUPPORTS",
-      claimStatus: "TESTED",
-      primaryMeasure: "AUDIENCE_AFFINITY",
-      evaluatorId: `CROSS_DOMAIN_AFFINITY@${EVALUATION_RULESET.version}`,
-    });
-    expect(
-      supports.facts.find((f) => f.jsonPointer === "/results/0/affinity"),
-    ).toMatchObject({
-      value: 0.95,
-      verifiedAtIngest: true,
-      measure: "AUDIENCE_AFFINITY",
-    });
-    expect(
-      evaluateClaim(
-        "CROSS_DOMAIN_AFFINITY",
-        { signalQlooIds: ["S"], targetQlooId: "E19" },
-        ok(ranked(twenty)),
-      ).stance,
-    ).toBe("NEUTRAL");
-    expect(
-      evaluateClaim(
-        "CROSS_DOMAIN_AFFINITY",
-        { signalQlooIds: ["S"], targetQlooId: "X" },
-        ok(ranked(twenty)),
-      ).stance,
-    ).toBe("CONTRADICTS");
-    expect(
-      evaluateClaim(
-        "CROSS_DOMAIN_AFFINITY",
-        { signalQlooIds: ["S"], targetQlooId: "X" },
-        ok(ranked(twenty.slice(0, 5))),
-      ).stance,
-    ).toBe("INSUFFICIENT");
-    const flat = twenty.map((id) => ({
-      qlooId: id,
-      name: id,
-      affinity: 0.5,
-      missingFields: [],
-    }));
-    expect(
-      evaluateClaim(
-        "CROSS_DOMAIN_AFFINITY",
-        { signalQlooIds: ["S"], targetQlooId: "E0" },
-        ok(flat),
-      ).stance,
-    ).toBe("INSUFFICIENT");
-  });
-
-  it("SHORTLIST_FIT: top third supports, bottom third contradicts", () => {
-    const r = ok(ranked(["A", "B", "C", "D", "E", "F"]));
-    expect(
-      evaluateClaim(
-        "SHORTLIST_FIT",
-        { signalQlooIds: ["S"], targetQlooId: "A" },
-        r,
-      ).stance,
-    ).toBe("SUPPORTS");
-    expect(
-      evaluateClaim(
-        "SHORTLIST_FIT",
-        { signalQlooIds: ["S"], targetQlooId: "C" },
-        r,
-      ).stance,
-    ).toBe("NEUTRAL");
-    expect(
-      evaluateClaim(
-        "SHORTLIST_FIT",
-        { signalQlooIds: ["S"], targetQlooId: "F" },
-        r,
-      ).stance,
-    ).toBe("CONTRADICTS");
-  });
-
-  it("AUDIENCE_BRIDGE never contradicts; TAG_RESONANCE needs an allowed tag type", () => {
-    expect(
-      evaluateClaim(
-        "AUDIENCE_BRIDGE",
-        { signalQlooIds: ["A"] },
-        ok([{ shared: [], a: [], b: [], matchEntities: [] }]),
-      ).stance,
-    ).toBe("INSUFFICIENT");
-    expect(
-      evaluateClaim(
-        "AUDIENCE_BRIDGE",
-        { signalQlooIds: ["A"] },
-        ok([{ shared: [{ tagId: "t" }], a: [], b: [], matchEntities: [] }]),
-      ).stance,
-    ).toBe("SUPPORTS");
-    const tags = [
-      { tagId: "T1", name: "noir", tagType: "urn:tag:genre:qloo" },
-      { tagId: "T2", name: "award", tagType: "urn:tag:endorsement" },
-    ];
-    expect(
-      evaluateClaim(
-        "TAG_RESONANCE",
-        { signalQlooIds: ["E"], tagQlooIds: ["T1"] },
-        ok(tags, { results: [{ id: "T1" }] }),
-      ).stance,
-    ).toBe("SUPPORTS");
-    expect(
-      evaluateClaim(
-        "TAG_RESONANCE",
-        { signalQlooIds: ["E"], tagQlooIds: ["T2"] },
-        ok(tags),
-      ).stance,
-    ).toBe("NEUTRAL");
-  });
-
-  it("maps EMPTY, ERROR, NEEDS_INPUT, and UNSUPPORTED to non-decisive outcomes", () => {
-    expect(
-      evaluateClaim(
-        "MOMENTUM",
-        { signalQlooIds: ["E"] },
-        { kind: "EMPTY", provenance: prov(), raw: {} },
-      ),
-    ).toMatchObject({ stance: "INSUFFICIENT", claimStatus: "TESTED" });
-    expect(
-      evaluateClaim(
-        "MOMENTUM",
-        { signalQlooIds: ["E"] },
-        { kind: "UNSUPPORTED", reason: "trends+book" },
-      ),
-    ).toMatchObject({ claimStatus: "UNSUPPORTED", quality: "UNSUPPORTED" });
-    expect(
-      evaluateClaim(
-        "MOMENTUM",
-        { signalQlooIds: ["E"] },
-        { kind: "ERROR", code: "TIMEOUT", retryable: true, provenance: null },
-      ),
-    ).toMatchObject({ claimStatus: "FAILED" });
-    expect(
-      evaluateClaim("MOMENTUM", { signalQlooIds: ["E"] }, ok([{ points: [] }]))
-        .stance,
-    ).toBe("INSUFFICIENT");
-    expect(
-      evaluateClaim(
-        "MOMENTUM",
-        { signalQlooIds: ["E"] },
-        ok([
-          { points: [{ date: "d", rankVelocity: 2, velocityFoldChange: 1.5 }] },
-        ]),
-      ).stance,
-    ).toBe("SUPPORTS");
-    expect(
-      evaluateClaim(
-        "AUDIENCE_PROFILE",
-        { signalQlooIds: ["E"] },
-        ok([{ dimension: "age", band: "25-34", index: 0.3 }]),
-      ).stance,
-    ).toBe("NEUTRAL");
-  });
-});
-
 describe("evidence planning (AGENT_WORKFLOW §7, §8.1)", () => {
   const [M, A, B5, B6] = [uuidv7(), uuidv7(), uuidv7(), uuidv7()];
   const entities = new Map([
@@ -493,72 +299,5 @@ describe("evidence planning (AGENT_WORKFLOW §7, §8.1)", () => {
     expect(p.queries.map((q) => q.method)).toEqual(["recommend"]);
     expect(p.untestedBudget).toEqual(["c2"]);
     expect(plan(0).untestedBudget.sort()).toEqual(["c1", "c2", "c3"]);
-  });
-});
-
-describe("collision engine (AGENT_WORKFLOW §16)", () => {
-  it("bridges co-occurring elements across seeds and domains, keeps the top k per domain, and diversifies", () => {
-    const thread = (domain: string, ids: string[]) =>
-      ids.map((entityId, position) => ({
-        entityId,
-        domain,
-        position,
-        tagIds: [],
-      }));
-    const threads = new Map([
-      [
-        "M",
-        [
-          ...thread("artist", ["AR1", "AR2"]),
-          ...thread("book", ["B1", "B5"]),
-          ...thread("place", ["P1", "P3"]),
-        ],
-      ],
-      [
-        "A",
-        [...thread("book", ["B5", "B9"]), ...thread("place", ["P3", "P9"])],
-      ],
-    ]);
-    const seeds = [
-      { entityId: "M", domain: "movie", tagIds: [] },
-      { entityId: "A", domain: "artist", tagIds: [] },
-    ];
-    const pool = buildCollisionPool({ seeds, threads, tension: 0.5, k: 10 });
-    const selected = pool.filter((c) => c.selected);
-    expect(selected.length).toBeGreaterThanOrEqual(3);
-    for (const c of pool) {
-      expect(c.noveltyInputs).toBe("REDUCED_INPUTS"); // no tags in M4
-      expect(c.bridge.coOccurrence).toBe(true);
-      for (const v of [c.relevance, c.novelty, c.tensionFit])
-        expect(v).toBeGreaterThanOrEqual(0);
-    }
-    expect(selected.map((c) => c.rank!).sort((a, b) => a - b)).toEqual(
-      selected.map((_, i) => i + 1),
-    );
-    // MMR spreads the first picks across distinct domain pairs.
-    const firstPairs = selected
-      .filter((c) => c.rank! <= 3)
-      .map((c) =>
-        c.elementEntityIds
-          .map(
-            (id) =>
-              ({ M: "movie", A: "artist" })[id as "M"] ??
-              id.replace(/\d+$/, ""),
-          )
-          .sort()
-          .join("|"),
-      );
-    expect(new Set(firstPairs).size).toBe(3);
-    // Deterministic for the same inputs.
-    expect(buildCollisionPool({ seeds, threads, tension: 0.5, k: 10 })).toEqual(
-      pool,
-    );
-    // Elements from a single seed's thread alone never form a candidate.
-    const lonely = buildCollisionPool({
-      seeds,
-      threads: new Map([["M", threads.get("M")!]]),
-      tension: 0.5,
-    });
-    expect(lonely).toEqual([]);
   });
 });

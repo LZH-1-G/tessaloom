@@ -117,6 +117,17 @@ export async function insertCollisionCandidates(
     .returning();
 }
 
+export async function updateCollisionCandidate(
+  db: Executor,
+  id: string,
+  patch: { selected: boolean; rank: number | null; tensionFit: number },
+) {
+  await db
+    .update(collisionCandidates)
+    .set(patch)
+    .where(eq(collisionCandidates.id, id));
+}
+
 export async function listCollisionCandidates(
   db: Executor,
   experimentId: string,
@@ -192,7 +203,7 @@ export async function updateHypothesis(
 
 // --- Maintenance queries ---
 
-const PAUSED = sql`${agentRuns.state} IN ('AWAITING_BRIEF_CONFIRMATION','AWAITING_ENTITY_CONFIRMATION','AWAITING_HYPOTHESIS_SELECTION','AWAITING_COUNTERFACTUAL_CONFIRMATION')`;
+const PAUSED = sql`${agentRuns.state} IN ('AWAITING_BRIEF_CONFIRMATION','AWAITING_ENTITY_CONFIRMATION','AWAITING_POOL_CONFIRMATION','AWAITING_HYPOTHESIS_SELECTION','AWAITING_COUNTERFACTUAL_CONFIRMATION')`;
 const TERMINAL = sql`${agentRuns.state} IN ('COMPLETED','COMPLETED_WITH_LIMITS','FAILED','CANCELLED')`;
 
 const lastEventTs = sql<Date>`(SELECT max(${runEvents.ts}) FROM ${runEvents} WHERE ${runEvents.runId} = ${agentRuns.id})`;
@@ -260,19 +271,14 @@ export async function loadRunSnapshot(db: Executor, runId: string) {
         .where(
           and(
             eq(entityRelations.experimentId, experiment.id),
-            eq(entityRelations.kind, "THREAD"),
+            inArray(entityRelations.kind, ["THREAD", "HAS_TAG"]),
           ),
         ),
       db
         .select()
         .from(collisionCandidates)
-        .where(
-          and(
-            eq(collisionCandidates.experimentId, experiment.id),
-            eq(collisionCandidates.selected, true),
-          ),
-        )
-        .orderBy(asc(collisionCandidates.rank)),
+        .where(eq(collisionCandidates.experimentId, experiment.id))
+        .orderBy(asc(collisionCandidates.rank), asc(collisionCandidates.id)),
       listHypothesisState(db, experiment.id),
       db
         .select({ state: runEvents.state, ts: runEvents.ts })
@@ -316,9 +322,10 @@ export async function loadRunSnapshot(db: Executor, runId: string) {
     workspaceId: project.workspaceId,
     brief: brief!,
     resolutions,
-    seeds: seeds.map((s) => s.entity),
+    seeds: seeds.map((s) => ({ ...s.entity, role: s.seed.role })),
     entities,
-    threads: relations,
+    threads: relations.filter((r) => r.kind === "THREAD"),
+    hasTag: relations.filter((r) => r.kind === "HAS_TAG"),
     pool,
     hypotheses: hyps,
     stateEvents,
