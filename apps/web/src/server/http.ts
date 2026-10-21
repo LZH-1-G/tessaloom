@@ -156,6 +156,16 @@ export function parseCookies(req: Request): Record<string, string> {
   return out;
 }
 
+/**
+ * Whether cookies carry `Secure` (SECURITY §4.1). Deployed environments are always served over
+ * HTTPS and always set it. Development and test servers run over plain loopback HTTP, where
+ * Linux WebKit (libsoup) drops `Secure` cookies (no loopback exception, unlike Chromium), which
+ * would leave the browser without a workspace or CSRF cookie. The deciding input is where the
+ * app is deployed (APP_ENV), not NODE_ENV: E2E runs the production build over HTTP.
+ */
+export const secureCookiesFor = (appEnv: string): boolean =>
+  appEnv !== "development" && appEnv !== "test";
+
 export function cookie(
   name: string,
   value: string,

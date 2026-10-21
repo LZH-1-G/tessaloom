@@ -16,6 +16,9 @@ test("liveness, readiness with the worker heartbeat, and the studio dashboard", 
   );
   await expect(page.getByTestId("mode-badge")).toHaveText("fixture");
   await expect(page.getByText("An empty loom.")).toBeVisible();
+  // The browser kept both workspace cookies (Linux WebKit drops Secure cookies over HTTP).
+  const names = (await page.context().cookies()).map((c) => c.name);
+  expect(names).toEqual(expect.arrayContaining(["tl_ws", "tl_csrf"]));
   await expectAccessible(page);
   await snap(page, info, "dashboard");
 });

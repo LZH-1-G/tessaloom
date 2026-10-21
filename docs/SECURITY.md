@@ -84,7 +84,7 @@ All runtime secrets live in **one** platform secret store: the single deployment
 
 ### 4.1 Anonymous workspaces
 
-- On the first request, the web process issues the cookie `tl_ws`: 32 random bytes, base64url-encoded, with `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=31536000`.
+- On the first request, the web process issues the cookie `tl_ws`: 32 random bytes, base64url-encoded, with `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=31536000`. `Secure` is set whenever `APP_ENV` is `staging` or `production` (always served over HTTPS). It is omitted only for `development` and `test` servers on loopback HTTP, because Linux WebKit (libsoup) drops `Secure` cookies over `http://127.0.0.1` with no loopback exception (verified 2026-10-21, PR #8 CI).
 - The server stores only `HMAC-SHA-256(secret, SESSION_SECRET)`. A database leak therefore does not reveal usable workspace secrets.
 - Every repository method takes a `workspaceId` derived server-side from the cookie. Route handlers never accept `workspaceId` from the client.
 - **Workspace recovery:** a "Workspace key" export in settings (S) lets a user copy their secret and restore it in another browser. The UI explains that anyone with the key can access the projects.
