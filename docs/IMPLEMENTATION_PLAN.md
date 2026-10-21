@@ -161,6 +161,12 @@ gantt
 
 ### M3 — LLM gateway (D2)
 
+> **Status: COMPLETED 2026-10-21** with scripted providers only (no paid calls). Decisions: ADR-022. **Deviations from the plan below:**
+> - Validators live in `packages/agent` and are *injected* into the gateway as callbacks, because `llm-gateway` may import only `core`.
+> - Prompts are versioned TypeScript templates with content hashes (`packages/llm-gateway/src/prompts.ts`), not `.md` files.
+> - The provider calls `beta.messages.create` with `output_config.format` and validates the output itself, instead of using `messages.parse`.
+> - Owner-run LM-1…LM-3 are still pending.
+
 - **Objective:** structured, validated, budgeted LLM calls behind `LlmPort`.
 - **Inputs:** API_CONTRACTS §7; ARCHITECTURE §8; AGENT_WORKFLOW §10, §13; SECURITY §6.
 - **Scope:**
@@ -168,12 +174,20 @@ gantt
   - `ScriptedLlmProvider` for tests (deterministic, supports invalid outputs).
   - Prompt registry (`packages/llm-gateway/prompts/<role>/<id>@<version>.md`) with content hashes; data-block wrapping of untrusted input.
   - The repair loop (max 1); cost estimation from usage and a price table in config; `llm_invocations` persistence.
-  - Validators from AGENT_WORKFLOW §13.2 (in `packages/agent`, called by the gateway).
+  - Validators from AGENT_WORKFLOW §13.2 (in `packages/agent`, injected into the gateway as semantic-validator callbacks by the orchestrator; ADR-022).
   - The **fallback model** (`LLM_FALLBACK_MODEL`, default `claude-sonnet-5-5`) is applied per whole step on unavailability, cost pressure, or `LLM_MODE=economy`; `fallback_used` is recorded (ADR-018). Price table in config (ADR-018 values, with the source date).
 - **Acceptance:** unit tests for the repair flow, refusal, truncation, the fallback switch, cost estimation, and each validator. **Owner-run live checks LM-1…LM-3** (TEST_PLAN §5.3) confirm that the account can access both models. They are logged in TEST_PLAN §15 and not required for CI. The owner provides a funded Claude Console API key; Claude Code or Codex subscriptions do not provide it.
 - **Evidence:** test output.
 
 ### M4 — Orchestrator core, worker, SSE (D3)
+
+> **Status: COMPLETED 2026-10-21** with scripted LLM and fixture Qloo only (no paid or live calls). Decisions: ADR-023. **Deviations from the plan below:**
+> - The transition table lives in `packages/core/src/machine.ts`, so the web process can apply gate transitions.
+> - Handlers are functional for EXPLORATION, not stubs: intent, resolution, discovery, collision pool, generation, deterministic planning, collection with grading, critique, and revision. A full scripted EXPLORATION, including one revision round, passes in the integration suite.
+> - Handlers for the other run kinds return `STATE_NOT_IMPLEMENTED` until M7/M8.
+> - A guarded `RETRY` event leaves `FAILED` after transient failures.
+> - Readiness also requires the heartbeat's run configuration before runs can start.
+> - The screen capture of raw SSE events is not produced. SSE reconnection is covered by integration tests, and the container smoke reads the stream from the real image.
 
 - **Objective:** a durable state machine executing runs step by step, with events streamed to the browser.
 - **Inputs:** AGENT_WORKFLOW §4–§11, §17; API_CONTRACTS §4.3, §8, §10; DATABASE_SCHEMA §6.

@@ -9,7 +9,7 @@ const root = path.resolve(
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: root,
-  transpilePackages: ["@tessaloom/config"],
+  transpilePackages: ["@tessaloom/config", "@tessaloom/core", "@tessaloom/db"],
   poweredByHeader: false,
 };
 

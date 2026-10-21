@@ -169,7 +169,9 @@ export const ExperimentSeed = z.object({
 export const ExperimentDefinition = z.object({
   schemaVersion: z.literal(1),
   briefContentHash: z.string().regex(/^[0-9a-f]{64}$/),
-  seeds: z.array(ExperimentSeed).min(1),
+  // Empty for a root EXPLORATION: its seeds are resolved from the brief during the run and
+  // recorded in experiment_seeds; the brief hash already pins them (ADR-023).
+  seeds: z.array(ExperimentSeed),
   variables: ExperimentVariables,
   scoringWeights: ScoringWeights,
   budgets: RunBudget,

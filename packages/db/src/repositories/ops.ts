@@ -116,6 +116,7 @@ export async function beatWorker(
     qlooReady: boolean;
     harnessVersion?: string | null;
     transport?: string | null;
+    runConfig?: unknown;
   },
 ) {
   await db
@@ -128,6 +129,7 @@ export async function beatWorker(
         qlooReady: input.qlooReady,
         harnessVersion: input.harnessVersion ?? null,
         transport: input.transport ?? null,
+        runConfig: input.runConfig ?? null,
       },
     });
 }

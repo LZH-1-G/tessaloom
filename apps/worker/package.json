@@ -9,8 +9,11 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@tessaloom/agent": "workspace:*",
     "@tessaloom/config": "workspace:*",
+    "@tessaloom/core": "workspace:*",
     "@tessaloom/db": "workspace:*",
+    "@tessaloom/llm-gateway": "workspace:*",
     "@tessaloom/qloo-adapter": "workspace:*"
   }
 }

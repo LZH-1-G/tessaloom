@@ -63,6 +63,20 @@ describe("environment isolation", () => {
     expect(parsed).not.toHaveProperty("SESSION_SECRET");
     expect(parsed).not.toHaveProperty("UNKNOWN");
     expect(parsed.LLM_FALLBACK_MODEL).toBe("claude-sonnet-5-5");
+    expect(parsed.LLM_MODE).toBe("standard");
+  });
+  it("rejects the scripted LLM provider in production", () => {
+    expect(
+      workerEnvSchema.safeParse({
+        ...base,
+        APP_ENV: "production",
+        LLM_PROVIDER: "scripted",
+      }).success,
+    ).toBe(false);
+    expect(
+      parseWorkerEnv({ ...base, LLM_PROVIDER: "scripted", LLM_MODE: "economy" })
+        .LLM_MODE,
+    ).toBe("economy");
   });
   it.each([
     { DATABASE_URL: "https://example.com" },

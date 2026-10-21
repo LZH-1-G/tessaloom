@@ -129,7 +129,7 @@ stateDiagram-v2
 
 ### 5.2 Transition rules
 
-Transitions are defined declaratively in `packages/agent/src/machine.ts` as a table of `{ from, event, to, guard }` entries. The orchestrator rejects any transition that is not in the table. This is covered by the tests in [TEST_PLAN.md §4](TEST_PLAN.md#4-agent-state-transition-tests).
+Transitions are defined declaratively in `packages/core/src/machine.ts` (moved from `packages/agent` in M4 so the web process can apply gate transitions; re-exported by `packages/agent`, ADR-023) as a table of `{ from, event, to, guard }` entries. The orchestrator rejects any transition that is not in the table. This is covered by the tests in [TEST_PLAN.md §4](TEST_PLAN.md#4-agent-state-transition-tests).
 
 | From | Event | To | Guard |
 |---|---|---|---|
@@ -157,6 +157,7 @@ Transitions are defined declaratively in `packages/agent/src/machine.ts` as a ta
 | *any non-terminal* | `BUDGET_EXHAUSTED` | `COMPLETED_WITH_LIMITS` | the outputs committed so far are self-consistent |
 | *any non-terminal* | `FATAL_ERROR` | `FAILED` | — |
 | *any non-terminal* | `CANCEL` | `CANCELLED` | — |
+| `FAILED` | `RETRY` | the failed state | the failure was transient (`LLM_UNAVAILABLE`, `STEP_RETRIES_EXHAUSTED`) and the failed state is runnable — the only exit from a terminal state (M4, ADR-023) |
 
 ---
 
@@ -206,6 +207,7 @@ handleRunStep(job { runId, expectedStateVersion }):
 
 - **Idempotency.** The pg-boss singleton key is `run:${runId}:${stateVersion}`. External calls made before a failed commit are recorded on retry as new invocation rows with `attempt + 1`. Qloo calls made during a failed attempt are counted in the quota counter even though no evidence was committed. Quota counters are updated in a separate small transaction immediately after each call.
 - **Heartbeat.** The worker updates `worker_heartbeats` every 10 s. The web readiness check and the "agent offline" UI banner depend on it.
+- **M4 implementation (ADR-023).** Handlers are pure (`packages/agent/src/steps.ts`) and return a commit plan. Deterministic stance grading runs in `COLLECTING_EVIDENCE`, on the in-memory response, because raw responses are not retained (R-08). `EVALUATING_EVIDENCE` computes statuses and scores, runs the R4 critique, and checks termination. Evidence planning is deterministic from typed claim params. The wall-clock budget excludes paused time.
 
 ---
 

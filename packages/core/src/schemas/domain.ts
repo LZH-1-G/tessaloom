@@ -82,7 +82,20 @@ export const IntentFrame = z.object({
 });
 export type IntentFrame = z.infer<typeof IntentFrame>;
 
-export const TestParams = z.record(z.string(), z.unknown());
+/**
+ * Typed claim/query parameters. Every reference is an internal `cultural_entities` UUID
+ * (entities and tags alike), never a free-text name. A strict object (not a record) so that
+ * the shape survives structured-output schema conversion (ADR-022).
+ */
+export const ClaimParams = z.object({
+  signalEntityIds: z.array(Uuid).min(1).max(5),
+  targetDomain: Domain.optional(),
+  targetEntityId: Uuid.optional(),
+  tagEntityIds: z.array(Uuid).max(5).optional(),
+  optionEntityIds: z.array(Uuid).max(10).optional(),
+  compareEntityIds: z.array(Uuid).max(5).optional(),
+});
+export type ClaimParams = z.infer<typeof ClaimParams>;
 
 export const HypothesisDraft = z.object({
   tempId: z.string().min(1),
@@ -103,7 +116,7 @@ export const HypothesisDraft = z.object({
         tempId: z.string().min(1),
         statement: z.string().min(1).max(200),
         testKind: ClaimTestKind,
-        params: TestParams,
+        params: ClaimParams,
       }),
     )
     .min(1)
@@ -124,6 +137,16 @@ export const HypothesisBatch = z.object({
   hypotheses: z.array(HypothesisDraft).min(1).max(6),
   decisionSummary: DecisionSummary,
 });
+export type HypothesisBatch = z.infer<typeof HypothesisBatch>;
+
+/** R3 in REVISING_HYPOTHESES (AGENT_WORKFLOW §12): refine, retire, or spawn (max 2). */
+export const HypothesisRevision = z.object({
+  refined: z.array(HypothesisDraft.extend({ revisionOfId: Uuid })).max(6),
+  retiredIds: z.array(Uuid).max(6),
+  spawned: z.array(HypothesisDraft).max(2),
+  decisionSummary: DecisionSummary,
+});
+export type HypothesisRevision = z.infer<typeof HypothesisRevision>;
 
 export const QlooMethod = z.enum([
   "searchEntities",
@@ -145,7 +168,7 @@ export const EvidencePlan = z.object({
       z.object({
         claimTempId: z.string().min(1),
         method: QlooMethod,
-        args: z.record(z.string(), z.unknown()),
+        args: ClaimParams,
         dependsOn: z.array(z.string()),
         priority: z.number().int().min(0),
       }),
@@ -153,6 +176,7 @@ export const EvidencePlan = z.object({
     .max(40),
   decisionSummary: DecisionSummary,
 });
+export type EvidencePlan = z.infer<typeof EvidencePlan>;
 
 export const CritiqueReport = z.object({
   perHypothesis: z.array(
@@ -168,6 +192,7 @@ export const CritiqueReport = z.object({
   continueLoop: z.boolean(),
   decisionSummary: DecisionSummary,
 });
+export type CritiqueReport = z.infer<typeof CritiqueReport>;
 
 export const BlueprintSectionKind = z.enum([
   "audience",

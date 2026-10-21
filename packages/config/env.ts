@@ -78,8 +78,20 @@ export const workerEnvSchema = z
     LLM_PROVIDER: z.enum(["anthropic", "scripted"]).default("anthropic"),
     LLM_MODEL: z.string().min(1).default("claude-opus-5-5"),
     LLM_FALLBACK_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
+    // economy: every step uses LLM_FALLBACK_MODEL (ADR-018).
+    LLM_MODE: z.enum(["standard", "economy"]).default("standard"),
   })
   .superRefine(fixtureGuard)
+  .superRefine((value, ctx) => {
+    // Scripted LLM output is test data; like fixtures it must never reach production users.
+    if (value.APP_ENV === "production" && value.LLM_PROVIDER === "scripted") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LLM_PROVIDER"],
+        message: "The scripted LLM provider is forbidden in production",
+      });
+    }
+  })
   .superRefine((value, ctx) => {
     const normalize = (url?: string) => url?.replace(/\/+$/, "");
     if (

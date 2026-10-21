@@ -315,12 +315,22 @@ describe("domain schemas", () => {
           tempId: "c1",
           statement: "Fans of X favor Y-type films.",
           testKind: "CROSS_DOMAIN_AFFINITY",
-          params: {},
+          params: {
+            signalEntityIds: [element.entityId],
+            targetDomain: "movie",
+          },
         },
       ],
       experienceSketch: "A listening corner with curated paperbacks.",
     };
     expect(HypothesisDraft.safeParse(draft).success).toBe(true);
+    // Claim params are a typed object (ADR-022): at least one signal entity UUID.
+    expect(
+      HypothesisDraft.safeParse({
+        ...draft,
+        claims: [{ ...draft.claims[0], params: {} }],
+      }).success,
+    ).toBe(false);
     expect(
       HypothesisDraft.safeParse({ ...draft, elementRefs: [element] }).success,
     ).toBe(false);
