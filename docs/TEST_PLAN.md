@@ -97,25 +97,25 @@
 | Quota guard | The counter at the cap refuses the call with `QUOTA_GUARD_ACTIVE` **before** calling the transport |
 | Argument validation | Out-of-range `limit` (0 or 21 for find_tags), > 5 signals, an unresolved entity → rejected before the transport |
 
-### 5.2 Live contract tests (**PENDING LIVE VALIDATION** — not yet executable)
+### 5.2 Live contract tests (executed in V1 on 2026-10-21; rerun for M2 contract tests)
 
 These run with `QLOO_MODE=live` and the real key. Each test **records** the redacted request and the full envelope to `fixtures/qloo-recorded/` (with `dataOrigin: REPLAY` metadata and a retrieval timestamp). It asserts only **structural** expectations, never specific cultural results.
 
 | ID | Capability | Steps | Structural assertions | Status |
 |---|---|---|---|---|
-| LC-0 | Harness readiness | Start `qloo mcp`; `listTools()`; `qloo_capabilities` | The tool list contains the expected names; `adapter.ready === true`. Save the tool input schemas to `docs/research/qloo-tools.json` (redacted). | Not executed |
-| LC-1 | Entity search | `qloo api search --query "<known author>" --take 3 --json` | `success`/results shape; each item has an ID and name field (names recorded) | Not executed |
-| LC-2 | Find tags | `qloo_find_tags { query: "cozy mystery", limit: 5 }` | `status ∈ {ok, empty, needs_input}`; item fields recorded | Not executed |
-| LC-3 | Describe | `qloo_describe` with an ID from LC-1 | Returned ID equals the requested ID (or document the actual behavior) | Not executed |
-| LC-4 | Entity tags | `qloo_entity_tags` with an ID from LC-1 | Tag item shape recorded | Not executed |
-| LC-5 | Recommend | `qloo_recommend { signals: [LC-1 id], target_type: <movie type token> }` | Result count > 0 or `empty`; record the affinity/popularity field presence | Not executed |
-| LC-6 | Rank | `qloo_rank` with 3 options | Ordered output recorded | Not executed |
-| LC-7 | Compare audiences | `qloo_compare_audiences` with two IDs | Output fields recorded | Not executed |
-| LC-8 | Where popular | `qloo_where_popular { entity, within: "<city>" }` | Output shape recorded | Not executed |
-| LC-9 | Trends | `qloo_trends` with 1 entity, 12 weeks | Trend fields recorded | Not executed |
-| LC-10 | Demographics | `qloo_audience_demographics` with 1 entity | Output shape recorded | Not executed |
-| LC-11 | Auth failure | Run with an invalid key in an isolated env | `status: error`, `error.code: QLOO_AUTH`, `retryable: false` | Not executed |
-| LC-12 | CLI parity | `qloo exec find_tags --input-file` vs MCP `qloo_find_tags` with the same input | Same envelope shape (per kit) | Not executed |
+| LC-0 | Harness readiness | Start `qloo mcp`; `listTools()`; `qloo_capabilities` | The tool list contains the expected names; `adapter.ready === true`. Save the tool input schemas to `docs/research/qloo-tools.json` (redacted). | **Executed 2026-10-21 — PASS.** 10 tools; `qloo_capabilities` contract 1.0.0 / result schema 1.0-preview.1. Schemas are summarized in research/QLOO_V1_VALIDATION.md §2.1 (not saved as raw JSON). |
+| LC-1 | Entity search | `qloo api search --query "<known author>" --take 3 --json` | `success`/results shape; each item has an ID and name field (names recorded) | **Executed — PASS.** Top-level array of `{ name, entity_id, types[], properties, popularity, disambiguation, tags[] }`; endpoint verified as `hackathon.api.qloo.com/search`. |
+| LC-2 | Find tags | `qloo_find_tags { query: "cozy mystery", limit: 5 }` | `status ∈ {ok, empty, needs_input}`; item fields recorded | **Executed — PASS.** `ok`, 5 tags `{ id, name, type, popularity }` spanning 5 tag types. |
+| LC-3 | Describe | `qloo_describe` with an ID from LC-1 | Returned ID equals the requested ID (or document the actual behavior) | **Executed — PASS, with a finding.** Name resolution `match: exact` chose a low-popularity edition; the canonical entity was in `alternatives`. LC-13/14 added `needs_input` coverage. |
+| LC-4 | Entity tags | `qloo_entity_tags` with an ID from LC-1 | Tag item shape recorded | **Executed — PASS.** `{ id, name, type, popularity, affinity }`; noisy tag types observed. |
+| LC-5 | Recommend | `qloo_recommend { signals: [LC-1 id], target_type: <movie type token> }` | Result count > 0 or `empty`; record the affinity/popularity field presence | **Executed — PASS** (LC-5a book→movie; LC-5b +tag→artist; LC-16 legacy author→book). Category in `subtype`; `affinity` and `explainability` present. |
+| LC-6 | Rank | `qloo_rank` with 3 options | Ordered output recorded | **Executed — PASS.** Ordered by affinity. |
+| LC-7 | Compare audiences | `qloo_compare_audiences` with two IDs | Output fields recorded | **Executed — PARTIAL.** `results{ tags[], a[], b[], matchEntities[] }`, no score; `limit` not honored. |
+| LC-8 | Where popular | `qloo_where_popular { entity, within: "<city>" }` | Output shape recorded | **Executed — PARTIAL.** Intra-city geohash cells with affinity; no area names. |
+| LC-9 | Trends | `qloo_trends` with 1 entity, 12 weeks | Trend fields recorded | **Executed — PARTIAL.** `book` → `QLOO_CONTRACT` (×2); 2026 `artist` window → 0 points; 2025 `movie` window → 10 points with the documented fields (LC-9b/c/d). |
+| LC-10 | Demographics | `qloo_audience_demographics` with 1 entity | Output shape recorded | **Executed — PASS.** `query{ age{6 bands}, gender }` relative indices. |
+| LC-11 | Auth failure | Run with an invalid key in an isolated env | `status: error`, `error.code: QLOO_AUTH`, `retryable: false` | **Executed — PASS.** Bare error object, `QLOO_AUTH`, `retryable: false`, exit 4; nothing leaked. |
+| LC-12 | CLI parity | `qloo exec find_tags --input-file` vs MCP `qloo_find_tags` with the same input | Same envelope shape (per kit) | **Executed — PASS.** Identical keys, status, and result order; only `transport` differs (`direct` vs `mcp`). |
 
 After LC-0…LC-10, the normalizers are updated and the evaluator thresholds for `AUDIENCE_BRIDGE` and `MOMENTUM` are calibrated (decision recorded in DECISIONS.md). **Budget for the live contract suite: ≤ 25 Qloo calls per full run.**
 
@@ -423,4 +423,7 @@ workflow_dispatch:
 
 | Date | Test set | Environment | Result | Evidence link | Notes |
 |---|---|---|---|---|---|
-| — | — | — | **Not executed** | — | No application code exists as of 2026-10-20 |
+| 2026-10-21 | M0 review remediation: unit, integration, runtime, browser/a11y, build, security, container smoke | Node 22.23.3, pnpm 10.34.7; local macOS + Docker Linux arm64; PostgreSQL 16 | **Local checks PASSED; PR CI BLOCKED** | [M0 verification](M0_VERIFICATION.md) | 62 unit, 3 integration, 6 runtime, 2 browser tests; live supervised worker environment/UID executes qloo 0.1.26; missing root UID rejected; no commit/push authorization; M1 not started |
+| 2026-10-21 | V1 live contract suite LC-0…LC-12 (+ LC-13…LC-16) | `qloo-harness` 0.1.26 → `https://hackathon.api.qloo.com`; local macOS | **20 calls: 15 ok, 2 `needs_input` (expected), 2 `QLOO_CONTRACT` (trends/book), 1 deliberate `QLOO_AUTH`**; the 20 include the LC-9b–d trends follow-ups | [V1 report](research/QLOO_V1_VALIDATION.md) | Raw responses not committed (R-08); quota and rate-limit code unknown |
+| 2026-10-21 | M1: unit (core schemas, SHA-256/JCS vectors, golden key, UUIDv7) + PostgreSQL integration (migrations, constraints, triggers, concurrency, repositories) | Node 22.23.3; PostgreSQL 16 (local Docker) | **91 unit / 23 integration PASS**; core 100% lines; `drizzle-kit check` clean; OSV clean (512 packages) | — | Each integration file uses its own migrated database |
+| 2026-10-21 | M2: adapter unit (envelopes, normalizers, quota/retry/cache, routing without fixture fallback, CLI stub, fixture guards, readiness) + adapter/DB integration + runtime + live smoke | Node 22.23.3; PostgreSQL 16; harness 0.1.26 → `https://hackathon.api.qloo.com` | **Unit 121 / integration 25 / runtime 6 PASS; live smoke 3 calls PASS; container smoke PASS** (image migrator, supervised worker trusts the hackathon endpoint, heartbeat, M0 isolation/restart/fixture/identity checks); OSV clean (575 packages) | — | Raw responses not persisted; live calls today: 23 |

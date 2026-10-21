@@ -1,6 +1,6 @@
 # Tessaloom — API Contracts (Internal APIs and Qloo Integration)
 
-> **Status:** Architecture baseline v1.1 · 2026-10-20 (review: §5.0 access verification and the §7 fallback model added)
+> **Status:** v1.2 · 2026-10-21. **V1 live validation completed** against `https://hackathon.api.qloo.com` (20 harness calls). Observed results are in [research/QLOO_V1_VALIDATION.md](research/QLOO_V1_VALIDATION.md) and summarized in §5.5. Where §5.3 (planning text) conflicts with §5.5 (observed), **§5.5 prevails**.
 > **Legend:** ✅ **CONFIRMED (docs)**: stated in an official source we read on 2026-10-20 · 🟡 **PENDING LIVE VALIDATION**: plausible from the docs, but not yet exercised with a real credential · ⛔ **UNKNOWN**: not found in any accessible source
 > **Rule:** No endpoint, parameter, response field, or score below should be treated as working until a live contract test has recorded it ([TEST_PLAN.md §5](TEST_PLAN.md#5-qloo-adapter-contract-tests)).
 
@@ -26,6 +26,7 @@ Tessaloom exposes two kinds of contracts:
 | `@qloo/qloo-harness` npm metadata | `npm view @qloo/qloo-harness` | 2026-10-20 | Latest `0.1.26`; `bin: qloo`; `engines: node >=22.19.0`; MIT; source repo `github.com/qloo/agentic-qloo` | The harness source repository returned **404** (likely private). We did not install or execute the package during the architecture phase. |
 | Qloo API docs | https://docs.qloo.com/ (pages listed in §5.3) | 2026-10-20, through an automated fetch-and-summarize tool | Endpoint paths, parameter names, `X-Api-Key` header, pagination limits, some response fields | Several pages are partially rendered (item schemas are in referenced files that were not shown). Some examples conflict (for example, a 404 described with a `code: 400` body). **Exact field shapes must be confirmed live.** |
 | Qloo docs MCP server | `https://docs.qloo.com/mcp` | Not connected during this phase | — | Can be used during implementation for `list-endpoints` / `get-endpoint`. **Never** use its `execute-request` tool (the kit forbids it). |
+| **V1 live validation** | `https://hackathon.api.qloo.com` via `@qloo/qloo-harness` 0.1.26 (`qloo mcp`, `qloo exec`, `qloo api search`) | 2026-10-21, 20 calls | Tool schemas, envelope, error shapes, item fields, scores, type tokens, disambiguation behavior (§5.5) | Raw responses are not committed (R-08). Quota, rate-limit code, and expiry remain unknown. |
 | Devpost rules | https://qloo.devpost.com/rules | **Not fetchable by the assistant** (HTTP 403 / Cloudflare challenge, re-checked 2026-10-20; no bypass attempted) | Key facts **externally verified by the owner** against the official page: a working application with **meaningful Qloo API integration** is required, among others | See [HACKATHON_CHECKLIST.md §1.1](HACKATHON_CHECKLIST.md#11-rules-facts-confirmed-from-the-official-rules-externally-verified) |
 
 **Important consequence.** The kit lists the event's supported surfaces as the harness commands. The REST endpoints under `api.qloo.com` describe Qloo's public API, but Tessaloom reaches them **only indirectly**, through the harness workflows or `qloo api`. Which REST parameters each harness workflow exposes is 🟡 PENDING LIVE VALIDATION.
@@ -215,11 +216,12 @@ This runs as a tiny worker job (`resolve.entity`) because only the worker can re
 
 | Planned path | Supported per kit? | Evidence (kit file) | Tessaloom usage | Live status |
 |---|---|---|---|---|
-| `qloo mcp` (stdio MCP server) via `@modelcontextprotocol/sdk` | ✅ Yes | README route table; `starter/mcp-client/README.md` §4–§6; `backend.mjs`; `manifest.json` `supported_surfaces` | **Primary.** A persistent child of the worker process, spawned with `env: process.env` | 🟡 PENDING LIVE VALIDATION |
-| `qloo exec <workflow> --input-file` | ✅ Yes | README; `starter/cli-workflow/README.md` | Secondary transport / fallback for workflows | 🟡 PENDING LIVE VALIDATION |
-| `qloo api <command> --json` (for example `search`) | ✅ Yes | README; `starter/cli-workflow/README.md` | Entity search (`searchEntities`) if no MCP equivalent exists | 🟡 PENDING LIVE VALIDATION |
+| `qloo mcp` (stdio MCP server) via `@modelcontextprotocol/sdk` | ✅ Yes | README route table; `starter/mcp-client/README.md` §4–§6; `backend.mjs`; `manifest.json` `supported_surfaces` | **Primary.** A persistent child of the worker process, spawned with `env: process.env` | ✅ **VERIFIED 2026-10-21** (10 tools; LC-0, LC-12) |
+| `qloo exec <workflow> --input-file` | ✅ Yes | README; `starter/cli-workflow/README.md` | Secondary transport / fallback for workflows | ✅ **VERIFIED 2026-10-21** (all 9 workflows exercised) |
+| `qloo api <command> --json` (for example `search`) | ✅ Yes | README; `starter/cli-workflow/README.md` | **Required** for entity search (no search workflow exists) and for locality disambiguation strings | ✅ **VERIFIED 2026-10-21** (LC-1, LC-15). Its `--dry-run` URL ignores `QLOO_BASE_URL` (display-only quirk). |
 | `qloo explore` (chat agent) | ✅ Supported, but **not used at runtime** | README | Optional for the owner's manual exploration only; never in the deployed app | — |
-| Credential via `QLOO_API_KEY` env on servers | ✅ Yes | MCP starter §1, §6; TROUBLESHOOTING | Worker-only env (ADR-017 allowlist) | 🟡 Key not yet received |
+| Credential via `QLOO_API_KEY` env on servers | ✅ Yes | MCP starter §1, §6; TROUBLESHOOTING | Worker-only env (ADR-017 allowlist) | ✅ Key received. Locally configured via the harness private config (`source: config`); env-based server use is verified in M2. |
+| Hackathon endpoint via `QLOO_BASE_URL` + `QLOO_TRUSTED_BASE_URL` = `https://hackathon.api.qloo.com` | ✅ Harness-supported (custom base URL is refused unless trusted) | Harness `doctor` / `router.js` | Must reach the worker and its `qloo mcp` child. **Not in the M0 worker allowlist → M2 prerequisite** (ADR-019) | ✅ **VERIFIED** on the wire (LC-1 `--verbose`) |
 | Long-running container, Node ≥ 22.19, harness installed | ✅ Required | MCP starter §6 (*"Serverless functions are not a supported route"*) | Single always-on container service (ADR-017) | Verified in M0 (`qloo --version` in the image) |
 | Docs MCP server `https://docs.qloo.com/mcp` | Reference only | README, API_ACCESS.md | Development-time lookup only; **never** `execute-request`; never deployed | — |
 | Direct REST (`api.qloo.com`, `X-Api-Key`) | ❌ Not a listed event surface (only "an organizer-approved authenticated gateway") | API_ACCESS.md | **Not used** | — |
@@ -229,6 +231,7 @@ This runs as a tiny worker job (`resolve.entity`) because only the worker can re
 
 - **Documented (✅):** tool names, the result envelope shape, the statuses, the `error.code` / `retryable` / `recovery` fields, `QLOO_AUTH`, the `find_tags` inputs (`query`, `limit` 1–20), and the input names listed in the kit's tool table.
 - **Awaiting live credentials (🟡):** full input schemas, result item fields, scores, filters, rate-limit error codes, and latencies. These are resolved in milestone V1 (TEST_PLAN §5.2).
+- **V1 outcome (2026-10-21):** input schemas, item fields, scores, filters, latencies, and the `QLOO_AUTH`/`QLOO_CONTRACT` error shapes are now observed (§5.5). Still ⛔ unknown: the rate-limit error code, the event quota, and credential expiry.
 
 **Mock policy.** Mock or fixture results are **never** returned as production Qloo results. `FixtureTransport` cannot be constructed in production, there is no code path from a live transport to fixtures, and fixture-derived records carry `DEVELOPMENT_FIXTURE` provenance (§6.4, ADR-014).
 
@@ -259,8 +262,16 @@ The MCP starter documents one envelope shape:
 
 - `error` is present only when `status = "error"`. *"Retry only when `error.retryable` is `true`."*
 - `qloo exec` returns *"the same result shape"* as `qloo mcp`. `qloo api` returns the *raw API response*.
-- The **fields inside `results[]` items are not documented** in the kit. 🟡 PENDING LIVE VALIDATION.
-- Known error code: `QLOO_AUTH` (missing or rejected credential). Other codes are ⛔ UNKNOWN.
+- The **fields inside `results[]` items are not documented** in the kit. ~~🟡 PENDING LIVE VALIDATION~~ → **observed in V1** (§5.5.3).
+- Known error code: `QLOO_AUTH` (missing or rejected credential). Other codes are ⛔ UNKNOWN. **V1:** `QLOO_CONTRACT` was also observed (§5.5.2).
+
+**V1-observed envelope (2026-10-21), which supersedes the sketch above:**
+
+- **Success** (`qloo exec` and `qloo mcp` `structuredContent`):
+  - **Always:** `schema_version` (`"1.0-preview.1"`), `operation`, `status`, `execution { transport: "direct"|"mcp", transport_name, correlation_id, duration_ms }`, `query_intent`.
+  - **Usually:** `interpretation`, `resolution`, `provenance { source, endpoint, transport, documentation, requests[{ method, path, query }] }`, and `results` (array, or an **object** for `compare_audiences`) *or* `series` (trends), plus `result_count` and `explainability` (recommend).
+  - **On `needs_input`:** `summary`, `results: []`, and `resolution.issues[]` instead of `outcomes[]`.
+- **Failure** (`qloo exec`): a **bare object** `{ error: { code, layer, retryable, recovery }, operation, correlation_id }`, with **no** `status`, `execution`, or `provenance`, and a non-zero exit (`QLOO_AUTH` → 4, `QLOO_CONTRACT` → 1). The adapter maps a bare error object to `QlooOutcome.ERROR` and a missing `status` without `error` to `UNKNOWN_ENVELOPE`.
 
 **Status mapping in the adapter:**
 
@@ -277,6 +288,8 @@ The MCP starter documents one envelope shape:
 ### 5.3 Planned integrations (capability by capability)
 
 Each subsection follows the same template: purpose, inputs, expected output categories, docs, auth, failure handling, rate limits, caching, validation, and whether live testing is required. **Every row requires real-credential testing before it is considered working.**
+
+> **V1 note (2026-10-21):** this section records the pre-validation plan. The observed inputs, outputs, and verdicts are in **§5.5**, which prevails on any conflict. In particular, there is no search workflow (use `qloo api search`); `compare_audiences` returns tag profiles, not a score; `where_popular` returns intra-city geohash cells; and `trends` rejects `book`.
 
 #### 5.3.1 Readiness — `capabilities()`
 
@@ -414,16 +427,64 @@ Each subsection follows the same template: purpose, inputs, expected output cate
 
 ### 5.4 Capability coverage summary
 
-| Capability family (requirement) | Planned method | Harness exposure | REST documented | Overall |
-|---|---|---|---|---|
-| Cultural entity search | `searchEntities` | `qloo api search` ✅ | ✅ | 🟡 PENDING LIVE VALIDATION |
-| Identification and disambiguation | `describeEntity` | `qloo_describe` ✅ name | ✅ (`/entities`) | 🟡 PENDING LIVE VALIDATION |
-| Tags and classifications | `findTags`, `entityTags` | ✅ names, `find_tags` inputs ✅ | ✅ (`/v2/tags`) | 🟡 PENDING LIVE VALIDATION |
-| Cross-domain insights | `recommend` | ✅ name + `signals`, `target_type` | ✅ (`/v2/insights`) | 🟡 PENDING LIVE VALIDATION |
-| Recommendations | `recommend`, `rank` | ✅ | ✅ | 🟡 PENDING LIVE VALIDATION |
-| Audience comparison | `compareAudiences` | ✅ name + `group_a/b` | ✅ (`/v2/analysis/compare`) | 🟡 PENDING LIVE VALIDATION |
-| Location insights | `wherePopular` | ✅ name + `entity`, `within` | ✅ (heatmap/location params) | 🟡 PENDING LIVE VALIDATION |
-| Trends | `trends` | ✅ name + inputs | ✅ (`/v2/trending`) | 🟡 PENDING LIVE VALIDATION |
+| Capability family (requirement) | Planned method | Harness exposure (observed) | Overall (V1, 2026-10-21) |
+|---|---|---|---|
+| Cultural entity search | `searchEntities` | `qloo api search` → `/search` (no workflow) | ✅ **CONFIRMED** (LC-1, LC-15) |
+| Identification and disambiguation | `describeEntity` | `qloo_describe` → `/search` + `/entities`; `needs_input` with candidates | ✅ **CONFIRMED, with caveats**: "exact" may pick a minor edition; locality candidates need `/search` disambiguation (LC-3, 13–15) |
+| Tags and classifications | `findTags`, `entityTags` | `qloo_find_tags` → `/v2/tags`; `qloo_entity_tags` → `/v2/insights` (urn:tag) | ✅ **CONFIRMED** (LC-2, LC-4); noisy tag types need filtering |
+| Cross-domain insights | `recommend` | `qloo_recommend` → `/v2/insights` with entity and tag signals, cross-type targets, `affinity`, `explainability` | ✅ **CONFIRMED** (LC-5a, 5b, 16); single-seed face validity is limited |
+| Recommendations | `recommend`, `rank` | `qloo_rank` → `/v2/insights` (`filter.results.entities`) | ✅ **CONFIRMED** (LC-6) |
+| Audience comparison | `compareAudiences` | `qloo_compare_audiences` → `/v2/analysis/compare` | 🟨 **PARTIAL**: tag profiles + overlap lists, no score; `limit` not honored (LC-7) |
+| Location insights | `wherePopular` | `qloo_where_popular` → `/v2/insights` (`filter.location.query`) | 🟨 **PARTIAL**: intra-city geohash cells, no names (LC-8) |
+| Audience demographics | `audienceDemographics` | `qloo_audience_demographics` → `/v2/insights` | ✅ **CONFIRMED** (aggregate relative indices; LC-10) |
+| Trends | `trends` | `qloo_trends` → `/v2/trending` | 🟨 **PARTIAL**: `movie` ok; `book` → `QLOO_CONTRACT`; recent `artist` window → 0 points (LC-9…9d) |
+| Rate-limit code / quota / expiry | — | — | ⛔ **UNKNOWN** |
+
+### 5.5 V1 observed contract (2026-10-21)
+
+Full evidence: [research/QLOO_V1_VALIDATION.md](research/QLOO_V1_VALIDATION.md). No raw responses are committed (R-08).
+
+#### 5.5.1 Transport and endpoint
+
+- **Workflows:** `qloo mcp` (10 tools) and `qloo exec` (the same 9 workflows), with identical envelopes (LC-12). **Search** uses `qloo api search` only.
+- **Endpoint:** both `QLOO_BASE_URL` and `QLOO_TRUSTED_BASE_URL` must be set to `https://hackathon.api.qloo.com` in the process that runs `qloo`. Without trust, the harness refuses a custom base URL; without the base URL, it uses `https://api.qloo.com`.
+- **Latency:** 2.2–12.5 s per call (median ≈ 3.2 s). The 30 s per-call timeout stays.
+- **Exit codes:** 0 on success and on `needs_input`. On failure: 1 (`QLOO_CONTRACT`), 4 (`QLOO_AUTH`).
+
+#### 5.5.2 Errors
+
+| Code | Meaning (observed) | Retryable | Adapter mapping |
+|---|---|---|---|
+| `QLOO_AUTH` | Missing or rejected credential | false | `ERROR` → run `FAILED (QLOO_UNAVAILABLE)` |
+| `QLOO_CONTRACT` | The request violates the upstream contract (e.g. trends with `book`) | false | `ERROR` → claim `UNTESTABLE` for that combination; record the combination in the capability matrix |
+| rate limit | Not observed. The harness lists `rate_limit` as a safe retry class; the code string is unknown | true (per capabilities) | Retry policy (AGENT_WORKFLOW §10) |
+
+#### 5.5.3 Inputs and outputs per method
+
+| `QlooPort` method | Harness call and key inputs | Output used by Tessaloom (observed) |
+|---|---|---|
+| `searchEntities` | `qloo api search --query --type <alias\|urn> --take --json` | Array of `{ name, entity_id, types[], popularity, disambiguation, properties, tags[{ name, tag_id, type, value }] }` |
+| `describeEntity` | `qloo_describe { entity, type? }` | `results[{ entity_id, name, popularity, properties }]`; `resolution.outcomes[{ status, match, selected, alternatives[] }]` or `resolution.issues[{ kind: "ambiguous", candidates[] }]` |
+| `findTags` | `qloo_find_tags { query, semantic?, limit≤20 }` | `results[{ id (tag URN), name, type, popularity }]` |
+| `entityTags` | `qloo_entity_tags { entities[≤10], entity_type?, limit≤20 }` | `results[{ id, name, type, popularity, affinity }]` |
+| `recommend` | `qloo_recommend { target_type, signals[≤10]?, signal_tags[≤10]?, signal_tags_operator?, signal_location?, demographic?, filter_location?, include_tags?, exclude_tags?, explain?, limit≤20 }` | `results[{ entity_id, name, subtype (category URN), popularity, affinity, explainability, properties }]`; top-level `explainability` |
+| `rank` | `qloo_rank { options[≤10], option_type, signals?, … }` | Same item shape, ordered by affinity. Scores are not comparable across calls. |
+| `compareAudiences` | `qloo_compare_audiences { group_a[≤10], group_b[≤10], target_type? }` | `results{ tags[], a[], b[], matchEntities[] }`; items `{ tag_id, name, subtype, entity_id, popularity, query.count }` |
+| `wherePopular` | `qloo_where_popular { entity, entity_type?, within, limit≤20 }` | `results[{ location{ latitude, longitude, geohash }, query{ affinity, affinity_rank, popularity } }]` |
+| `audienceDemographics` | `qloo_audience_demographics { entity, entity_type? }` | `results[{ query{ age{6 bands}, gender{ male, female } } }]` as relative indices in [−1, 1] |
+| `trends` | `qloo_trends { entities[1..5], entity_type, start_date, end_date, limit≤20 }` | `series[{ entity, points[{ date, population_percentile, population_rank (string), population_rank_velocity, velocity_fold_change, population_percent_delta }] }]` |
+
+**Type tokens.** Inputs use short names (`artist, book, brand, movie, person, place, podcast, tv_show, videogame`, plus `locality, actor, album, author, director` for name-resolving tools). Outputs use URNs (`urn:entity:videogame`, `urn:entity:author`, …). A legacy `urn:entity:author` ID worked as a `recommend` signal (LC-16).
+
+#### 5.5.4 Consequences for `QlooPort` and evaluators
+
+- **Disambiguation (gate H2).** Never auto-accept on `match: "exact"`. Show the selected entity plus its alternatives with type, popularity, and description. For localities, enrich candidates via `searchEntities(type=locality)` to obtain `disambiguation`. Persist `resolution` (outcomes/issues, alternatives, strategy, provenance) in `entity_resolution_records.candidates`.
+- **Tags.** Every concept goes through tag confirmation (one concept → several tag types). `TAG_RESONANCE` uses an allowlist of tag types **observed in V1**: `genre`, `subgenre`, `keyword`, `plot`, `motif`, `character`, `style`. It excludes `endorsement` and `book_format`. Other observed types (`interests`, `audience`, `instrument`, `music`, `artist`) are not used for resonance until reviewed. The list is versioned with the ruleset.
+- **`CROSS_DOMAIN_AFFINITY`.** Read the category from `subtype`. Prefer ≥ 2 signals or a tag signal. Stances use affinity *relative to the result set* (rank and spread), not presence alone. Thresholds are versioned in the ruleset.
+- **`AUDIENCE_BRIDGE`.** Redefined: SUPPORTS when `tags[]` or `matchEntities[]` is non-empty, or when `a` and `b` share tag subtypes beyond a threshold. INSUFFICIENT when all overlap lists are empty (absence of overlap in the top lists is not proof of disjoint audiences).
+- **`LOCATION_FIT`.** Redefined: "within the venue's locality, how strongly does the anchor entity's audience concentrate?" Use top-cell affinity and `affinity_rank`, and proximity of the venue to high-affinity cells if coordinates are known. It does not test popularity *in* a city versus elsewhere.
+- **`MOMENTUM`.** Allowed only for type and window combinations that return points (observed: `movie`). `book` → UNTESTABLE. Empty `points` → INSUFFICIENT.
+- **`AUDIENCE_PROFILE`.** Values are relative indices; the UI must not present them as shares of people.
 
 ---
 
@@ -471,13 +532,33 @@ type QlooProvenance = {
 - Normalizers (`normalize/*.ts`) map raw `results[]` items to `NormalizedEntity { qlooId, name, type, tags?: NormalizedTag[], popularity?: number, affinity?: number, properties?: Record<string, unknown> }`.
 - **Optional fields stay `undefined` unless they are actually present.** No defaults are invented. Normalizers record `missingFields[]` so the UI and evaluators know what was absent.
 - Every normalizer is driven by **recorded live envelopes** (contract fixtures) once the key arrives. Until then, normalizers parse only `status`, `summary`, `result_count`, and `error`, and treat items as opaque `unknown` validated by permissive schemas. Evaluators that depend on specific fields return INSUFFICIENT with `reason: "FIELD_UNAVAILABLE"`.
+- **V1 status:** no normalizer code existed yet (`packages/qloo-adapter` is an M0 stub), so there was no code to update. The mapping below is the **observed specification** that M2 implements. All fields remain optional in the schemas, and unknown extra fields are preserved in `properties`.
+
+| Normalized field | `searchEntities` | `describeEntity` | `recommend` / `rank` | `findTags` | `entityTags` |
+|---|---|---|---|---|---|
+| `qlooId` | `entity_id` | `entity_id` | `entity_id` | `id` | `id` |
+| `name` | `name` | `name` | `name` | `name` | `name` |
+| `type` (URN) | `types[0]` (all kept in `types`) | `resolution…selected.type` | **`subtype`** (`type` is the generic `urn:entity`) | `type` (tag type URN) | `type` |
+| `popularity` | `popularity` | `popularity` | `popularity` | `popularity` | `popularity` |
+| `affinity` | — | — | `affinity` | — | `affinity` |
+| `disambiguation` | `disambiguation` | `alternatives[].description` / `candidates[].description` | — | — | — |
+| `tags` | `tags[{ tag_id, name, type }]` | — | — | — | — |
+| `explainability` | — | — | `explainability["signal.interests.entities"][]` | — | — |
+| `properties` | `properties` | `properties` | `properties` | — | — |
+
+- Special shapes:
+  - `compareAudiences` → `ComparisonItem { side: "a"|"b"|"shared", tagId, name, subtype, entityId, popularity, count }`, plus `matchEntities` kept as is.
+  - `wherePopular` → `GeoPopularity { latitude, longitude, geohash, affinity, affinityRank, popularity }`.
+  - `audienceDemographics` → `DemographicFact { dimension: "age"|"gender", band, index }`.
+  - `trends` → `TrendPoint { entityId, date, populationPercentile, populationRank (string→number with the original kept), rankVelocity, velocityFoldChange, percentDelta }`.
+- **Provenance from the harness.** Copy `execution.correlation_id`, `execution.transport`, `execution.duration_ms`, `provenance.endpoint`, `provenance.requests`, `interpretation`, `query_intent`, and `resolution` into the `tool_invocations` record and the evidence trace. This replaces the planned reconstruction of the request from arguments.
 
 ### 6.3 Transports
 
 | Transport | Implementation | When used |
 |---|---|---|
-| `HarnessMcpTransport` | `@modelcontextprotocol/sdk` `Client` + `StdioClientTransport({ command: "qloo", args: ["mcp"], env: process.env })`. On connect: `listTools()` (tool schemas are cached and logged at startup for contract discovery) and `callTool({ name: "qloo_capabilities" })`. Calls use `callTool({ name, arguments })` and read `structuredContent`. | Default in staging/production |
-| `HarnessCliTransport` | `execFile("qloo", ["exec", workflow, "--input-file", tmpJson])` or `execFile("qloo", ["api", command, ...flags, "--json"])` with a timeout. Never uses a shell and never passes `--api-key`. Arguments are validated against an allowlist before spawning. | Capabilities not exposed by MCP (for example `search`); fallback while the MCP child is unhealthy |
+| `HarnessMcpTransport` | `@modelcontextprotocol/sdk` `Client` + `StdioClientTransport({ command: "qloo", args: ["mcp"], env: process.env })`. On connect: `listTools()` (tool schemas are cached and logged at startup for contract discovery) and `callTool({ name: "qloo_capabilities" })`. Calls use `callTool({ name, arguments })` and read `structuredContent`. The worker env must include `QLOO_BASE_URL` and `QLOO_TRUSTED_BASE_URL` (V1). Verify at boot that `qloo doctor --json`'s `qloo-endpoint-trust` reports the hackathon endpoint. | Default in staging/production |
+| `HarnessCliTransport` | `execFile("qloo", ["exec", workflow, "--input-file", tmpJson])` or `execFile("qloo", ["api", command, ...flags, "--json"])` with a timeout. Never uses a shell and never passes `--api-key`. Arguments are validated against an allowlist before spawning. Parse stdout as JSON in both cases: a result envelope or a bare `{ error, operation, correlation_id }` object (exit 1/4). Do **not** use `--dry-run` to verify endpoints (it ignores `QLOO_BASE_URL`). | **Always** for `searchEntities` (no search workflow exists) and locality disambiguation; fallback for workflows while the MCP child is unhealthy |
 | `FixtureTransport` | Reads `fixtures/qloo/<workflow>/<requestHash>.json`. Unknown hash → `ERROR { code: "FIXTURE_MISSING" }`. **Never** falls back to "closest" data. | `QLOO_MODE=fixture` in local development, CI, and E2E. **Refuses to construct when `APP_ENV=production`.** |
 
 ### 6.4 Fixture policy: no silent substitution
@@ -505,6 +586,21 @@ type QlooProvenance = {
 - **Retries.** Retries consume tokens and quota. There are never unbounded retries.
 
 ---
+
+### 6.7 M2 implementation status (2026-10-21)
+
+`packages/qloo-adapter` implements this section:
+
+| Part | Implementation |
+|---|---|
+| Inputs | Zod schemas with V1 bounds (`inputs.ts`), mapped to the exact snake_case harness arguments. Undefined options are dropped before hashing. |
+| Transports | `McpTransport` (persistent `qloo mcp`, bounded restarts), `CliTransport` (`qloo exec <workflow> --input <json>`, `qloo api search … --json`, no shell, never `--api-key`, stdout parsed on non-zero exits), `LiveHarnessRouter` (MCP → CLI fallback; search always CLI), `FixtureTransport` (dev/test only). |
+| Envelopes | `parseEnvelope` classifies `search_array`, `result_list`, `compare_object`, `series`, `needs_input`, `error_object`, and `unknown` (→ `UNKNOWN_ENVELOPE`). It extracts the correlation ID, endpoint, request records, and every resolution candidate (selected, alternatives, issue candidates, with provenance). |
+| Normalizers | `normalize.ts` per §6.2: the category comes from `subtype`; comparison results carry no score; trend ranks keep the original string. |
+| Outcomes | `OK` / `EMPTY` / `NEEDS_INPUT` / `UNSUPPORTED` (local, V1-known) / `ERROR`. The raw payload is held in memory for evidence extraction and pointer verification (`verifyPointer`), then discarded. |
+| Recording | `createDbRecorder`: one `tool_invocations` row per call (cache hits included) and a structural snapshot without the raw payload unless `QLOO_RAW_RETENTION=on`. `createDbQuotaGuard`: atomic daily reservation. |
+| Readiness | `checkQlooReadiness`: `qloo --version` + `qloo doctor --json` (no network); ready only with a configured credential **and** the trusted hackathon endpoint. |
+| Live verification | A 3-call smoke through the real adapter on 2026-10-21: search (CLI) OK; "Lisbon"/locality → `NEEDS_INPUT` with 4 candidates (no disambiguation text); recommend (MCP) OK with `subtype` category, affinity, and harness provenance; trends/book → local `UNSUPPORTED`. |
 
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 

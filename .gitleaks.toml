@@ -1,0 +1,18 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Exact, nonfunctional M0 test sentinels; never real credentials"
+regexTarget = "secret"
+regexes = [
+  '''^m0-qloo-secret-sentinel$''',
+  '''^m0-placeholder-pepper-at-least-32-bytes$''',
+  '''^test-pepper-placeholder-at-least-32-bytes$''',
+]
+
+[[rules]]
+id = "qloo-api-key"
+description = "Qloo credential assignment with a high-entropy value"
+regex = '''(?i)QLOO_API_KEY\s*[:=]\s*["']?([a-zA-Z0-9_+/=-]{20,})'''
+secretGroup = 1
+entropy = 3.5

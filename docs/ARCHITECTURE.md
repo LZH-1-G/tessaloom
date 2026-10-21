@@ -62,7 +62,7 @@ flowchart LR
 Trust boundaries:
 
 - **The browser never talks to Qloo or the LLM provider.**
-- **The web process has no Qloo key and no LLM key.** The supervisor starts it with an environment allowlist that excludes them, and as M10 hardening, under a separate Unix UID. Only the worker holds them (see [SECURITY.md §3](SECURITY.md#3-credential-management)).
+- **The web process has no Qloo key and no LLM key.** The supervisor starts it with an environment allowlist that excludes them and a controlled executable PATH. M0 enforces configured non-root child UIDs when the supervisor runs as root, with distinct UIDs for web and worker; missing identities fail before any spawn. Only the worker holds provider keys (see [SECURITY.md §3](SECURITY.md#3-credential-management)).
 - **The two processes communicate only through PostgreSQL:** job queue rows, run state, and an append-only event log.
 
 ---

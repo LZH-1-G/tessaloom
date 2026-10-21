@@ -1,0 +1,24 @@
+{
+  "name": "@tessaloom/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tessaloom/core": "workspace:*",
+    "drizzle-orm": "0.45.3",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "check": "drizzle-kit check",
+    "build": "esbuild src/migrate-cli.ts --bundle --platform=node --target=node22 --format=esm --external:pg-native --outfile=dist/migrate.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "migrate": "node dist/migrate.mjs"
+  }
+}

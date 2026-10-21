@@ -1,16 +1,65 @@
 # tessaloom
+
 An agentic cultural experimentation studio powered by Qloo.
 
-> *Where Different Worlds Create New Possibilities.* · Built for the **Qloo Agentic Hackathon 2026** (submission deadline: October 30, 2026, 11:45 PM EDT).
+> _Where Different Worlds Create New Possibilities._ · Built for the **Qloo Agentic Hackathon 2026** (submission deadline: October 30, 2026, 11:45 PM EDT).
 
-> **Project status (2026-10-20):** Architecture and design phase. The application code is not implemented yet. Qloo capabilities that have not been exercised with a live event credential are marked **PENDING LIVE VALIDATION** in the documentation.
+> **Project status (2026-10-21):** M0 foundation scaffold implemented; local verification is recorded in [M0 verification](docs/M0_VERIFICATION.md). PR CI remains pending authorization to commit and push. M1 has not started. Qloo capabilities remain **PENDING LIVE VALIDATION**.
+
+## Run the M0 scaffold
+
+Use Node 22.23.3 (`.nvmrc`), pnpm 10.34.7 (`packageManager`), and Docker. The scaffold needs no Qloo or LLM credentials and makes no provider calls.
+
+```sh
+nvm use
+corepack enable
+pnpm install --frozen-lockfile
+cp -n .env.example .env
+docker compose up -d --wait postgres
+pnpm dev
+```
+
+Open http://localhost:3000 for the placeholder page. `/api/health` reports liveness; `/api/health/ready` checks PostgreSQL connectivity only. `pnpm dev` runs the web development server with a filtered environment. To run both built processes under the supervisor:
+
+```sh
+pnpm build
+NODE_ENV=production node --env-file=.env scripts/start.mjs
+```
+
+The default `TL_ROLE=all` runs web and the lifecycle-only worker in one service. `TL_ROLE=web` and `TL_ROLE=worker` are also supported. Container execution adds separate user IDs and the private harness home:
+
+```sh
+docker compose --profile app up --build -d --wait
+docker compose --profile app down
+```
+
+The local Compose passwords and `.env.example` values are development placeholders. Production deployment must inject independent session secrets. Provider-key requirements will be added with the M2/M3 adapters; M0 permits a keyless production lifecycle.
+
+## Verify M0
+
+```sh
+pnpm lint
+pnpm typecheck
+pnpm test:unit --coverage
+DATABASE_URL=postgresql://tessaloom:local-development-only@127.0.0.1:5432/tessaloom pnpm test:integration
+pnpm build
+pnpm test:runtime
+pnpm exec playwright install chromium webkit
+pnpm test:e2e
+pnpm audit --prod --audit-level=high
+pnpm check:bundle
+docker build -t tessaloom:m0 .
+pnpm test:container
+```
+
+The container smoke test creates and removes its own temporary PostgreSQL container and network. It checks the official harness version, database readiness, secret isolation, worker restart, shutdown, and the production fixture guard. [The verification report](docs/M0_VERIFICATION.md) includes exact security scan commands, evidence, limitations, and the acceptance checklist. The six shared packages remain stubs except for foundation configuration. No domain schemas, jobs, adapters, or product modules are implemented yet.
 
 ## Technical summary
 
 Tessaloom helps independent bookstores, cafés, small venues, and community organizers design original cultural experiences. A user describes a creative challenge that involves several cultural interests. An evidence-driven agent then:
 
 1. **Resolves** the interests into confirmed Qloo entities and tags, and asks the user when they are ambiguous.
-2. **Discovers** cross-domain relationships, then weaves *collision hypotheses* (the **Cultural Collision Engine**).
+2. **Discovers** cross-domain relationships, then weaves _collision hypotheses_ (the **Cultural Collision Engine**).
 3. **Tests** each hypothesis's claims against Qloo data. Deterministic evaluators grade the evidence (the **Creative Hypothesis Loop**).
 4. Runs **what-if experiments** that recompute only the affected Qloo queries and report exactly what changed (the **Counterfactual Experimentation Engine**).
 5. Shows everything in an **Interactive Cultural Evidence Graph** that separates Qloo data, computed values, AI interpretation, and creative speculation.
@@ -20,31 +69,31 @@ The product has eight modules: Cultural Intelligence, Cultural Collision Engine,
 
 ### Planned stack
 
-| Area | Technology |
-|---|---|
-| App | TypeScript, Next.js (App Router), React, Tailwind CSS, shadcn/ui, React Flow, Recharts |
-| Data | PostgreSQL, Drizzle ORM, Zod, pg-boss |
-| Qloo | The official `@qloo/qloo-harness` (`qloo mcp` / `qloo exec` / `qloo api`), called from a long-running worker. Serverless is not a supported route for the harness. |
-| AI | A provider-agnostic LLM gateway with structured outputs. The default provider is the Anthropic Claude API: primary `claude-opus-5-5`, configurable fallback `claude-sonnet-5-5`. It needs a separately funded API key; Claude Code and Codex subscriptions do not cover runtime use. |
-| Quality | Vitest, Playwright, axe-core, GitHub Actions, gitleaks, CodeQL |
-| Hosting | One always-on container service: a supervisor runs the web and worker processes with per-process secret isolation. Plus managed PostgreSQL. |
+| Area    | Technology                                                                                                                                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| App     | TypeScript, Next.js (App Router), React, Tailwind CSS, shadcn/ui, React Flow, Recharts                                                                                                                                                                                               |
+| Data    | PostgreSQL, Drizzle ORM, Zod, pg-boss                                                                                                                                                                                                                                                |
+| Qloo    | The official `@qloo/qloo-harness` (`qloo mcp` / `qloo exec` / `qloo api`), called from a long-running worker. Serverless is not a supported route for the harness.                                                                                                                   |
+| AI      | A provider-agnostic LLM gateway with structured outputs. The default provider is the Anthropic Claude API: primary `claude-opus-5-5`, configurable fallback `claude-sonnet-5-5`. It needs a separately funded API key; Claude Code and Codex subscriptions do not cover runtime use. |
+| Quality | Vitest, Playwright, axe-core, GitHub Actions, gitleaks, CodeQL                                                                                                                                                                                                                       |
+| Hosting | One always-on container service: a supervisor runs the web and worker processes with per-process secret isolation. Plus managed PostgreSQL.                                                                                                                                          |
 
 ### Documentation
 
-| Document | Contents |
-|---|---|
-| [PRD](docs/PRD.md) | Product requirements, personas, modules, scenarios |
-| [Architecture](docs/ARCHITECTURE.md) | System architecture and technology decisions |
-| [Agent workflow](docs/AGENT_WORKFLOW.md) | State machine, budgets, validation, counterfactual engine |
-| [API contracts](docs/API_CONTRACTS.md) | Internal REST/SSE API and Qloo integration contracts |
-| [Database schema](docs/DATABASE_SCHEMA.md) | Tables, relationships, versioning, retention |
-| [UI/UX spec](docs/UI_UX_SPEC.md) | Screens, visual identity, accessibility |
-| [Originality strategy](docs/ORIGINALITY_STRATEGY.md) | Innovation mechanisms and prior-art review |
-| [Security](docs/SECURITY.md) | Security, privacy, credential management |
-| [Test plan](docs/TEST_PLAN.md) | Testing strategy and acceptance criteria |
-| [Implementation plan](docs/IMPLEMENTATION_PLAN.md) | Engineering milestones |
-| [Hackathon checklist](docs/HACKATHON_CHECKLIST.md) | Rules and submission compliance |
-| [Decisions](docs/DECISIONS.md) | Architecture decisions, trade-offs, risks |
+| Document                                             | Contents                                                  |
+| ---------------------------------------------------- | --------------------------------------------------------- |
+| [PRD](docs/PRD.md)                                   | Product requirements, personas, modules, scenarios        |
+| [Architecture](docs/ARCHITECTURE.md)                 | System architecture and technology decisions              |
+| [Agent workflow](docs/AGENT_WORKFLOW.md)             | State machine, budgets, validation, counterfactual engine |
+| [API contracts](docs/API_CONTRACTS.md)               | Internal REST/SSE API and Qloo integration contracts      |
+| [Database schema](docs/DATABASE_SCHEMA.md)           | Tables, relationships, versioning, retention              |
+| [UI/UX spec](docs/UI_UX_SPEC.md)                     | Screens, visual identity, accessibility                   |
+| [Originality strategy](docs/ORIGINALITY_STRATEGY.md) | Innovation mechanisms and prior-art review                |
+| [Security](docs/SECURITY.md)                         | Security, privacy, credential management                  |
+| [Test plan](docs/TEST_PLAN.md)                       | Testing strategy and acceptance criteria                  |
+| [Implementation plan](docs/IMPLEMENTATION_PLAN.md)   | Engineering milestones                                    |
+| [Hackathon checklist](docs/HACKATHON_CHECKLIST.md)   | Rules and submission compliance                           |
+| [Decisions](docs/DECISIONS.md)                       | Architecture decisions, trade-offs, risks                 |
 
 ### Responsible use
 

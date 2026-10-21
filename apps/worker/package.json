@@ -1,0 +1,16 @@
+{
+  "name": "worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@tessaloom/config": "workspace:*",
+    "@tessaloom/db": "workspace:*",
+    "@tessaloom/qloo-adapter": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+
+> tessaloom@0.0.0 typecheck <repo-root>
+> tsc --noEmit && tsc -p tsconfig.scripts.json && pnpm -r --if-present typecheck
+
+Scope: 8 of 9 workspace projects
+apps/web typecheck$ tsc --noEmit
+apps/worker typecheck$ tsc --noEmit
+apps/worker typecheck: Done
+apps/web typecheck: Done

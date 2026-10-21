@@ -1,6 +1,6 @@
 # Tessaloom — Database Schema
 
-> **Status:** Architecture baseline v1.1 · 2026-10-20 (review: `resolution_status.PENDING`, `llm_invocations.fallback_used`)
+> **Status:** v1.2 · 2026-10-21 · **Implemented in M1** (`packages/db/src/schema.ts`, migrations `0000`–`0001`). §11 lists where the implementation refines this document using V1 evidence.
 > **Engine:** PostgreSQL 16+ · **ORM:** Drizzle ORM (`drizzle-orm/pg-core`) + `drizzle-kit` migrations
 > **Related:** [ARCHITECTURE.md §9](ARCHITECTURE.md#9-data-architecture-summary) · [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) · [SECURITY.md](SECURITY.md)
 
@@ -614,3 +614,23 @@ Retention of Qloo-derived data must comply with Qloo's terms. That review is **P
 | Evidence graph projection (≤ 300 nodes) | Several indexed reads, assembled in `core/graph` | < 150 ms |
 | Branch tree for history | `(root_experiment_id)` | < 30 ms |
 | Cache lookup | `(request_hash, retrieved_at DESC)` | < 5 ms |
+
+---
+
+## 11. M1 implementation notes (2026-10-21)
+
+The schema is implemented with Drizzle ORM (`packages/db/src/schema.ts`), plus a hand-written integrity migration (`migrations/0001_integrity_constraints.sql`). It has 28 tables and 30 enum types; the enums are generated from the Zod enums in `@tessaloom/core`. The V1 findings (ADR-019) and the storage restriction (R-08) led to these refinements, which supersede the sections above where they differ:
+
+| Area | Implementation |
+|---|---|
+| Raw Qloo payloads (§4.11) | `raw` is **nullable**, with `raw_retained boolean` and `CHECK (raw_retained = (raw IS NOT NULL))`. The repository default is `rawRetention: "off"`, so only the structural summary (status, shape, count, error code) is stored until storage permission is confirmed (R-08). A trigger lets only `pinned` and `expires_at` change. |
+| Heterogeneous responses | New enum `envelope_shape` (`search_array`, `result_list`, `compare_object`, `series`, `needs_input`, `error_object`, `unknown`) on snapshots and tool invocations. |
+| Harness provenance (§4.12) | `tool_invocations` adds `envelope_shape`, `correlation_id`, `harness_endpoint`, and `harness_requests` (the exact GET requests the harness reports). These are request records, not response data. |
+| Disambiguation (§4.4, §4.5) | `cultural_entities` adds `disambiguation` and `legacy_type` (legacy `author`/`actor`/`director`/`album` types). `entity_resolution_records.candidates` holds `ResolutionCandidates`: every entity candidate with its `source` (`selected`, `alternative`, `issue_candidate`, `search`), type, popularity, description, and disambiguation; tag candidates; the harness pick (`harnessSelectedQlooId`, never auto-accepted); and resolution provenance. `requested_kind` distinguishes entity, tag, and locality lookups. The repository rejects selecting a candidate that was never offered, and `EXACT_SINGLE` unless exactly one candidate exists. |
+| Affinity vs. creative suitability | Evidence facts carry a required `measure` (`qloo_measure` enum: `AUDIENCE_AFFINITY`, `POPULARITY`, `RANK_POSITION`, `AUDIENCE_TAG_OVERLAP`, `GEO_AFFINITY`, `TREND`, `DEMOGRAPHIC_INDEX`, `TAG_ASSOCIATION`, `NONE`), and `evidence_records.primary_measure` is indexed for queries. **No column stores a Qloo-derived creative-fit score.** `hypotheses.support_score` summarizes audience-affinity evidence only. |
+| Unsupported and insufficient states | `claim_status` adds `UNSUPPORTED` (e.g. trends with `book`). `evidence_quality` is an enum: `FULL`, `PARTIAL`, `DEGRADED`, `FIELD_UNAVAILABLE`, `UNSUPPORTED`, `ERROR`. Facts record `verifiedAtIngest`, because pointers are verified against the response before it is discarded when raw retention is off. |
+| Append-only enforcement (§8) | `BEFORE UPDATE` triggers (SQLSTATE `23001`) on `run_events`, `evidence_records`, `tool_invocations`, and `blueprint_revisions`. They apply to every role, in addition to the role grants in `packages/db/sql/roles.sql`. |
+| Fixture firewall | Triggers (SQLSTATE `23514`) couple FIXTURE invocations with `DEVELOPMENT_FIXTURE` provenance for both evidence and entities, in both directions. |
+| Circular pointers | `projects.current_brief_version_id` and `experience_blueprints.current_revision_id` are `DEFERRABLE INITIALLY DEFERRED` foreign keys. |
+| Small additions | Enums `workspace_kind`, `experiment_mode`, `agent_role`; `usage_counters.day` is `YYYY-MM-DD` text with a format check; `consumeWithinLimit` is a single atomic upsert that never exceeds the limit. |
+
