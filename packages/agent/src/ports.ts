@@ -48,6 +48,7 @@ export interface ResolutionCandidatesLike {
     tagId: string;
     name: string;
     tagType?: string;
+    popularity?: number;
     rankInSource: number;
   }[];
   harnessSelectedQlooId?: string;
@@ -98,6 +99,15 @@ type InsightType =
   | "videogame";
 
 export interface QlooPort {
+  /** `qloo api search` (V1: the only plain search; raw results carry `tags[]`). */
+  searchEntities(
+    input: { query: string; type?: InsightType | "locality"; take?: number },
+    ctx: QlooCallContext,
+  ): Promise<QlooResult<QlooEntityItem>>;
+  findTags(
+    input: { query: string; limit?: number },
+    ctx: QlooCallContext,
+  ): Promise<QlooResult<QlooTagItem>>;
   describeEntity(
     input: { entity: string; type?: InsightType | "locality" },
     ctx: QlooCallContext,
@@ -106,6 +116,7 @@ export interface QlooPort {
     input: {
       targetType: InsightType;
       signals?: string[];
+      signalTags?: string[];
       includeTags?: string[];
       limit?: number;
     },

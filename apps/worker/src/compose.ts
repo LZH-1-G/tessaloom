@@ -5,6 +5,7 @@ import type { LlmGateway } from "@tessaloom/llm-gateway";
 import {
   FixtureTransport,
   QlooAdapter,
+  SyntheticFixtureTransport,
   createDbQuotaGuard,
   createDbRecorder,
   createLiveTransport,
@@ -51,6 +52,8 @@ const unconfigured = async () =>
     provenance: null,
   }) as const;
 export const UNCONFIGURED_QLOO: QlooPort = {
+  searchEntities: unconfigured,
+  findTags: unconfigured,
   describeEntity: unconfigured,
   recommend: unconfigured,
   rank: unconfigured,
@@ -64,7 +67,7 @@ export const UNCONFIGURED_QLOO: QlooPort = {
 export function createQlooAdapter(
   db: Db,
   input: {
-    mode: "live" | "fixture" | undefined;
+    mode: "live" | "fixture" | "synthetic" | undefined;
     appEnv: string;
     harnessVersion: string | null;
     dailyLimit: number;
@@ -83,6 +86,8 @@ export function createQlooAdapter(
         input.fixtureRoot ?? "fixtures/qloo",
         input.appEnv,
       );
+    else if (input.mode === "synthetic")
+      transport = new SyntheticFixtureTransport(input.appEnv);
     else return null;
   }
   return new QlooAdapter({
@@ -90,7 +95,9 @@ export function createQlooAdapter(
     harnessVersion: input.harnessVersion ?? "fixture",
     recorder: createDbRecorder(db),
     quota: createDbQuotaGuard(db, { dailyLimit: input.dailyLimit }),
-    rateLimitPerMin: input.rateLimitPerMin,
+    // The limiter protects the shared Qloo quota; fixtures generate no Qloo traffic.
+    rateLimitPerMin:
+      transport.name === "FIXTURE" ? 100_000 : input.rateLimitPerMin,
   });
 }
 

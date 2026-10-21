@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  CreateBriefRequest,
+  CreateProjectRequest,
   RunConfig,
   StartExperimentRequest,
   canonicalHash,
@@ -11,7 +13,17 @@ import {
   cancelRun,
   confirmRun,
   consumeWithinLimit,
+  createBriefVersion,
+  createProject,
   createWorkspace,
+  evidenceTrace,
+  experimentView,
+  invocationTrace,
+  getBriefVersion,
+  getProject,
+  listProjects,
+  projectOverview,
+  withTx,
   findIdempotentResponse,
   findWorkspaceBySecretHash,
   getRunForWorkspace,
@@ -148,7 +160,10 @@ export const startExperiment = handle(
       }
     }
     const { beat, config } = await liveWorker(s);
-    const mode = beat.transport === "fixture" ? "fixture" : "live";
+    const mode =
+      beat.transport === "fixture" || beat.transport === "synthetic"
+        ? "fixture"
+        : "live";
     if (mode === "live") {
       const used = await consumeWithinLimit(s.handle.db, {
         scope: "workspace",
@@ -335,5 +350,169 @@ export const streamEvents = handle(
         "X-Content-Type-Options": "nosniff",
       },
     });
+  },
+);
+
+// --- Projects and briefs (API_CONTRACTS §4.1, §4.2) ---
+
+// POST /api/v1/projects
+export const postProject = handle(async (s: Services, req: Request) => {
+  checkCsrf(req);
+  const workspace = await requireWorkspace(s, req);
+  s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+  const body = await readJson(req, CreateProjectRequest);
+  const project = await createProject(s.handle.db, {
+    workspaceId: workspace.id,
+    ...body,
+  });
+  return json(project, 201);
+});
+
+// GET /api/v1/projects
+export const getProjects = handle(async (s: Services, req: Request) => {
+  const workspace = await requireWorkspace(s, req);
+  const items = await listProjects(s.handle.db, workspace.id);
+  const overviews = await Promise.all(
+    items.map((p) => projectOverview(s.handle.db, workspace.id, p.id)),
+  );
+  return json({
+    items: overviews.map((o) => ({
+      ...o.project,
+      briefCount: o.briefs.length,
+      latestExperiment: o.experiments[0]
+        ? {
+            id: o.experiments[0].id,
+            status: o.experiments[0].status,
+            latestRun: o.experiments[0].latestRun
+              ? runView(o.experiments[0].latestRun)
+              : null,
+          }
+        : null,
+    })),
+    nextCursor: null,
+  });
+});
+
+// GET /api/v1/projects/:projectId
+export const getProjectDetail = handle(
+  async (s: Services, req: Request, params: { projectId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const overview = await projectOverview(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.projectId),
+    );
+    return json({
+      ...overview,
+      experiments: overview.experiments.map((e) => ({
+        ...e,
+        latestRun: e.latestRun ? runView(e.latestRun) : null,
+      })),
+    });
+  },
+);
+
+// POST /api/v1/projects/:projectId/briefs — a new append-only brief version.
+export const postBrief = handle(
+  async (s: Services, req: Request, params: { projectId: string }) => {
+    checkCsrf(req);
+    const workspace = await requireWorkspace(s, req);
+    s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+    const projectId = Uuid.parse(params.projectId);
+    await getProject(s.handle.db, workspace.id, projectId);
+    const body = await readJson(req, CreateBriefRequest);
+    const brief = await withTx(s.handle.db, (tx) =>
+      createBriefVersion(tx, { projectId, content: body }),
+    );
+    return json(brief, 201);
+  },
+);
+
+// GET /api/v1/briefs/:briefVersionId
+export const getBrief = handle(
+  async (s: Services, req: Request, params: { briefVersionId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const brief = await getBriefVersion(
+      s.handle.db,
+      Uuid.parse(params.briefVersionId),
+    );
+    await getProject(s.handle.db, workspace.id, brief.projectId);
+    return json(brief);
+  },
+);
+
+/** AGENT_WORKFLOW §13.1: fixture-derived records are never served by a production build. */
+function assertNoFixtures(s: Services, value: unknown) {
+  if (
+    s.appEnv === "production" &&
+    JSON.stringify(value).includes('"DEVELOPMENT_FIXTURE"')
+  )
+    throw new HttpError(
+      "FORBIDDEN",
+      "Development fixtures cannot be served in production.",
+    );
+}
+
+// GET /api/v1/experiments/:experimentId
+export const getExperiment = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const view = await experimentView(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.experimentId),
+    );
+    assertNoFixtures(s, view);
+    return json({ ...view, runs: view.runs.map(runView) });
+  },
+);
+
+// GET /api/v1/evidence/:evidenceId/trace
+export const getEvidenceTrace = handle(
+  async (s: Services, req: Request, params: { evidenceId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const trace = await evidenceTrace(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.evidenceId),
+    );
+    assertNoFixtures(s, trace);
+    return json(trace);
+  },
+);
+
+// GET /api/v1/system/status — mode badge, worker banner, Qloo readiness (UI_UX_SPEC §3).
+export const getSystemStatus = handle(async (s: Services) => {
+  const beat = await latestHeartbeat(s.handle.db);
+  const online =
+    !!beat &&
+    s.now().getTime() - beat.lastBeatAt.getTime() < s.heartbeatMaxAgeMs;
+  const transport = beat?.transport ?? null;
+  return json({
+    workerOnline: online,
+    mode:
+      transport === "fixture" || transport === "synthetic"
+        ? "fixture"
+        : transport
+          ? "live"
+          : null,
+    qlooTransport: transport,
+    qlooReady: online && !!beat?.qlooReady,
+    harnessVersion: beat?.harnessVersion ?? null,
+    llmModel:
+      (beat?.runConfig as { llmModel?: string } | null)?.llmModel ?? null,
+  });
+});
+
+// GET /api/v1/invocations/:invocationId — request-to-result trace for one Qloo call.
+export const getInvocationTrace = handle(
+  async (s: Services, req: Request, params: { invocationId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const trace = await invocationTrace(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.invocationId),
+    );
+    return json(trace);
   },
 );

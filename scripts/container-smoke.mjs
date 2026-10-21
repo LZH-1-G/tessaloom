@@ -134,7 +134,7 @@ try {
     "-e",
     "APP_ENV=test",
     "-e",
-    "QLOO_MODE=fixture",
+    "QLOO_MODE=synthetic",
     "-e",
     "LLM_PROVIDER=scripted",
     "-e",
@@ -248,8 +248,8 @@ try {
     20_000,
   );
   log("worker_heartbeat_passed");
-  // M4: one run travels web → pg-boss → worker inside the image. The scripted provider has no
-  // scripted outputs here, so the first LLM step fails closed with LLM_NOT_CONFIGURED.
+  // M4/M5: one run travels web → pg-boss → worker inside the image, with synthetic fixtures and
+  // the scripted AI stand-ins, and pauses at gate H1 (brief confirmation).
   /** @param {string} query */
   const psql = (query) =>
     docker(
@@ -319,16 +319,16 @@ try {
         })
       ).json()
     );
-    return finalRun.state === "FAILED";
+    return finalRun.state === "AWAITING_BRIEF_CONFIRMATION";
   }, 30_000);
-  assert.equal(finalRun.terminalReason, "LLM_NOT_CONFIGURED");
+  assert.equal(finalRun.terminalReason, null);
   const sse = await (
     await fetch(`${url}/api/v1/runs/${runId}/events`, {
       headers: { cookie: cookies.join("; ") },
       signal: AbortSignal.timeout(10_000),
     })
   ).text();
-  for (const type of ["RUN_STARTED", "STATE_ENTERED", "RUN_FAILED"])
+  for (const type of ["RUN_STARTED", "STATE_ENTERED", "CONFIRMATION_REQUESTED"])
     assert(sse.includes(`"type":"${type}"`), `SSE stream lacks ${type}`);
   assert(sse.includes("event: run-terminal"));
   const mode = psql(

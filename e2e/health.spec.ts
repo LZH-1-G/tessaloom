@@ -1,26 +1,21 @@
-import { test, expect } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
+import { expect, test } from "@playwright/test";
+import { expectAccessible, expectFixtureBanner, snap } from "./helpers";
 
-test("M0 liveness and placeholder page", async ({
+test("liveness, readiness with the worker heartbeat, and the studio dashboard", async ({
   request,
   page,
-}, testInfo) => {
-  const response = await request.get("/api/health");
-  expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ status: "ok", version: "0.0.0" });
+}, info) => {
+  const live = await request.get("/api/health");
+  expect(live.status()).toBe(200);
+  const ready = await request.get("/api/health/ready");
+  expect(await ready.json()).toEqual({ db: true, worker: true });
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Tessaloom", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("The studio is taking shape.")).toBeVisible();
-  const accessibility = await new AxeBuilder({ page }).analyze();
-  expect(
-    accessibility.violations.filter((item) =>
-      ["serious", "critical"].includes(item.impact ?? ""),
-    ),
-  ).toEqual([]);
-  await page.screenshot({
-    path: testInfo.outputPath("m0-placeholder.png"),
-    fullPage: true,
-  });
+  await expectFixtureBanner(page);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    /Where different worlds create new possibilities/,
+  );
+  await expect(page.getByTestId("mode-badge")).toHaveText("fixture");
+  await expect(page.getByText("An empty loom.")).toBeVisible();
+  await expectAccessible(page);
+  await snap(page, info, "dashboard");
 });

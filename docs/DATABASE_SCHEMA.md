@@ -642,4 +642,4 @@ The schema is implemented with Drizzle ORM (`packages/db/src/schema.ts`), plus a
 | `pgboss` schema | Installed by the release migrator (`installQueues`) with queues `run.step` (policy `exclusive`), `maintenance.expire-paused-runs`, and `maintenance.recover-runs`. `roles.sql` grants the app role DML on it after the first migration. |
 | Root EXPLORATION definitions | `ExperimentDefinition.seeds` may be empty. Seeds are written to `experiment_seeds` at `DISCOVERING`, and the brief hash pins them in the key. |
 | Critique storage | The R4 critique per hypothesis lives in `hypotheses.score_breakdown.critique`, because `evidence_records` is append-only. |
-
+| Fixture coupling through the cache (migration `0003_fixture_coupling_through_cache`) | `tl_effective_origin()` resolves a CACHE invocation to its source invocation's origin. Both fixture-coupling triggers use it (ADR-024). |

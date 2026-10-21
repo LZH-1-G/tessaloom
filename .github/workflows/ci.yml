@@ -59,6 +59,21 @@ jobs:
       - run: pnpm test:integration
   e2e:
     runs-on: ubuntu-latest
+    # Browser journeys run the full stack (web + worker + queue) against a migrated database,
+    # with synthetic fixtures and the scripted AI stand-ins (TEST_PLAN §10).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tessaloom
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: tessaloom
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tessaloom -d tessaloom"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      E2E_DATABASE_URL: postgresql://tessaloom:local-development-only@127.0.0.1:5432/tessaloom_e2e
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -74,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: m0-browser-evidence
+          name: browser-evidence
           path: test-results/
   security:
     runs-on: ubuntu-latest

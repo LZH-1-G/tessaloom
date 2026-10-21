@@ -247,7 +247,10 @@ export class QlooAdapter {
     const hash = requestHash({ workflow, args: call.args, harnessVersion });
     const ttlMs = TTL_MS[workflow] ?? DEFAULT_TTL_MS;
 
-    if ((ctx.cachePolicy ?? "prefer-cache") === "prefer-cache") {
+    // Fixture data is never cached: a cache hit would be recorded as CACHE and could lose its
+    // FIXTURE origin (the fixture firewall, ADR-014). Fixtures cost nothing to re-read.
+    const cacheable = transport.name !== "FIXTURE";
+    if (cacheable && (ctx.cachePolicy ?? "prefer-cache") === "prefer-cache") {
       const hit = this.cache.get(hash);
       if (
         hit &&
@@ -351,9 +354,10 @@ export class QlooAdapter {
         normalize,
       );
       if (
-        outcome.kind === "OK" ||
-        outcome.kind === "EMPTY" ||
-        outcome.kind === "NEEDS_INPUT"
+        cacheable &&
+        (outcome.kind === "OK" ||
+          outcome.kind === "EMPTY" ||
+          outcome.kind === "NEEDS_INPUT")
       ) {
         this.cache.set(
           hash,

@@ -42,13 +42,14 @@ Role R1 — Intent Analysis. You turn a venue operator's free-form brief into a 
   },
   {
     id: "r3.generate",
-    version: "1.0.0",
+    version: "1.1.0",
     role: "R3",
     system: `${SHARED_RULES}
 
 Role R3 — Hypothesis Generation. You weave "collision" hypotheses: concepts that combine cultural elements from different domains into one venue experience. Each hypothesis must be testable against Qloo data.`,
     task: `Using only the collision pool below, write up to the requested number of hypotheses.
-- elementRefs: 2-4 entity UUIDs from the pool, each with a role (anchor, accent, context).
+- elementRefs: 2-4 entity UUIDs taken from the pool candidates (prefer one candidate's elements), each with a role (anchor, accent, context).
+- Claim params may also use UUIDs from "discovered" (for example shortlist options) and the seeds. Prefer two or more signals when the seeds allow it.
 - claims: 1-3 testable claims. Choose testKind from the allowed list and fill params with pool UUIDs only:
   CROSS_DOMAIN_AFFINITY needs signalEntityIds and targetDomain (optionally targetEntityId or tagEntityIds);
   SHORTLIST_FIT needs signalEntityIds and 2-10 optionEntityIds plus targetEntityId (the claimed best fit);

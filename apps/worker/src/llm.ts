@@ -2,10 +2,10 @@ import { recordLlmInvocation, type Executor } from "@tessaloom/db";
 import {
   AnthropicProvider,
   LlmGateway,
-  ScriptedLlmProvider,
   type LlmInvocationRecorder,
   type LlmProvider,
 } from "@tessaloom/llm-gateway";
+import { createScriptedDemoProvider } from "./scripted-llm";
 
 /** Persists each provider call as one `llm_invocations` row (ADR-022: injected recorder). */
 export function createDbLlmRecorder(db: Executor): LlmInvocationRecorder {
@@ -52,23 +52,42 @@ export interface LlmSettings {
  * Builds the gateway from worker settings. A missing Anthropic key yields `null`: runs that
  * need the LLM then fail with a configuration error instead of the worker crashing.
  */
+/** Model ids a scripted deployment reports: never a real model name, always $0. */
+export const SCRIPTED_MODELS = {
+  primary: "scripted-demo",
+  fallback: "scripted-demo-fallback",
+} as const;
+
+/** The models a deployment actually uses (scripted runs never borrow a real model name). */
+export function effectiveModels(settings: LlmSettings) {
+  return settings.LLM_PROVIDER === "scripted"
+    ? { primary: SCRIPTED_MODELS.primary, fallback: SCRIPTED_MODELS.fallback }
+    : { primary: settings.LLM_MODEL, fallback: settings.LLM_FALLBACK_MODEL };
+}
+
 export function createLlmGateway(
   settings: LlmSettings,
   recorder: LlmInvocationRecorder,
   provider?: LlmProvider,
 ): LlmGateway | null {
   let resolved = provider;
+  let models = {
+    primary: settings.LLM_MODEL,
+    fallback: settings.LLM_FALLBACK_MODEL,
+  };
   if (!resolved) {
+    models = effectiveModels(settings);
+    // Scripted: deterministic stand-ins (development/CI only; rejected in production).
     if (settings.LLM_PROVIDER === "scripted")
-      resolved = new ScriptedLlmProvider();
+      resolved = createScriptedDemoProvider();
     else if (settings.ANTHROPIC_API_KEY)
       resolved = new AnthropicProvider({ apiKey: settings.ANTHROPIC_API_KEY });
     else return null;
   }
   return new LlmGateway({
     provider: resolved,
-    primaryModel: settings.LLM_MODEL,
-    fallbackModel: settings.LLM_FALLBACK_MODEL,
+    primaryModel: models.primary,
+    fallbackModel: models.fallback,
     mode: settings.LLM_MODE,
     recorder,
     allowUnpricedModels: resolved.name === "scripted",

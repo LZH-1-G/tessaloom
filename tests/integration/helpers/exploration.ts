@@ -35,6 +35,7 @@ import {
 import {
   CompareAudiencesInput,
   DescribeEntityInput,
+  EntityTagsInput,
   FIXTURE_LABEL,
   RankInput,
   RecommendInput,
@@ -138,6 +139,20 @@ export function rankedPayload(
   });
 }
 
+/** entity_tags (V1 shape `{ id, name, type, popularity, affinity }`); ids are fictional. */
+export function tagsPayload(tags: [string, string][]) {
+  return envelope("entity_tags", {
+    results: tags.map(([id, type], i) => ({
+      id: `urn:tag:${type}:${id}`,
+      name: `Tag ${id}`,
+      type: `urn:tag:${type}`,
+      popularity: 0.5,
+      affinity: Number((0.9 - i * 0.05).toFixed(2)),
+    })),
+    result_count: tags.length,
+  });
+}
+
 export function comparePayload(sharedTagIds: string[]) {
   return envelope("compare_audiences", {
     results: {
@@ -164,6 +179,8 @@ export const call = {
     toHarness.rank(RankInput.parse(input)),
   compare: (input: Record<string, unknown>) =>
     toHarness.compareAudiences(CompareAudiencesInput.parse(input)),
+  entityTags: (id: string) =>
+    toHarness.entityTags(EntityTagsInput.parse({ entities: [id], limit: 10 })),
 };
 
 const range = (prefix: string, from: number, to: number) =>
@@ -201,6 +218,23 @@ export async function standardFixtures(lib: FixtureLibrary) {
       call.recommend({ targetType: target, signals: [seed], limit: 10 }),
       rankedPayload("recommend", target, ids),
     );
+  // Tags (CI-5): seeds and every thread item; shared tags create tag bridges.
+  const all = new Set([
+    "M-BR",
+    "A-VAN",
+    ...threads.flatMap(([, , ids]) => ids),
+  ]);
+  for (const id of all) {
+    const n = Number(id.replace(/\D/g, "") || "0");
+    await lib.put(
+      call.entityTags(id),
+      tagsPayload([
+        [`noir-${n % 3}`, "genre:media"],
+        [`synth-${n % 4}`, "keyword:media"],
+        [`own-${id}`, "keyword:media"],
+      ]),
+    );
+  }
   // Evidence queries used by the scripted hypotheses.
   await lib.put(
     call.recommend({ targetType: "book", signals: ["M-BR"], limit: 20 }),
@@ -243,6 +277,7 @@ const byName = (input: Record<string, unknown>, qlooName: string) => {
     ...((input.pool as { elements: PoolElement[] }[]) ?? []).flatMap(
       (p) => p.elements,
     ),
+    ...((input.discovered as PoolElement[]) ?? []),
   ];
   const found = all.find((e) => e.name === qlooName);
   if (!found) throw new Error(`Scripted LLM: ${qlooName} not in pool`);

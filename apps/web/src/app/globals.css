@@ -3,47 +3,61 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* UI_UX_SPEC §2.2 design tokens ("The Loom"): linen, indigo ink, warp, weft, and status hues. */
 :root {
-  --background: #f6f1e7;
-  --foreground: #1e2233;
-  --card: #fffdf8;
-  --card-foreground: #1e2233;
-  --popover: #fffdf8;
-  --popover-foreground: #1e2233;
-  --primary: #2f3e8f;
-  --primary-foreground: #fffdf8;
-  --secondary: #ece6d9;
-  --secondary-foreground: #1e2233;
-  --muted: #ece6d9;
-  --muted-foreground: #5d6275;
-  --accent: #ece6d9;
-  --accent-foreground: #1e2233;
-  --destructive: #a63d40;
-  --border: #d4cfc5;
-  --input: #d4cfc5;
-  --ring: #2f3e8f;
-  --radius: 0.625rem;
+  --tl-bg: #f6f1e7;
+  --tl-surface: #fffdf8;
+  --tl-surface-2: #f0e9db;
+  --tl-ink: #1e2233;
+  --tl-muted: #555a6c;
+  --tl-line: #d8d0bf;
+  --tl-warp: #2f3e8f;
+  --tl-warp-ink: #fffdf8;
+  --tl-weft: #b04a22;
+  --tl-saffron: #d9a21b;
+  --tl-saffron-tint: #f7e7b9;
+  --tl-moss: #2f6b40;
+  --tl-rust: #a63d40;
+  --tl-slate: #5b616e;
+
+  --background: var(--tl-bg);
+  --foreground: var(--tl-ink);
+  --card: var(--tl-surface);
+  --card-foreground: var(--tl-ink);
+  --popover: var(--tl-surface);
+  --popover-foreground: var(--tl-ink);
+  --primary: var(--tl-warp);
+  --primary-foreground: var(--tl-warp-ink);
+  --secondary: var(--tl-surface-2);
+  --secondary-foreground: var(--tl-ink);
+  --muted: var(--tl-surface-2);
+  --muted-foreground: var(--tl-muted);
+  --accent: var(--tl-surface-2);
+  --accent-foreground: var(--tl-ink);
+  --destructive: var(--tl-rust);
+  --border: var(--tl-line);
+  --input: var(--tl-line);
+  --ring: var(--tl-warp);
+  --radius: 0.5rem;
 }
 
-.dark {
-  --background: #14161c;
-  --foreground: #ece6d9;
-  --card: #1c1f27;
-  --card-foreground: #ece6d9;
-  --popover: #1c1f27;
-  --popover-foreground: #ece6d9;
-  --primary: #8c9bf2;
-  --primary-foreground: #14161c;
-  --secondary: #292d38;
-  --secondary-foreground: #ece6d9;
-  --muted: #292d38;
-  --muted-foreground: #a3a8b8;
-  --accent: #292d38;
-  --accent-foreground: #ece6d9;
-  --destructive: #e57c7f;
-  --border: #454b5c;
-  --input: #454b5c;
-  --ring: #8c9bf2;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tl-bg: #14161c;
+    --tl-surface: #1c1f27;
+    --tl-surface-2: #252935;
+    --tl-ink: #ece6d9;
+    --tl-muted: #a3a8b8;
+    --tl-line: #3a4050;
+    --tl-warp: #8c9bf2;
+    --tl-warp-ink: #14161c;
+    --tl-weft: #f08a5d;
+    --tl-saffron: #f2c14e;
+    --tl-saffron-tint: #3d3417;
+    --tl-moss: #79c08e;
+    --tl-rust: #e57c7f;
+    --tl-slate: #9ca3af;
+  }
 }
 
 @theme inline {
@@ -65,16 +79,102 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-warp: var(--tl-warp);
+  --color-weft: var(--tl-weft);
+  --color-saffron: var(--tl-saffron);
+  --color-saffron-tint: var(--tl-saffron-tint);
+  --color-moss: var(--tl-moss);
+  --color-rust: var(--tl-rust);
+  --color-slate: var(--tl-slate);
+  --color-surface: var(--tl-surface);
+  --color-surface-2: var(--tl-surface-2);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  html {
+    color-scheme: light dark;
   }
   body {
-    @apply bg-background font-sans text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
   }
+  /* UI_UX_SPEC §8: a 2 px warp focus outline with ≥ 3:1 contrast. */
+  :focus-visible {
+    outline: 2px solid var(--tl-warp);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* The loom: warp threads as a quiet background texture for hero areas. */
+.tl-warp-texture {
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--tl-warp) 9%, transparent) 0 1px,
+    transparent 1px 28px
+  );
+}
+
+/* UI_UX_SPEC §2.4 provenance visual language: border style + pattern, never color alone. */
+.prov-QLOO_SOURCED {
+  border: 2px solid var(--tl-warp);
+  background: color-mix(in oklab, var(--tl-warp) 7%, var(--tl-surface));
+}
+.prov-APP_DERIVED {
+  border: 1px solid var(--tl-ink);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--tl-ink) 7%, transparent) 0 1px,
+    transparent 1px 7px
+  );
+}
+.prov-MODEL_INTERPRETATION {
+  border: 2px dashed var(--tl-weft);
+}
+.prov-CREATIVE_SPECULATION {
+  border: 2px dotted var(--tl-saffron);
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--tl-saffron) 25%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+}
+.prov-USER_PROVIDED {
+  border: 1px solid var(--tl-muted);
+}
+.prov-DEVELOPMENT_FIXTURE {
+  border: 3px double var(--tl-rust);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklab, var(--tl-rust) 8%, transparent) 0 6px,
+    transparent 6px 14px
+  );
+}
+
+/* React Flow keeps its own theme; align it with the tokens. */
+.react-flow {
+  --xy-background-color: var(--tl-bg);
+  --xy-node-background-color: var(--tl-surface);
+  --xy-node-color: var(--tl-ink);
+  --xy-edge-stroke: var(--tl-muted);
+  --xy-controls-button-background-color: var(--tl-surface);
+  --xy-controls-button-color: var(--tl-ink);
+  --xy-minimap-background-color: var(--tl-surface);
 }

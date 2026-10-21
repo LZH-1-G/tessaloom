@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BlueprintFormat, ShareScope, UseCase } from "../enums";
+import { BlueprintFormat, Domain, ShareScope, UseCase } from "../enums";
 import { BriefInput } from "./domain";
 import {
   ExperimentVariables,
@@ -54,6 +54,17 @@ export const ConfirmationResponse = z.discriminatedUnion("kind", [
     kind: z.literal("BRIEF"),
     briefVersionId: z.uuid(),
     action: z.literal("confirm"),
+    // H1 editable chips (UI_UX_SPEC §4.2): the user's domain for an interest overrides the
+    // model's guess and becomes the resolution type hint (USER_PROVIDED).
+    interestDomains: z
+      .array(
+        z.object({
+          interestIndex: z.number().int().min(0).max(5),
+          domain: z.union([Domain, z.literal("unknown")]),
+        }),
+      )
+      .max(6)
+      .optional(),
   }),
   z.object({
     kind: z.literal("ENTITIES"),

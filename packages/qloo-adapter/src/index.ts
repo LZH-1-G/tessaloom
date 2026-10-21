@@ -24,3 +24,8 @@ export {
   fixtureHash,
   fixturePath,
 } from "./transports/fixture";
+export {
+  SyntheticFixtureTransport,
+  SYNTHETIC_LABEL,
+  syntheticPayload,
+} from "./transports/synthetic";

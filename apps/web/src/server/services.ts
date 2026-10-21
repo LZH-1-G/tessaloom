@@ -13,6 +13,7 @@ export interface Services {
   /** Lazily started pg-boss sender (the web process never runs maintenance). */
   boss: () => Promise<PgBoss>;
   sessionSecret: string;
+  appEnv: string;
   pepper: string;
   secureCookies: boolean;
   limiter: RateLimiter;
@@ -46,6 +47,7 @@ export function services(): Services {
         throw error;
       })),
     sessionSecret: env.SESSION_SECRET,
+    appEnv: env.APP_ENV,
     pepper: env.SHARE_TOKEN_PEPPER,
     secureCookies: env.NODE_ENV === "production",
     limiter: new RateLimiter(),

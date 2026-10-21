@@ -65,7 +65,10 @@ export function validateSupervisorEnv(env) {
   const role = env.TL_ROLE ?? "all";
   if (!["all", "web", "worker"].includes(role))
     throw new Error("Invalid TL_ROLE");
-  if (env.APP_ENV === "production" && env.QLOO_MODE === "fixture") {
+  if (
+    env.APP_ENV === "production" &&
+    (env.QLOO_MODE === "fixture" || env.QLOO_MODE === "synthetic")
+  ) {
     throw new Error("Invalid QLOO_MODE: fixtures are forbidden in production");
   }
   for (const key of [

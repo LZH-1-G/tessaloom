@@ -10,6 +10,7 @@ import {
   selectResolutionCandidate,
   setClaimOutcome,
   setIntentFrame,
+  updateCollisionCandidate,
   updateHypothesis,
   upsertCulturalEntity,
   type Tx,
@@ -54,6 +55,7 @@ export async function applyCommit(
       qlooType: e.qlooType ?? null,
       domain: e.domain ?? null,
       disambiguation: e.disambiguation ?? null,
+      legacyType: e.legacyType ?? false,
       snapshot: e.snapshot,
       sourceToolInvocationId: e.sourceToolInvocationId,
       provenanceClass: e.provenanceClass,
@@ -72,7 +74,7 @@ export async function applyCommit(
           interestIndex: r.interestIndex,
           inputText: r.inputText,
           domainHint: r.domainHint,
-          requestedKind: "entity",
+          requestedKind: r.requestedKind,
         })
       ).id;
     await recordResolutionCandidates(tx, {
@@ -92,7 +94,7 @@ export async function applyCommit(
     await insertExperimentSeeds(
       tx,
       scope.experimentId,
-      plan.seeds.map((s) => ({ entityId: resolve(s), role: "seed" as const })),
+      plan.seeds.map((s) => ({ entityId: resolve(s.ref), role: s.role })),
     );
 
   if (plan.relations?.length) {
@@ -119,6 +121,13 @@ export async function applyCommit(
       })),
     );
   }
+
+  for (const p of plan.poolSelection ?? [])
+    await updateCollisionCandidate(tx, p.id, {
+      selected: p.selected,
+      rank: p.rank,
+      tensionFit: p.tensionFit,
+    });
 
   if (plan.collisionCandidates?.length)
     await insertCollisionCandidates(

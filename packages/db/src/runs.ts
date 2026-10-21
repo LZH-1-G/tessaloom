@@ -391,6 +391,24 @@ export async function confirmRun(
             "Confirmation references a different brief version",
           );
         await confirmBriefVersion(tx, experiment.briefVersionId);
+        const brief = await getBriefVersion(tx, experiment.briefVersionId);
+        const interests = (brief.content as { interests: { text: string }[] })
+          .interests;
+        for (const edit of response.interestDomains ?? []) {
+          const interest = interests[edit.interestIndex];
+          if (!interest)
+            throw new DomainRuleError(`Unknown interest ${edit.interestIndex}`);
+          // A PENDING record carries the user's type hint into resolution (USER_PROVIDED).
+          await createResolution(tx, {
+            projectId: experiment.projectId,
+            briefVersionId: experiment.briefVersionId,
+            runId: run.id,
+            interestIndex: edit.interestIndex,
+            inputText: interest.text,
+            domainHint: edit.domain === "unknown" ? null : edit.domain,
+            requestedKind: "entity",
+          });
+        }
         return runView(
           await commitTransition(
             tx,
@@ -437,7 +455,10 @@ export async function confirmRun(
             const candidate = candidates.entities.find(
               (c) => c.qlooId === choice.qlooId,
             );
-            if (!candidate)
+            const tag = candidate
+              ? undefined
+              : candidates.tags.find((t) => t.tagId === choice.qlooId);
+            if (!candidate && !tag)
               throw new DomainRuleError(
                 "Selected entity was not among the offered candidates",
               );
@@ -445,28 +466,46 @@ export async function confirmRun(
             const source = sourceId
               ? await getToolInvocation(tx, sourceId)
               : null;
-            const domain =
-              /^urn:entity:([a-z_]+)$/.exec(candidate.type ?? "")?.[1] ?? null;
-            const entity = await upsertCulturalEntity(tx, {
-              workspaceId: project!.workspaceId,
-              kind: domain === "locality" ? "locality" : "entity",
-              qlooId: candidate.qlooId,
-              name: candidate.name,
-              qlooType: candidate.type ?? null,
-              domain,
-              disambiguation: candidate.disambiguation ?? null,
-              legacyType: candidate.legacyType,
-              snapshot: {
-                popularity: candidate.popularity ?? null,
-                description: candidate.description ?? null,
-                source: candidate.source,
-              },
-              sourceToolInvocationId: sourceId,
-              provenanceClass:
-                source?.dataOrigin === "FIXTURE"
-                  ? "DEVELOPMENT_FIXTURE"
-                  : "QLOO_SOURCED",
-            });
+            const provenanceClass =
+              source?.dataOrigin === "FIXTURE"
+                ? "DEVELOPMENT_FIXTURE"
+                : "QLOO_SOURCED";
+            const domain = candidate
+              ? (/^urn:entity:([a-z_]+)$/.exec(candidate.type ?? "")?.[1] ??
+                null)
+              : "tag";
+            const entity = candidate
+              ? await upsertCulturalEntity(tx, {
+                  workspaceId: project!.workspaceId,
+                  kind: domain === "locality" ? "locality" : "entity",
+                  qlooId: candidate.qlooId,
+                  name: candidate.name,
+                  qlooType: candidate.type ?? null,
+                  domain,
+                  disambiguation: candidate.disambiguation ?? null,
+                  legacyType: candidate.legacyType,
+                  snapshot: {
+                    popularity: candidate.popularity ?? null,
+                    description: candidate.description ?? null,
+                    source: candidate.source,
+                  },
+                  sourceToolInvocationId: sourceId,
+                  provenanceClass,
+                })
+              : await upsertCulturalEntity(tx, {
+                  workspaceId: project!.workspaceId,
+                  kind: "tag",
+                  qlooId: tag!.tagId,
+                  name: tag!.name,
+                  qlooType: tag!.tagType ?? null,
+                  domain: "tag",
+                  snapshot: {
+                    popularity: tag!.popularity ?? null,
+                    tagType: tag!.tagType ?? null,
+                  },
+                  sourceToolInvocationId: sourceId,
+                  provenanceClass,
+                });
             await selectResolutionCandidate(tx, {
               resolutionId: record.id,
               entityId: entity.id,
@@ -497,7 +536,12 @@ export async function confirmRun(
         )
           throw new DomainRuleError("Every ambiguous interest needs a choice");
         const selectedIds = after
-          .filter((r) => r.status === "RESOLVED" && r.selectedEntityId)
+          .filter(
+            (r) =>
+              r.status === "RESOLVED" &&
+              r.selectedEntityId &&
+              r.requestedKind !== "locality",
+          )
           .map((r) => r.selectedEntityId!);
         const seedRows = selectedIds.length
           ? await tx

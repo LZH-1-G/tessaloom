@@ -243,7 +243,8 @@ describe("full scripted EXPLORATION (TEST_PLAN §4 item 6)", () => {
       sql`SELECT count(*) AS n FROM tool_invocations WHERE run_id = ${runId} AND data_origin <> 'CACHE'`,
     );
     expect(usage.qlooCalls).toBe(qlooCalls);
-    expect(usage.qlooCalls).toBe(2 + 6 + 3 + 1); // resolve + discovery + evidence (it. 0) + evidence (it. 1)
+    // resolve + seed tags + discovery + tag enrichment + evidence (it. 0) + evidence (it. 1)
+    expect(usage.qlooCalls).toBe(2 + 2 + 6 + 8 + 3 + 1);
     expect(usage.llmCalls).toBe(5);
     expect(provider.remaining()).toBe(0);
   });
@@ -352,11 +353,11 @@ describe("idempotency and recovery (TEST_PLAN §4 items 7–8)", () => {
       sql`SELECT count(*) AS n FROM run_events WHERE run_id = ${r.runId} AND type = 'STATE_ENTERED' AND state = 'BUILDING_COLLISION_POOL'`,
     );
     expect(entered).toBe(1);
-    // Quota counters include both attempts (6 discovery calls each); invocations are kept.
+    // Quota counters include both attempts (2 seed tags + 6 threads + 8 enrichments each).
     const qlooAfter = await count(
       sql`SELECT coalesce(sum(value), 0) AS n FROM usage_counters WHERE scope = 'global' AND scope_id = 'qloo'`,
     );
-    expect(qlooAfter - qlooBefore).toBe(12);
+    expect(qlooAfter - qlooBefore).toBe(32);
     expect(
       await count(
         sql`SELECT count(*) AS n FROM tool_invocations WHERE run_id = ${r.runId} AND method = 'recommend'`,
@@ -366,7 +367,7 @@ describe("idempotency and recovery (TEST_PLAN §4 items 7–8)", () => {
     expect(
       ((await getRun(handle.db, r.runId)).usage as { qlooCalls: number })
         .qlooCalls,
-    ).toBe(2 + 6);
+    ).toBe(2 + 16);
   });
 });
 
@@ -441,9 +442,10 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
 
   it("ends with COMPLETED_WITH_LIMITS and UNTESTED_BUDGET claims when the Qloo budget runs out", async () => {
     const r = await startRun();
-    // Resolution (2) + discovery (6) consume the whole budget; no evidence query fits.
+    // Resolution (2) + seed tags (2) + threads (6) use all 10 calls (enrichment yields to the
+    // evidence reserve); no evidence query fits.
     await handle.db.execute(
-      sql`UPDATE agent_runs SET budget = jsonb_set(budget, '{maxQlooCalls}', '8') WHERE id = ${r.runId}`,
+      sql`UPDATE agent_runs SET budget = jsonb_set(budget, '{maxQlooCalls}', '10') WHERE id = ${r.runId}`,
     );
     const deps = makeDeps(handle, boss, lib, scriptedExplorationLlm());
     await passGates(deps, r);

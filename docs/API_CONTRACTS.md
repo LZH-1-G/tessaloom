@@ -613,6 +613,17 @@ Implemented: `GET /api/v1/workspace`, `POST /api/v1/projects/:projectId/experime
 - **Queue topology (§8).** `run.step` uses policy `exclusive`. The migrator creates the `pgboss` schema and queues. `maintenance.recover-runs` (every 5 min) is added.
 - **Not yet implemented.** The project, brief, and other endpoints in §4.1–§4.7 arrive with their milestones (M5+).
 
+### 6.9 M5 API status (2026-10-21)
+
+Added:
+- `POST/GET /api/v1/projects`, `GET /api/v1/projects/:projectId` (overview with brief versions and experiments);
+- `POST /api/v1/projects/:projectId/briefs`, `GET /api/v1/briefs/:briefVersionId`;
+- `GET /api/v1/experiments/:experimentId` (read model: brief, runs, LLM providers used, resolutions, seeds, entities with data origin, relations, pool, hypotheses with claims and evidence);
+- `GET /api/v1/evidence/:evidenceId/trace` and `GET /api/v1/invocations/:invocationId` (redacted request, envelope, pointer facts);
+- `GET /api/v1/system/status` (worker online, mode, Qloo readiness).
+
+Every read is workspace-scoped, and a production build refuses to serialize `DEVELOPMENT_FIXTURE` records (AGENT_WORKFLOW §13.1). The BRIEF confirmation accepts `interestDomains` edits, and an ENTITIES `candidate` choice may name a tag ID.
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts

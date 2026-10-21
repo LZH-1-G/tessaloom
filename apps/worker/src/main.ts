@@ -14,7 +14,7 @@ import {
   type QlooReadiness,
 } from "@tessaloom/qloo-adapter";
 import { buildPorts, buildRunConfig, createQlooAdapter } from "./compose";
-import { createDbLlmRecorder, createLlmGateway } from "./llm";
+import { createDbLlmRecorder, createLlmGateway, effectiveModels } from "./llm";
 import {
   expirePausedRuns,
   recoverStalledRuns,
@@ -53,11 +53,13 @@ let lastHeartbeatError: string | null = null;
 
 const gateway = createLlmGateway(env, createDbLlmRecorder(handle.db));
 const harnessVersion = () =>
-  env.QLOO_MODE === "fixture" ? "fixture" : (readiness?.harnessVersion ?? null);
+  env.QLOO_MODE === "fixture" || env.QLOO_MODE === "synthetic"
+    ? env.QLOO_MODE
+    : (readiness?.harnessVersion ?? null);
 const runConfig = () =>
   buildRunConfig({
-    llmModel: env.LLM_MODEL,
-    llmFallbackModel: env.LLM_FALLBACK_MODEL,
+    llmModel: effectiveModels(env).primary,
+    llmFallbackModel: effectiveModels(env).fallback,
     promptVersions: prompts.versions(),
     harnessVersion: harnessVersion(),
   });
@@ -84,7 +86,9 @@ async function heartbeat() {
     await beatWorker(handle.db, {
       workerId,
       qlooReady:
-        env.QLOO_MODE === "fixture" ? true : (readiness?.ready ?? false),
+        env.QLOO_MODE === "fixture" || env.QLOO_MODE === "synthetic"
+          ? true
+          : (readiness?.ready ?? false),
       harnessVersion: harnessVersion(),
       transport:
         env.QLOO_MODE === "live" ? "HARNESS_MCP" : (env.QLOO_MODE ?? null),

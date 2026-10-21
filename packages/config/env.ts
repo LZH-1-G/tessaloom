@@ -17,14 +17,18 @@ const shared = {
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
-  QLOO_MODE: z.enum(["fixture", "live"]).optional(),
+  // synthetic: deterministic generated fixtures for development and browser E2E (ADR-024).
+  QLOO_MODE: z.enum(["fixture", "synthetic", "live"]).optional(),
 };
 
 function fixtureGuard(
   value: { APP_ENV: string; QLOO_MODE?: string },
   ctx: z.RefinementCtx,
 ) {
-  if (value.APP_ENV === "production" && value.QLOO_MODE === "fixture") {
+  if (
+    value.APP_ENV === "production" &&
+    (value.QLOO_MODE === "fixture" || value.QLOO_MODE === "synthetic")
+  ) {
     ctx.addIssue({
       code: "custom",
       path: ["QLOO_MODE"],

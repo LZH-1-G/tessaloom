@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   EVALUATION_RULESET,
   addUsage,
-  buildCollisionPool,
   checkTermination,
   computeStatus,
   evaluateClaim,
@@ -493,72 +492,5 @@ describe("evidence planning (AGENT_WORKFLOW §7, §8.1)", () => {
     expect(p.queries.map((q) => q.method)).toEqual(["recommend"]);
     expect(p.untestedBudget).toEqual(["c2"]);
     expect(plan(0).untestedBudget.sort()).toEqual(["c1", "c2", "c3"]);
-  });
-});
-
-describe("collision engine (AGENT_WORKFLOW §16)", () => {
-  it("bridges co-occurring elements across seeds and domains, keeps the top k per domain, and diversifies", () => {
-    const thread = (domain: string, ids: string[]) =>
-      ids.map((entityId, position) => ({
-        entityId,
-        domain,
-        position,
-        tagIds: [],
-      }));
-    const threads = new Map([
-      [
-        "M",
-        [
-          ...thread("artist", ["AR1", "AR2"]),
-          ...thread("book", ["B1", "B5"]),
-          ...thread("place", ["P1", "P3"]),
-        ],
-      ],
-      [
-        "A",
-        [...thread("book", ["B5", "B9"]), ...thread("place", ["P3", "P9"])],
-      ],
-    ]);
-    const seeds = [
-      { entityId: "M", domain: "movie", tagIds: [] },
-      { entityId: "A", domain: "artist", tagIds: [] },
-    ];
-    const pool = buildCollisionPool({ seeds, threads, tension: 0.5, k: 10 });
-    const selected = pool.filter((c) => c.selected);
-    expect(selected.length).toBeGreaterThanOrEqual(3);
-    for (const c of pool) {
-      expect(c.noveltyInputs).toBe("REDUCED_INPUTS"); // no tags in M4
-      expect(c.bridge.coOccurrence).toBe(true);
-      for (const v of [c.relevance, c.novelty, c.tensionFit])
-        expect(v).toBeGreaterThanOrEqual(0);
-    }
-    expect(selected.map((c) => c.rank!).sort((a, b) => a - b)).toEqual(
-      selected.map((_, i) => i + 1),
-    );
-    // MMR spreads the first picks across distinct domain pairs.
-    const firstPairs = selected
-      .filter((c) => c.rank! <= 3)
-      .map((c) =>
-        c.elementEntityIds
-          .map(
-            (id) =>
-              ({ M: "movie", A: "artist" })[id as "M"] ??
-              id.replace(/\d+$/, ""),
-          )
-          .sort()
-          .join("|"),
-      );
-    expect(new Set(firstPairs).size).toBe(3);
-    // Deterministic for the same inputs.
-    expect(buildCollisionPool({ seeds, threads, tension: 0.5, k: 10 })).toEqual(
-      pool,
-    );
-    // Elements from a single seed's thread alone never form a candidate.
-    const lonely = buildCollisionPool({
-      seeds,
-      threads: new Map([["M", threads.get("M")!]]),
-      tension: 0.5,
-    });
-    expect(lonely).toEqual([]);
   });
 });

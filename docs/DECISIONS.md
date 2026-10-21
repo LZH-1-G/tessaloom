@@ -32,6 +32,7 @@
 | ADR-021 | M2 live Qloo adapter decisions: endpoint variables in the worker, MCP SDK version, routing, local unsupported answers, in-memory cache | **Accepted** | 2026-10-21 (M2) |
 | ADR-022 | M3 LLM gateway decisions: dependency direction (injected validators), SDK call shape, typed claim params, prompts in code, policies | **Accepted** | 2026-10-21 (M3) |
 | ADR-023 | M4 orchestrator decisions: machine in core, pure step handlers with commit plans, pg-boss topology, grading at collection, worker-published run config, retry and budget termination | **Accepted** | 2026-10-21 (M4) |
+| ADR-024 | M5 discovery decisions: V1-based resolution strategy, tag enrichment budget, synthetic fixtures and scripted AI for development/E2E, fixture firewall through the cache, collision engine in core | **Accepted** | 2026-10-21 (M5) |
 
 ---
 
@@ -380,6 +381,37 @@
 
 ---
 
+### ADR-024: M5 brief, resolution, and discovery decisions
+
+- **Date:** 2026-10-21 (M5).
+- **Decisions:**
+  1. **Resolution follows the V1-observed contract (ADR-019).**
+     - Typed interests use `describe(entity, type)`. `qloo api search` (the only plain search) is called only when `describe` finds nothing or asks for input.
+     - Untyped interests use `describe(entity)` plus `find_tags`, because an interest may be a tag and one concept maps to several tags (V1 findings 2 and 5).
+     - The venue locality uses `describe(…, locality)`, then `api search --type locality`, which supplies the disambiguation strings `describe` omits (V1 finding 3).
+     - All candidates are merged without duplicates. **Exact-single** auto-accepts only one candidate whose name equals the user's text, ignoring case and accents. A harness `exact` pick alone is never trusted (V1 finding 1; CI-A1).
+  2. **H1 edits are user input.** Changing an interest's world at gate H1 creates a `PENDING` resolution record with the user's type hint, so the edit is stored as `USER_PROVIDED` and the model's `IntentFrame` stays unchanged. Editing the brief creates a new version and a new experiment.
+  3. **H2 covers tags and the locality.** A tag can be chosen as a seed; tag seeds thread through `recommend(signal_tags=…)`. The locality row uses index `interests.length` and becomes the experiment's `location` seed, which `LOCATION_FIT` uses.
+  4. **Tag enrichment is budgeted.**
+     - Seeds get one `entity_tags` call each.
+     - Thread items get per-entity `entity_tags` calls, because a multi-entity call merges tags without attribution (V1). At most 8 such calls are made, prioritized by bridge items, then by rank.
+     - Discovery never spends into the half of the Qloo budget reserved for evidence.
+     - Candidates whose elements lack tags are flagged `REDUCED_INPUTS` (CC-5).
+  5. **Grounding scope (§13.2).** R3 is grounded in every entity of the experiment (seeds, thread results, tags), not only the pool. R3 still weaves from the pool and receives the other entities as `discovered`, for example as shortlist options. Prompt `r3.generate` was bumped to 1.1.0.
+  6. **Collision engine in core.** `buildCollisionCandidates` / `selectPool` are pure and shared by the worker and the browser, so the tension slider can re-select the pool from stored scores. All candidates are stored, capped at 40 per domain pair.
+  7. **Development and E2E data are synthetic and labeled.**
+     - `QLOO_MODE=synthetic` uses a deterministic `SyntheticFixtureTransport`: fictional names, `FX-` IDs, transport `FIXTURE`, so every record is `DEVELOPMENT_FIXTURE`. It mirrors the V1 quirks and is refused in production by the environment schema and the supervisor. It is never a fallback for live failures.
+     - `LLM_PROVIDER=scripted` uses deterministic R1/R3/R4 stand-ins, which report the model id `scripted-demo` at $0 (never a real model name).
+     - The UI shows the FIXTURE banner, and the experiment view lists the LLM providers used.
+  8. **Fixture firewall through the cache.**
+     - The adapter no longer caches fixture-transport results.
+     - Migration `0003_fixture_coupling_through_cache` makes the coupling triggers resolve a CACHE invocation's effective origin through `cache_source_invocation_id`.
+     - Before this fix, cached fixture data could be labeled `QLOO_SOURCED`. The bug was found by the WebKit E2E run.
+  9. **The Qloo rate limiter applies to live traffic only.** Fixture transports bypass it.
+- **Consequences:** Resolution can take two calls per interest (`describe` + `search`/`find_tags`), and locality resolution takes two. M6 calibration must account for this in the Qloo budget.
+
+---
+
 ## 3. Key trade-offs
 
 | Trade-off | Chosen side | Cost accepted |
@@ -452,6 +484,7 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | M5 implemented: Creative Brief (form, preview, H1 chips, versions), V1-based resolution with tags and locality (H2), budgeted tag enrichment, Discovery Canvas (lanes, list, inspector, trace), synthetic fixtures and scripted AI for development and E2E, fixture-firewall-through-cache fix; ADR-024 recorded | IMPLEMENTATION_PLAN M5 |
 | 2026-10-21 | M4 implemented: state machine (core), pure step handlers, pg-boss worker with idempotent commits, budgets, cancellation, gates, expiry, recovery, retry, SSE, run API, heartbeat readiness; full scripted EXPLORATION passes; ADR-023 recorded | IMPLEMENTATION_PLAN M4 |
 | 2026-10-21 | M3 implemented: provider-agnostic LLM gateway (Anthropic + scripted providers), prompt registry, repair/refusal/truncation/fallback/budget policies, §13.2 validators in `packages/agent`; ADR-022 recorded | IMPLEMENTATION_PLAN M3 |
 | 2026-10-21 | M2 implemented: worker endpoint settings, live Qloo adapter (MCP/CLI routing, envelope parsing, normalizers, quota, cache, provenance), worker readiness and heartbeat; ADR-021 recorded; 3-call live smoke passed | API_CONTRACTS §6.7 |

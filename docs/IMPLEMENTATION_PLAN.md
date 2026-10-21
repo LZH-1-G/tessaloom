@@ -201,6 +201,12 @@ gantt
 
 ### M5 — Brief, intent, resolution, discovery (D4)
 
+> **Status: COMPLETED 2026-10-21** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-024. **Deviations from the plan below:**
+> - Resolution also uses `find_tags` for untyped interests and resolves the venue locality.
+> - Tag enrichment is budgeted (at most 8 thread items).
+> - The design tokens and components are hand-built on Tailwind and native elements (dialog, radio, select), not generated shadcn components.
+> - E2E runs on a synthetic Qloo transport (`QLOO_MODE=synthetic`), because interactive journeys change the requests and file fixtures cannot anticipate them. File fixtures remain for the integration suite.
+
 - **Objective:** a real R1 and R2 and the first two product pages.
 - **Inputs:** PRD §6.1; UI_UX_SPEC §4.2, §4.3; AGENT_WORKFLOW §2, §8, §11 (H1, H2), §16 step 1.
 - **Scope:**
