@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "node --env-file=.env scripts/dev.mjs",
-    "build": "pnpm --filter web build && pnpm --filter worker build",
+    "build": "pnpm --filter web build && pnpm --filter worker build && pnpm --filter @tessaloom/db build",
     "start": "node scripts/start.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

@@ -128,6 +128,8 @@ gantt
 
 ### M2 — Qloo adapter (D2)
 
+> **Status: COMPLETED 2026-10-21** (pending the container smoke on the rebuilt image, recorded in TEST_PLAN §15). The V1 prerequisite is done (worker endpoint settings, schema, image, tests). `packages/qloo-adapter` provides the transports, envelope parsing, normalizers, quota guard, in-memory cache, DB recorder, and readiness. The worker reports readiness and heartbeats. 25 unit and 2 adapter integration tests pass, and a 3-call live smoke passed. Decisions: ADR-021.
+
 - **Objective:** a `QlooPort` with harness MCP, harness CLI, and fixture transports, plus envelope mapping, caching, rate limiting, quota guard, and provenance.
 - **Inputs:** API_CONTRACTS §5 (**§5.5 observed contract prevails**), §6; DECISIONS ADR-019; AGENT_WORKFLOW §10; SECURITY §3.2, §8; TEST_PLAN §5.1, §5.2.
 - **Scope:**

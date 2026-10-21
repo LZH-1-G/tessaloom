@@ -102,6 +102,32 @@ export default [
       ),
     },
   })),
+  // Fixture firewall (ADR-014): live transports and the adapter core can never reach fixtures.
+  {
+    files: [
+      "packages/qloo-adapter/src/adapter.ts",
+      "packages/qloo-adapter/src/recorder.ts",
+      "packages/qloo-adapter/src/transports/{cli,mcp,router}.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/fixture",
+                "**/fixture.*",
+                "./fixture",
+                "../transports/fixture",
+              ],
+              message: "Live Qloo code must not import development fixtures.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ["packages/{core,agent}/src/**/*.ts"],
     rules: {

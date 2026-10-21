@@ -67,6 +67,11 @@ export const workerEnvSchema = z
     QLOO_API_KEY: z.string().min(1).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     QLOO_HOME: z.string().min(1).optional(),
+    // V1: the hackathon endpoint requires both variables, set to the same exact URL.
+    QLOO_BASE_URL: z.string().url().startsWith("https://").optional(),
+    QLOO_TRUSTED_BASE_URL: z.string().url().startsWith("https://").optional(),
+    // Raw Qloo payloads are not persisted until storage permission is confirmed (R-08).
+    QLOO_RAW_RETENTION: z.enum(["off", "on"]).default("off"),
     QLOO_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),
     GLOBAL_DAILY_QLOO_CALLS: z.coerce.number().int().nonnegative().default(300),
     GLOBAL_DAILY_LLM_USD: z.coerce.number().nonnegative().default(15),
@@ -74,7 +79,21 @@ export const workerEnvSchema = z
     LLM_MODEL: z.string().min(1).default("claude-opus-5-5"),
     LLM_FALLBACK_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
   })
-  .superRefine(fixtureGuard);
+  .superRefine(fixtureGuard)
+  .superRefine((value, ctx) => {
+    const normalize = (url?: string) => url?.replace(/\/+$/, "");
+    if (
+      value.QLOO_BASE_URL &&
+      normalize(value.QLOO_BASE_URL) !== normalize(value.QLOO_TRUSTED_BASE_URL)
+    ) {
+      // The harness refuses a custom base URL unless it is explicitly trusted.
+      ctx.addIssue({
+        code: "custom",
+        path: ["QLOO_TRUSTED_BASE_URL"],
+        message: "QLOO_TRUSTED_BASE_URL must equal QLOO_BASE_URL",
+      });
+    }
+  });
 
 // Do not expose Zod's raw errors: future validators may include input values.
 function parseEnv<T>(schema: z.ZodType<T>, env: Record<string, unknown>): T {

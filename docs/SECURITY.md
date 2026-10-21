@@ -41,6 +41,8 @@
 
 | Secret | Where it lives | Who can read it | Rotation |
 |---|---|---|---|
+The non-secret Qloo endpoint settings `QLOO_BASE_URL` / `QLOO_TRUSTED_BASE_URL` (both `https://hackathon.api.qloo.com`) and `QLOO_RAW_RETENTION` (default `off`) are also forwarded to the worker only (ADR-021).
+
 All runtime secrets live in **one** platform secret store: the single deployment service (ADR-017). Isolation between processes comes from the supervisor's **per-process environment allowlists** and, when the platform allows a root start, **separate Unix UIDs**.
 
 | Secret | Where it lives | Which process receives it | Rotation |

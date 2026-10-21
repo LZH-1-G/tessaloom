@@ -29,6 +29,7 @@
 | ADR-018 | LLM model verification, configurable fallback model, cost model, and credentials | **Accepted** | 2026-10-20 (review) |
 | ADR-019 | V1-observed Qloo contract: endpoint configuration, transports, disambiguation, and evaluator redefinitions | **Accepted** | 2026-10-21 (V1) |
 | ADR-020 | M1 data-layer decisions: raw retention off by default, trigger-enforced immutability, pure-TS hashing, esbuild override | **Accepted** | 2026-10-21 (M1) |
+| ADR-021 | M2 live Qloo adapter decisions: endpoint variables in the worker, MCP SDK version, routing, local unsupported answers, in-memory cache | **Accepted** | 2026-10-21 (M2) |
 
 ---
 
@@ -190,7 +191,7 @@
 
 - **Decision: Option C.** One deployment service and one Docker image. `tini` is PID 1, followed by `node scripts/start.mjs` (the supervisor), which:
   1. spawns **web** (`node apps/web/server.js`) with the allowlist `NODE_ENV, APP_ENV, PORT, HOSTNAME, DATABASE_URL, SESSION_SECRET, SHARE_TOKEN_PEPPER, ADMIN_TOKEN, LOG_LEVEL`, plus a supervisor-generated `PATH`. It never forwards `QLOO_*` secrets or `*_API_KEY`.
-  2. spawns **worker** (`node apps/worker/dist/main.js`) with the allowlist `NODE_ENV, APP_ENV, DATABASE_URL, QLOO_API_KEY, QLOO_HOME, QLOO_MODE, QLOO_RATE_LIMIT_PER_MIN, GLOBAL_DAILY_*, ANTHROPIC_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_FALLBACK_MODEL, LOG_LEVEL`, plus the same generated `PATH`. The worker spawns `qloo mcp` with its own env in M2. `PATH` is derived only from the running Node executable's directory and `/usr/local/bin`, `/usr/bin`, `/bin`, with duplicates removed; the parent's `PATH` is discarded. In the Docker image it is `/usr/local/bin:/usr/bin:/bin`, so both `qloo` and its `/usr/bin/env node` shebang resolve. No `NODE_OPTIONS`, `LD_PRELOAD`, or unrelated parent variables are forwarded.
+  2. spawns **worker** (`node apps/worker/dist/main.js`) with the allowlist `NODE_ENV, APP_ENV, DATABASE_URL, QLOO_API_KEY, QLOO_HOME, QLOO_MODE, QLOO_RATE_LIMIT_PER_MIN, GLOBAL_DAILY_*, ANTHROPIC_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_FALLBACK_MODEL, LOG_LEVEL`, plus the non-secret endpoint settings `QLOO_BASE_URL`, `QLOO_TRUSTED_BASE_URL`, and `QLOO_RAW_RETENTION` (added in M2 per ADR-019/ADR-021), plus the same generated `PATH`. The worker spawns `qloo mcp` with its own env in M2. `PATH` is derived only from the running Node executable's directory and `/usr/local/bin`, `/usr/bin`, `/bin`, with duplicates removed; the parent's `PATH` is discarded. In the Docker image it is `/usr/local/bin:/usr/bin:/bin`, so both `qloo` and its `/usr/bin/env node` shebang resolve. No `NODE_OPTIONS`, `LD_PRELOAD`, or unrelated parent variables are forwarded.
   3. **Enforced in M0:** when the supervisor runs as root, every selected child requires a valid positive non-root UID via `TL_WEB_UID` / `TL_WORKER_UID`; GID defaults to that UID unless a valid positive `TL_*_GID` is configured. Invalid, missing, or zero identities fail before any child is spawned. With `TL_ROLE=all`, the UIDs must be distinct. The Docker image supplies web UID 10001 and worker UID 10002. `QLOO_HOME` is owned by `tl-worker` with mode `0700`. The supervisor itself serves no traffic. An already non-root local supervisor keeps its current identity without requiring UID configuration; same-user process isolation remains weaker and is recorded. Hosted verification remains M10.
   4. Restarts a crashed child with exponential backoff (1 s → 30 s). After more than 5 crashes in 5 minutes it exits with code 1, so the platform restarts the container.
   5. Forwards SIGTERM/SIGINT to both children and exits after they stop (25 s grace period).
@@ -286,6 +287,22 @@
   - Contract tests cannot rely on stored raw recordings while retention is off.
   - Without raw snapshots, replay of sample projects depends on R-08: either permission arrives, or samples run live within the quota guard (IMPLEMENTATION_PLAN §5).
 
+### ADR-021: M2 live Qloo adapter decisions
+
+- **Date:** 2026-10-21 (M2).
+- **Decisions:**
+  1. **Endpoint settings reach only the worker.** The supervisor forwards `QLOO_BASE_URL`, `QLOO_TRUSTED_BASE_URL`, and `QLOO_RAW_RETENTION` to the worker only. `workerEnvSchema` requires HTTPS and rejects a base URL that differs from the trusted URL, because the harness would refuse it. The image defaults both URLs to `https://hackathon.api.qloo.com`. Worker readiness (`qloo --version` and `qloo doctor --json`, with no network) is `ready` only when the credential is configured **and** the doctor reports exactly that endpoint as trusted.
+  2. **`@modelcontextprotocol/sdk@1.32.1` instead of the kit's `1.30.1`.** OSV reports five advisories against 1.30.1 (GHSA-22jm-h49p-29qw, GHSA-46jr-4wx8-v453, GHSA-6prh-2h8m-c8cw, GHSA-6qxp-vccf-f47h, GHSA-rvq5-wwqv-78pq; three high), all fixed by 1.32.0. 1.32.1 (published 2026-10-05) keeps the same stdio client API and was verified live against `qloo mcp`.
+  3. **Routing.** Workflows go to MCP first, then fall back to the CLI on `MCP_UNAVAILABLE`/`HARNESS_NOT_FOUND`; both are live harness surfaces. Search always uses `qloo api search`. There is **no code path to fixtures** from the live router, adapter core, or recorder; an ESLint rule enforces this. `FixtureTransport` refuses production and any file without the synthetic label.
+  4. **Local `UNSUPPORTED` answers.** Combinations V1 observed as rejected upstream (trends + `book`) return `UNSUPPORTED` without spending quota. Evaluators map this to `UNTESTABLE`.
+  5. **Quota and throughput.** One atomic reservation (`consumeWithinLimit`) is made before every live call, retries included. The token bucket defaults to 20/min, concurrency to 2, the timeout to 30 s, and there are at most 2 retries, only for `retryable` errors.
+  6. **Cache in memory only.** Raw retention is off (ADR-020), so the adapter caches outcomes in process memory (TTL: 7 days for identity lookups, 1 day otherwise). Each cache hit still writes its own `tool_invocations` row (`CACHE`, linked to the source invocation).
+  7. **No derived scores.** `compareAudiences` returns Qloo's tag profiles and overlap lists only; the adapter computes no similarity metric. All affinity values remain aggregate audience signals.
+  8. **Migrator entry split.** The release-step migrator has its own entry (`migrate-cli.ts`). Bundling the database library into the worker previously triggered the migrator's "run when executed directly" guard, because `import.meta.url` equals the worker bundle; this was found and fixed in M2.
+- **Consequences:**
+  - `qloo api search` returns the raw API response without harness provenance, so search invocations record only Tessaloom's own request arguments.
+  - Locality candidates from `describe` arrive without disambiguation (confirmed live in M2); M5 enriches them via `searchEntities`.
+
 ---
 
 ## 3. Key trade-offs
@@ -360,5 +377,6 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-21 | M2 implemented: worker endpoint settings, live Qloo adapter (MCP/CLI routing, envelope parsing, normalizers, quota, cache, provenance), worker readiness and heartbeat; ADR-021 recorded; 3-call live smoke passed | API_CONTRACTS §6.7 |
 | 2026-10-21 | M1 implemented: Zod domain schemas, Drizzle schema (28 tables), migrations, repositories; ADR-020 recorded | DATABASE_SCHEMA §11 |
 | 2026-10-21 | V1 live Qloo validation (20 calls, hackathon endpoint); ADR-019 recorded; U-1, U-5, U-6, U-7 resolved; U-12 opened; R-02 handled; R-18 added | research/QLOO_V1_VALIDATION.md, API_CONTRACTS §5.5 |

@@ -36,6 +36,9 @@ const fullEnv = {
   LLM_PROVIDER: "scripted",
   LLM_MODEL: "primary",
   LLM_FALLBACK_MODEL: "fallback",
+  QLOO_BASE_URL: "https://hackathon.api.qloo.com",
+  QLOO_TRUSTED_BASE_URL: "https://hackathon.api.qloo.com",
+  QLOO_RAW_RETENTION: "off",
 };
 
 describe("child environment", () => {
@@ -72,6 +75,9 @@ describe("child environment", () => {
         "LLM_PROVIDER",
         "LLM_MODEL",
         "LLM_FALLBACK_MODEL",
+        "QLOO_BASE_URL",
+        "QLOO_TRUSTED_BASE_URL",
+        "QLOO_RAW_RETENTION",
         "PATH",
       ].sort(),
     );

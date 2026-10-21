@@ -101,6 +101,20 @@ try {
       "accepting connections",
     ),
   );
+  // M2: the image's release-step migrator applies the schema (forward-only, idempotent).
+  const migrated = docker(
+    "run",
+    "--rm",
+    "--network",
+    network,
+    "-e",
+    `DATABASE_URL_MIGRATOR=postgresql://tessaloom:local-development-only@${db}:5432/tessaloom`,
+    image,
+    "node",
+    "packages/db/dist/migrate.mjs",
+  );
+  assert.match(migrated, /"event":"migrations_applied"/);
+  log("image_migrations_applied");
   docker(
     "run",
     "-d",
@@ -197,11 +211,36 @@ try {
       assert.match(fs.readFileSync("/usr/local/bin/qloo", "utf8").split("\\n")[0], /^#!\\s*\\/usr\\/bin\\/env node\\s*$/);
       const version = execFileSync("qloo", ["--version"], { env, encoding: "utf8", timeout: 15000 }).trim();
       assert.equal(version, "0.1.26");
-      console.log(JSON.stringify({ uid: process.getuid(), gid: process.getgid(), version, nodeShebangExecuted: true, missingPathRejected: true }));
+      // M2/ADR-019: the supervised worker environment trusts exactly the hackathon endpoint (local check, no network).
+      assert.equal(env.QLOO_BASE_URL, "https://hackathon.api.qloo.com");
+      const doctor = JSON.parse(spawnSync("qloo", ["doctor", "--json"], { env, encoding: "utf8", timeout: 15000 }).stdout);
+      const trust = doctor.checks.find((c) => c.id === "qloo-endpoint-trust");
+      assert.equal(trust.status, "ok");
+      assert.ok(trust.message.includes("explicitly trusted via QLOO_TRUSTED_BASE_URL: https://hackathon.api.qloo.com/"));
+      console.log(JSON.stringify({ uid: process.getuid(), gid: process.getgid(), version, nodeShebangExecuted: true, missingPathRejected: true, hackathonEndpointTrusted: true }));
     `,
     ),
   );
   log("supervised_worker_harness_passed", harness);
+  // M2: the supervised worker reaches PostgreSQL and records its heartbeat.
+  await until(
+    () =>
+      Number(
+        docker(
+          "exec",
+          db,
+          "psql",
+          "-U",
+          "tessaloom",
+          "-d",
+          "tessaloom",
+          "-tAc",
+          "SELECT count(*) FROM worker_heartbeats WHERE last_beat_at > now() - interval '1 minute'",
+        ),
+      ) >= 1,
+    20_000,
+  );
+  log("worker_heartbeat_passed");
   docker(
     "exec",
     "--user",

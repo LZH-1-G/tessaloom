@@ -587,6 +587,21 @@ type QlooProvenance = {
 
 ---
 
+### 6.7 M2 implementation status (2026-10-21)
+
+`packages/qloo-adapter` implements this section:
+
+| Part | Implementation |
+|---|---|
+| Inputs | Zod schemas with V1 bounds (`inputs.ts`), mapped to the exact snake_case harness arguments. Undefined options are dropped before hashing. |
+| Transports | `McpTransport` (persistent `qloo mcp`, bounded restarts), `CliTransport` (`qloo exec <workflow> --input <json>`, `qloo api search … --json`, no shell, never `--api-key`, stdout parsed on non-zero exits), `LiveHarnessRouter` (MCP → CLI fallback; search always CLI), `FixtureTransport` (dev/test only). |
+| Envelopes | `parseEnvelope` classifies `search_array`, `result_list`, `compare_object`, `series`, `needs_input`, `error_object`, and `unknown` (→ `UNKNOWN_ENVELOPE`). It extracts the correlation ID, endpoint, request records, and every resolution candidate (selected, alternatives, issue candidates, with provenance). |
+| Normalizers | `normalize.ts` per §6.2: the category comes from `subtype`; comparison results carry no score; trend ranks keep the original string. |
+| Outcomes | `OK` / `EMPTY` / `NEEDS_INPUT` / `UNSUPPORTED` (local, V1-known) / `ERROR`. The raw payload is held in memory for evidence extraction and pointer verification (`verifyPointer`), then discarded. |
+| Recording | `createDbRecorder`: one `tool_invocations` row per call (cache hits included) and a structural snapshot without the raw payload unless `QLOO_RAW_RETENTION=on`. `createDbQuotaGuard`: atomic daily reservation. |
+| Readiness | `checkQlooReadiness`: `qloo --version` + `qloo doctor --json` (no network); ready only with a configured credential **and** the trusted hackathon endpoint. |
+| Live verification | A 3-call smoke through the real adapter on 2026-10-21: search (CLI) OK; "Lisbon"/locality → `NEEDS_INPUT` with 4 candidates (no disambiguation text); recommend (MCP) OK with `subtype` category, affinity, and harness provenance; trends/book → local `UNSUPPORTED`. |
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts

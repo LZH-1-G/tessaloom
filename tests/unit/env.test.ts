@@ -84,3 +84,31 @@ describe("environment isolation", () => {
     expect(parseInvalidWorkerEnv).not.toThrow("sensitive-sentinel");
   });
 });
+
+describe("hackathon endpoint settings (V1, ADR-019)", () => {
+  const live = { ...base, QLOO_MODE: "live" };
+  it("accepts matching base and trusted URLs and defaults raw retention to off", () => {
+    const parsed = parseWorkerEnv({
+      ...live,
+      QLOO_BASE_URL: "https://hackathon.api.qloo.com",
+      QLOO_TRUSTED_BASE_URL: "https://hackathon.api.qloo.com/",
+    });
+    expect(parsed.QLOO_RAW_RETENTION).toBe("off");
+  });
+  it.each([
+    { QLOO_BASE_URL: "https://hackathon.api.qloo.com" },
+    {
+      QLOO_BASE_URL: "https://hackathon.api.qloo.com",
+      QLOO_TRUSTED_BASE_URL: "https://api.qloo.com",
+    },
+    {
+      QLOO_BASE_URL: "http://hackathon.api.qloo.com",
+      QLOO_TRUSTED_BASE_URL: "http://hackathon.api.qloo.com",
+    },
+    { QLOO_RAW_RETENTION: "always" },
+  ])("rejects unsafe endpoint configuration %j", (change) => {
+    expect(workerEnvSchema.safeParse({ ...live, ...change }).success).toBe(
+      false,
+    );
+  });
+});

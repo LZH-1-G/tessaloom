@@ -32,6 +32,10 @@ const allowlists = {
     "QLOO_HOME",
     "QLOO_MODE",
     "QLOO_RATE_LIMIT_PER_MIN",
+    // Non-secret hackathon endpoint settings (V1/ADR-019); the harness refuses an untrusted URL.
+    "QLOO_BASE_URL",
+    "QLOO_TRUSTED_BASE_URL",
+    "QLOO_RAW_RETENTION",
     "ANTHROPIC_API_KEY",
     "LLM_PROVIDER",
     "LLM_MODEL",
