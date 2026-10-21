@@ -423,4 +423,4 @@ workflow_dispatch:
 
 | Date | Test set | Environment | Result | Evidence link | Notes |
 |---|---|---|---|---|---|
-| — | — | — | **Not executed** | — | No application code exists as of 2026-10-20 |
+| 2026-10-21 | M0 review remediation: unit, integration, runtime, browser/a11y, build, security, container smoke | Node 22.23.3, pnpm 10.34.7; local macOS + Docker Linux arm64; PostgreSQL 16 | **Local checks PASSED; PR CI BLOCKED** | [M0 verification](M0_VERIFICATION.md) | 62 unit, 3 integration, 6 runtime, 2 browser tests; live supervised worker environment/UID executes qloo 0.1.26; missing root UID rejected; no commit/push authorization; M1 not started |

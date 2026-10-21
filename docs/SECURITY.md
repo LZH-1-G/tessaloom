@@ -60,9 +60,10 @@ All runtime secrets live in **one** platform secret store: the single deployment
 3. **Never** pass `--api-key` to `qloo`; the kit warns it leaks to shell history. The harness reads `QLOO_API_KEY` from the environment.
 4. **Spawn `qloo mcp` with `env: process.env`** (required for the key to reach the child process). No other process receives the environment.
 5. **Process-level isolation in one service (ADR-017):**
-   - The supervisor (`scripts/start.mjs`) passes each child **only** its allowlisted variables. The web process never receives `QLOO_*` secrets or `*_API_KEY`.
+   - The supervisor (`scripts/start.mjs`) passes each child **only** its allowlisted variables plus a controlled `PATH`. The web process never receives `QLOO_*` secrets or `*_API_KEY`.
+   - `PATH` is generated from the running Node executable's directory and the fixed system directories `/usr/local/bin`, `/usr/bin`, `/bin` (deduplicated). It never comes from the parent's `PATH`. The Docker value is `/usr/local/bin:/usr/bin:/bin`; both the harness executable and its `/usr/bin/env node` shebang must execute under the supervised worker's actual UID and environment. M0 smoke tests verify `qloo --version` only, without credentials or live workflows. The interpreter directory is trusted alongside the interpreter itself; local tool-directory ownership and the separate development launcher's inherited PATH should be reviewed before live credentials are used.
    - The web env schema additionally **rejects** these variables at boot (defense in depth).
-   - When a root container start is possible, `web` and `worker` run under distinct UIDs (`tl-web`, `tl-worker`), so the web process cannot read `/proc/<worker-pid>/environ`. `QLOO_HOME` is owned by `tl-worker` with mode `0700`.
+   - A root supervisor **fails closed** before spawning anything unless every selected role has a valid positive non-root `TL_*_UID` and GID (GID defaults to UID). Web and worker UIDs must differ when both are selected. The Docker image supplies `tl-web` UID/GID 10001 and `tl-worker` UID/GID 10002, so web cannot read `/proc/<worker-pid>/environ`. `QLOO_HOME` is owned by `tl-worker` with mode `0700`. Missing UID configuration never falls back to root. Non-root local development retains the caller's identity without requiring UID settings; it does not provide separate-user process isolation.
    - The supervisor logs variable **names** only.
    - **Residual risk:** a container-level compromise could expose worker secrets. It is mitigated by provider spend limits, the Qloo quota guard, and fast revocation (§9). If stronger isolation is needed, the same image can be split into two services via `TL_ROLE`.
 6. **Local development** uses `QLOO_MODE=fixture` by default. Live mode requires the developer to export `QLOO_API_KEY` in their own shell session or use `qloo setup --qloo`.
@@ -151,7 +152,7 @@ Unauthorized access returns **404**, not 403, to avoid confirming that a resourc
 | Rate limiting | Run-starting endpoints: 6/min per workspace, 20/min per IP-hash; other endpoints: 60/min per workspace; daily live-run allowance per workspace |
 | Error handling | Generic user messages; internal details only in logs with a `requestId`; no stack traces in responses |
 | Dependencies | Lockfile committed; `pnpm audit --prod` and OSV scanning in CI; Dependabot weekly; harness version pinned |
-| Container | `tini` as PID 1; the supervisor spawns the children as non-root users (separate UIDs when possible); read-only root filesystem where feasible (writable `QLOO_HOME` and `/tmp`); minimal base image; no SSH |
+| Container | `tini` as PID 1; root supervisor requires configured non-root child UIDs and fails closed before any spawn; distinct UIDs for both roles; controlled executable PATH; read-only root filesystem where feasible (writable `QLOO_HOME` and `/tmp`); minimal base image; no SSH |
 | Database | TLS required; least-privilege roles ([DATABASE_SCHEMA.md §8](DATABASE_SCHEMA.md#8-secret-protection-and-data-minimization)); no direct public access other than the provider's TLS endpoint, with an IP allowlist where supported |
 
 ---
@@ -206,3 +207,4 @@ These are tested per [TEST_PLAN.md §9](TEST_PLAN.md#9-security-checks):
 6. CSP and security headers are present on all pages (Playwright header assertions).
 7. `pnpm audit --prod` shows no high or critical vulnerabilities without a documented exception.
 8. In the running container, the web process environment contains no `QLOO_API_KEY` or `*_API_KEY`. Verified by the supervisor allowlist unit test and a container smoke check of `/proc/<web-pid>/environ` (TEST_PLAN §9).
+9. M0 container smoke executes `qloo --version` by name under the actual supervised worker UID/GID and the environment read from that worker's `/proc` entry. It checks the Node shebang, uses a missing-PATH negative control, and proves root startup rejects missing role UIDs before spawning children.

@@ -24,7 +24,7 @@
 | ADR-013 | Counterfactuals default to holding hypotheses fixed | Accepted | 2026-10-20 |
 | ADR-014 | The fixture firewall | Accepted | 2026-10-20 |
 | ADR-015 | REST route handlers for commands; RSC for reads | Accepted | 2026-10-20 |
-| ADR-016 | Managed PostgreSQL (default Neon) and Fly.io (default host) | Proposed. Confirm in M0. (Single service per ADR-017.) | 2026-10-20 |
+| ADR-016 | Managed PostgreSQL (default Neon) and Fly.io (default host) | Confirmed engineering target in M0; provisioning remains M10. (Single service per ADR-017.) | 2026-10-21 |
 | ADR-017 | **Single deployment service: one container, two supervised processes** | **Accepted** (supersedes the two-app deployment in ADR-001/002) | 2026-10-20 (review) |
 | ADR-018 | LLM model verification, configurable fallback model, cost model, and credentials | **Accepted** | 2026-10-20 (review) |
 
@@ -156,7 +156,9 @@
 
 ### ADR-016: Managed PostgreSQL (default Neon) and Fly.io (default host)
 
-- **Status:** Proposed. Confirm in M0 after checking current plan limits and pricing (not verified in this phase).
+- **Status:** Confirmed engineering target in M0 on 2026-10-21: Fly.io for one always-on application service and Neon for managed PostgreSQL. No paid resources were provisioned; account access, region, spend authorization, and hosted validation remain M10.
+- **Plan check:** [Fly.io pricing](https://docs.fly.io/about/pricing) lists a 2 GB shared-cpu-2x Machine at $13.39 per 30 days in `iad`/`ewr`, excluding other resource charges; prices vary by region. [Neon pricing](https://neon.com/pricing) lists Free at 100 CU-hours and 1 GB per project, and Launch at $0.106/CU-hour plus $0.35/GB-month. Use a paid, adequately budgeted database plan for the continuous worker rather than assuming the free quota covers judging. Recheck pricing and scale-to-zero settings before deployment. These are published rates, not measured Tessaloom costs.
+- **Isolation validation:** M0 verifies root supervisor startup and distinct non-root child UIDs in Docker. Actual Fly.io account/platform configuration and the same isolation checks on the hosted Machine are still to be verified in M10; local results do not establish hosted behavior.
 - **Rationale:** Managed backups and TLS; branchable databases for staging (Neon); always-on machines that run one service with a supervised multi-process container (Fly.io; ADR-017).
 - **Alternatives:** Render (web + background worker + Postgres); Railway; Supabase Postgres.
 - **Consequences:** Two vendors. A pre-tested fallback on Render is prepared on D9 (IMPLEMENTATION_PLAN §5).
@@ -185,9 +187,9 @@
 | **Solo implementation time** | Highest: extra app configuration, secret duplication, cross-app deploy ordering and debugging (estimated +3–5 h) | Lowest initially, but it violates the module boundaries and makes the worker's lifecycle fragile | Low: the supervisor script + env allowlists (estimated 1–2 h, including tests) |
 
 - **Decision: Option C.** One deployment service and one Docker image. `tini` is PID 1, followed by `node scripts/start.mjs` (the supervisor), which:
-  1. spawns **web** (`node apps/web/server.js`) with the allowlist `NODE_ENV, APP_ENV, PORT, HOSTNAME, DATABASE_URL, SESSION_SECRET, SHARE_TOKEN_PEPPER, ADMIN_TOKEN, LOG_LEVEL`. It never forwards `QLOO_*` secrets or `*_API_KEY`.
-  2. spawns **worker** (`node apps/worker/dist/main.js`) with the allowlist `NODE_ENV, APP_ENV, DATABASE_URL, QLOO_API_KEY, QLOO_HOME, QLOO_MODE, QLOO_RATE_LIMIT_PER_MIN, GLOBAL_DAILY_*, ANTHROPIC_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_FALLBACK_MODEL, LOG_LEVEL`. The worker spawns `qloo mcp` with its own env.
-  3. **Hardening (M10):** when the container starts as root, the supervisor spawns the children with distinct unprivileged UIDs (`tl-web`, `tl-worker`). `QLOO_HOME` is owned by `tl-worker`. The supervisor itself serves no traffic. If the platform does not allow a root start, both children run as one non-root user and the residual risk is recorded.
+  1. spawns **web** (`node apps/web/server.js`) with the allowlist `NODE_ENV, APP_ENV, PORT, HOSTNAME, DATABASE_URL, SESSION_SECRET, SHARE_TOKEN_PEPPER, ADMIN_TOKEN, LOG_LEVEL`, plus a supervisor-generated `PATH`. It never forwards `QLOO_*` secrets or `*_API_KEY`.
+  2. spawns **worker** (`node apps/worker/dist/main.js`) with the allowlist `NODE_ENV, APP_ENV, DATABASE_URL, QLOO_API_KEY, QLOO_HOME, QLOO_MODE, QLOO_RATE_LIMIT_PER_MIN, GLOBAL_DAILY_*, ANTHROPIC_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_FALLBACK_MODEL, LOG_LEVEL`, plus the same generated `PATH`. The worker spawns `qloo mcp` with its own env in M2. `PATH` is derived only from the running Node executable's directory and `/usr/local/bin`, `/usr/bin`, `/bin`, with duplicates removed; the parent's `PATH` is discarded. In the Docker image it is `/usr/local/bin:/usr/bin:/bin`, so both `qloo` and its `/usr/bin/env node` shebang resolve. No `NODE_OPTIONS`, `LD_PRELOAD`, or unrelated parent variables are forwarded.
+  3. **Enforced in M0:** when the supervisor runs as root, every selected child requires a valid positive non-root UID via `TL_WEB_UID` / `TL_WORKER_UID`; GID defaults to that UID unless a valid positive `TL_*_GID` is configured. Invalid, missing, or zero identities fail before any child is spawned. With `TL_ROLE=all`, the UIDs must be distinct. The Docker image supplies web UID 10001 and worker UID 10002. `QLOO_HOME` is owned by `tl-worker` with mode `0700`. The supervisor itself serves no traffic. An already non-root local supervisor keeps its current identity without requiring UID configuration; same-user process isolation remains weaker and is recorded. Hosted verification remains M10.
   4. Restarts a crashed child with exponential backoff (1 s → 30 s). After more than 5 crashes in 5 minutes it exits with code 1, so the platform restarts the container.
   5. Forwards SIGTERM/SIGINT to both children and exits after they stop (25 s grace period).
   6. Writes a startup log line listing the env variable **names** (never values) given to each child, for auditability.
@@ -275,7 +277,7 @@
 | U-6 | Does `qloo_recommend` support tag/location filters? | Partly (test kinds degrade) | V1 |
 | U-7 | Is an MCP tool available for plain entity search, or only `qloo api search`? | No (the CLI fallback exists) | V1 |
 | U-8 | The runtime LLM budget the owner will fund | Yes, for the hosted demo | The owner, by M3. Recommendation: $150 prepaid (ADR-018). |
-| U-9 | Final hosting vendor choice (single service per ADR-017) | No | M0 |
+| U-9 | Final hosting vendor choice (single service per ADR-017) | **Resolved 2026-10-21** as the engineering target: Fly.io + Neon; paid provisioning remains subject to owner authorization | ADR-016; hosted validation in M10 |
 | U-10 | Does the hosting platform allow a root container start (needed for per-process UIDs)? | No (fallback: one non-root user + documented residual risk) | M0 / M10 |
 | U-11 | Can the owner's API account access `claude-opus-5-5` and `claude-sonnet-5-5`? (IDs verified in the docs, not via a live call) | Yes, for M3 | Owner key → `GET /v1/models/{id}` in M3 |
 

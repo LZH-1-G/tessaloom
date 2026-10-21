@@ -1,0 +1,13 @@
+
+> tessaloom@0.0.0 test:runtime <repo-root>
+> vitest run --config vitest.runtime.config.ts
+
+
+ RUN  v5.0.5 <repo-root>
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  10:03:55
+   Duration  2.65s (tests 95%, transform 4%, import 1%)
+

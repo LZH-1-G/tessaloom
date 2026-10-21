@@ -1,0 +1,17 @@
+
+> tessaloom@0.0.0 test <repo-root>
+> pnpm test:unit
+
+
+> tessaloom@0.0.0 test:unit <repo-root>
+> vitest run
+
+
+ RUN  v5.0.5 <repo-root>
+
+
+ Test Files  3 passed (3)
+      Tests  62 passed (62)
+   Start at  10:06:06
+   Duration  758ms (tests 76%, import 17%, transform 7%, worker 1%)
+

@@ -1,0 +1,13 @@
+
+> tessaloom@0.0.0 test:container <repo-root>
+> node scripts/container-smoke.mjs
+
+{"event":"harness_version","version":"0.1.26"}
+{"event":"process_isolation_passed","rows":[{"pid":14,"role":"web","uid":10001,"gid":10001,"envNames":["APP_ENV","DATABASE_URL","HOSTNAME","NODE_ENV","PATH","PORT","SESSION_SECRET","SHARE_TOKEN_PEPPER"]},{"pid":15,"role":"worker","uid":10002,"gid":10002,"envNames":["ANTHROPIC_API_KEY","APP_ENV","DATABASE_URL","LLM_PROVIDER","NODE_ENV","PATH","QLOO_API_KEY","QLOO_HOME","QLOO_MODE"]}],"home":{"uid":10002,"mode":448}}
+{"event":"supervised_worker_harness_passed","uid":10002,"gid":10002,"version":"0.1.26","nodeShebangExecuted":true,"missingPathRejected":true}
+{"event":"web_worker_access_denied","environment":true,"harnessHome":true}
+{"event":"worker_restart_passed","elapsedMs":1159}
+{"event":"graceful_shutdown_passed"}
+{"event":"production_fixture_guard_passed"}
+{"event":"root_identity_fail_closed_passed"}
+{"event":"container_smoke_passed"}

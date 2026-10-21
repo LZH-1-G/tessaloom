@@ -1,0 +1,15 @@
+
+> tessaloom@0.0.0 test:e2e <repo-root>
+> playwright test
+
+
+Running 2 tests using 2 workers
+
+(node:51837) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:51838) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium] › e2e/health.spec.ts:4:1 › M0 liveness and placeholder page (1.4s)
+  ✓  1 [webkit] › e2e/health.spec.ts:4:1 › M0 liveness and placeholder page (2.2s)
+
+  2 passed (4.6s)

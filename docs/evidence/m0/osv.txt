@@ -1,0 +1,5 @@
+Warning: `scan` exists as both a subcommand of OSV-Scanner and as a file on the filesystem. `scan` is assumed to be a subcommand here. If you intended for `scan` to be an argument to `scan`, you must specify `scan scan` in your command line.
+Starting filesystem walk for root: /
+Scanned /scan/pnpm-lock.yaml file and found 474 packages
+End status: 0 dirs visited, 1 inodes visited, 1 Extract calls, 16.971584ms elapsed, 16.97175ms wall time
+No issues found

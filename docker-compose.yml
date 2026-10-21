@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tessaloom
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: tessaloom
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessaloom -d tessaloom"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  app:
+    profiles: ["app"]
+    build: .
+    environment:
+      APP_ENV: development
+      NODE_ENV: production
+      TL_ROLE: all
+      DATABASE_URL: postgresql://tessaloom:local-development-only@postgres:5432/tessaloom
+      SESSION_SECRET: local-development-placeholder-32-bytes
+      SHARE_TOKEN_PEPPER: local-share-placeholder-at-least-32-bytes
+      QLOO_MODE: fixture
+      LLM_PROVIDER: scripted
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+volumes:
+  postgres-data:
