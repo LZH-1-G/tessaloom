@@ -4,6 +4,7 @@ import type {
   EvidenceStance,
   QlooMeasure,
 } from "@tessaloom/core";
+import type { ResolvedParams } from "@tessaloom/core";
 import type { QlooResult } from "./ports";
 
 /**
@@ -40,17 +41,7 @@ export const EVALUATION_RULESET = {
 
 export const PENDING_CALIBRATION = "evaluator pending live calibration";
 
-/** Claim params with internal UUIDs already mapped to Qloo IDs. */
-export interface ResolvedParams {
-  signalQlooIds: string[];
-  signalTagQlooIds?: string[];
-  targetDomain?: string;
-  targetQlooId?: string;
-  tagQlooIds?: string[];
-  optionQlooIds?: string[];
-  compareQlooIds?: string[];
-}
-
+export type { ResolvedParams } from "@tessaloom/core";
 export interface Evaluation {
   stance: EvidenceStance;
   facts: EvidenceFact[];

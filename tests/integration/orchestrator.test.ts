@@ -381,11 +381,12 @@ describe("idempotency and recovery (TEST_PLAN §4 items 7–8)", () => {
       sql`SELECT count(*) AS n FROM run_events WHERE run_id = ${r.runId} AND type = 'STATE_ENTERED' AND state = 'BUILDING_COLLISION_POOL'`,
     );
     expect(entered).toBe(1);
-    // Quota counters include both attempts (2 seed tags + 6 threads + 8 enrichments each).
+    // Fixture traffic never draws on the shared live Qloo quota (ADR-027); per-attempt
+    // reservation for live transports, retries included, is pinned by the adapter unit tests.
     const qlooAfter = await count(
       sql`SELECT coalesce(sum(value), 0) AS n FROM usage_counters WHERE scope = 'global' AND scope_id = 'qloo'`,
     );
-    expect(qlooAfter - qlooBefore).toBe(32);
+    expect(qlooAfter - qlooBefore).toBe(0);
     expect(
       await count(
         sql`SELECT count(*) AS n FROM tool_invocations WHERE run_id = ${r.runId} AND method = 'recommend'`,

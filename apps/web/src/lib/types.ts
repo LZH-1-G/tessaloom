@@ -243,7 +243,19 @@ export interface ExperimentViewData {
     kind: string;
     createdAt: string;
     definition: {
-      variables: { targetDomains: string[]; collisionTension: number };
+      seeds?: { qlooId: string; kind: string; role: string }[];
+      variableDelta?: Record<string, unknown> | null;
+      variables: {
+        targetDomains: string[];
+        collisionTension: number;
+        timeWindowWeeks?: number;
+        locationQlooId?: string | null;
+        constraints?: {
+          capacity?: number;
+          budgetBand?: string;
+          durationMinutes?: number;
+        };
+      };
       scoringWeights: { support: number; novelty: number; feasibility: number };
     };
   };
@@ -275,4 +287,57 @@ export interface RunEventView {
   role: string | null;
   summary: string;
   payload: Record<string, unknown>;
+}
+
+// --- M8 What-if (API_CONTRACTS §4.5, §6.12) ---
+
+export interface BranchPreview {
+  dirtyQueries: number;
+  reusedQueries: number;
+  estimatedQlooCalls: number;
+  rescoreOnly: boolean;
+  needsConfirmation: boolean;
+  dirtyList: { method: string; label: string; reason: string }[];
+  claims: {
+    reuse: number;
+    inherit: number;
+    dirty: number;
+    unsupported: number;
+  };
+  unsupported: string[];
+  mode: string;
+  qlooCallsToday: number;
+}
+
+export interface BranchItem {
+  id: string;
+  kind: "ROOT" | "BRANCH";
+  label: string | null;
+  parentExperimentId: string | null;
+  status: string;
+  createdAt: string;
+  variableDelta: Record<string, unknown> | null;
+  plannedDirtyQueries: number | null;
+  plannedReusedQueries: number | null;
+  latestRun: RunView | null;
+  comparisonId: string | null;
+}
+
+export interface ComparisonRow {
+  id: string;
+  baseExperimentId: string;
+  otherExperimentId: string;
+  comparisonKind: string;
+  metrics: import("@tessaloom/core").ComparisonMetrics;
+  dirtyQueries: number;
+  reusedQueries: number;
+  newQlooResults: number;
+  narrative: {
+    text: string;
+    rendered: string;
+    citedEvidenceIds: string[];
+    provenance: "MODEL_INTERPRETATION" | "APP_DERIVED";
+    source: string;
+  } | null;
+  createdAt: string;
 }

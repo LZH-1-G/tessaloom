@@ -794,6 +794,9 @@ export const evidenceRecords = pgTable(
     provenanceClass: provenanceClass("provenance_class").notNull(),
     // The evaluator's plain-language rule (APP_DERIVED), e.g. "SUPPORTS because B ranked 4 of 20".
     rationale: text("rationale"),
+    // Ordered top-K Qloo ids of the graded result (identifiers only, never the payload; at
+    // most 20). Counterfactual comparisons diff these lists (overlap@K, RBO; ADR-027).
+    resultIds: text("result_ids").array(),
     criticNote: text("critic_note"),
     criticDowngrade: boolean("critic_downgrade").notNull().default(false),
     createdAt: createdAt(),
@@ -810,6 +813,10 @@ export const evidenceRecords = pgTable(
     check(
       "evidence_never_model_sourced",
       sql`${t.provenanceClass} IN ('QLOO_SOURCED','APP_DERIVED','DEVELOPMENT_FIXTURE')`,
+    ),
+    check(
+      "evidence_result_ids_len",
+      sql`${t.resultIds} IS NULL OR cardinality(${t.resultIds}) <= 50`,
     ),
     check(
       "evidence_critic_note_len",

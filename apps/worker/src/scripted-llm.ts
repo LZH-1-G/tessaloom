@@ -129,6 +129,7 @@ function claimsFor(
   seeds: El[],
   pool: PoolIn[],
   index: number,
+  locality?: El | null,
 ): HypothesisDraft["claims"] {
   const entitySeeds = seeds.filter((s) => s.domain !== "tag");
   const tagSeeds = seeds.filter((s) => s.domain === "tag");
@@ -208,6 +209,29 @@ function claimsFor(
         },
       });
   }
+  // Timeliness for screen media (trend series exist for film and TV; V1 finding 11).
+  if (
+    claims.length < 3 &&
+    index % 2 === 1 &&
+    (anchor.domain === "movie" || anchor.domain === "tv_show")
+  )
+    claims.push({
+      tempId: "c4",
+      statement: clip(`Interest in ${anchor.name} is rising right now.`, 200),
+      testKind: "MOMENTUM",
+      params: { signalEntityIds: [anchor.entityId] },
+    });
+  // Venue fit when the locality is resolved (LOCATION_FIT stays descriptive until calibrated).
+  if (claims.length < 3 && locality && anchor.domain !== "tag")
+    claims.push({
+      tempId: "c5",
+      statement: clip(
+        `Audiences of ${anchor.name} concentrate around ${locality.name}.`,
+        200,
+      ),
+      testKind: "LOCATION_FIT",
+      params: { signalEntityIds: [anchor.entityId] },
+    });
   return claims.slice(0, 3);
 }
 
@@ -228,7 +252,14 @@ function generate(input: Record<string, unknown>): ScriptedStep {
     const seedIds = new Set(seeds.map((s) => s.entityId));
     const anchor = seedIds.has(y.entityId) && !seedIds.has(x.entityId) ? y : x;
     const accent = anchor === x ? y : x;
-    const claims = claimsFor(anchor, accent, seeds, pool, index);
+    const claims = claimsFor(
+      anchor,
+      accent,
+      seeds,
+      pool,
+      index,
+      (input.venueLocality as El | undefined) ?? null,
+    );
     if (claims.length === 0) return;
     hypotheses.push({
       tempId: `h${index + 1}`,
@@ -395,6 +426,41 @@ function revise(input: Record<string, unknown>): ScriptedStep {
   };
 }
 
+/** R5: a placeholder-only narrative over the deterministic metrics (WI-A4). */
+function compareNarrative(input: Record<string, unknown>): ScriptedStep {
+  const rescoreOnly = input.rescoreOnly === true;
+  const hyps =
+    (input.hypotheses as {
+      title: string;
+      from: string | null;
+      to: string | null;
+    }[]) ?? [];
+  const claims = (input.claims as { evidenceIds: string[] }[]) ?? [];
+  const lead = hyps[0];
+  const parts = [
+    rescoreOnly
+      ? "Rescored with existing evidence, so no new Qloo data was retrieved."
+      : "The branch re-ran {{metric:dirtyQueries}} Qloo queries and reused {{metric:reusedQueries}}.",
+    "{{metric:changedStances}} of {{metric:claimsTotal}} claims changed stance; {{metric:changedStatuses}} of {{metric:hypothesesTotal}} hypotheses changed status.",
+    ...(lead
+      ? [
+          lead.from === lead.to
+            ? `"${lead.title.replace(/\d/g, "")}" stayed ${(lead.to ?? "untested").replace(/_/g, " ").toLowerCase()}, with its composite moving {{metric:h0.compositeDelta}}.`
+            : `"${lead.title.replace(/\d/g, "")}" moved from ${(lead.from ?? "untested").replace(/_/g, " ").toLowerCase()} to ${(lead.to ?? "untested").replace(/_/g, " ").toLowerCase()} (composite {{metric:h0.compositeDelta}}).`,
+        ]
+      : []),
+    "These are aggregate audience signals, not a verdict on creative fit.",
+  ];
+  return {
+    output: {
+      text: clip(parts.join(" "), 900),
+      citedEvidenceIds: claims.flatMap((c) => c.evidenceIds).slice(0, 6),
+      decisionSummary:
+        "Explained the largest changes between parent and branch.",
+    },
+  };
+}
+
 const RESPONDERS: Record<
   string,
   (input: Record<string, unknown>) => ScriptedStep
@@ -403,6 +469,7 @@ const RESPONDERS: Record<
   "r3.generate": generate,
   "r4.critique": critique,
   "r3.revise": revise,
+  "r5.compare": compareNarrative,
 };
 
 /** A scripted provider that answers every prompt deterministically (and never runs out). */

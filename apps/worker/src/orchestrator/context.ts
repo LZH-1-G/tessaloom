@@ -14,7 +14,13 @@ import {
   type HypothesisView,
   type StepContext,
 } from "@tessaloom/agent";
-import type { loadRunSnapshot } from "@tessaloom/db";
+import {
+  branchRecord,
+  compareSide,
+  listRunsForExperiment,
+  type Executor,
+  type loadRunSnapshot,
+} from "@tessaloom/db";
 
 export type RunSnapshot = NonNullable<
   Awaited<ReturnType<typeof loadRunSnapshot>>
@@ -107,6 +113,8 @@ export function buildStepContext(
       projectId: snap.experiment.projectId,
       variables: definition.variables,
       scoringWeights: definition.scoringWeights,
+      parentExperimentId: snap.experiment.parentExperimentId,
+      variableDelta: definition.variableDelta,
     },
     brief: {
       versionId: snap.brief.id,
@@ -150,4 +158,34 @@ export function buildStepContext(
     today: now.toISOString().slice(0, 10),
     signal,
   };
+}
+
+/**
+ * COUNTERFACTUAL runs also need the branch's stored dependency plan, the parent's plan date
+ * (trend windows stay comparable), and — when comparing — both sides from the database.
+ */
+export async function enrichCounterfactualContext(
+  db: Executor,
+  ctx: StepContext,
+): Promise<void> {
+  const parentId = ctx.experiment.parentExperimentId;
+  if (ctx.run.kind !== "COUNTERFACTUAL" || !parentId) return;
+  const branch = await branchRecord(db, ctx.experiment.id);
+  ctx.branch = branch
+    ? {
+        plannedDirtyQueries: branch.plannedDirtyQueries,
+        plannedReusedQueries: branch.plannedReusedQueries,
+        mode: branch.mode,
+      }
+    : null;
+  const [parentRun] = await listRunsForExperiment(db, parentId);
+  if (parentRun)
+    ctx.today = (parentRun.startedAt ?? parentRun.createdAt)
+      .toISOString()
+      .slice(0, 10);
+  if (ctx.run.state === "COMPARING")
+    ctx.comparison = {
+      parent: await compareSide(db, parentId),
+      branch: await compareSide(db, ctx.experiment.id),
+    };
 }

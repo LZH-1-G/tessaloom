@@ -10,6 +10,8 @@ import { useId, useState } from "react";
 import { breakdownOf, stanceCounts } from "@/lib/hypothesis-view";
 import type { EntityView, HypothesisRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useProject } from "./project-context";
+import { AdjustWeightsDialog } from "./whatif/adjust-weights";
 import { DomainBadge, ProvenanceChip, StatusPill } from "./provenance";
 import { Button } from "./ui";
 
@@ -124,20 +126,49 @@ export function ScoreBreakdown({ h }: { h: HypothesisRow }) {
           )}
         </div>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled
-          aria-describedby={`${h.id}-weights-note`}
-        >
-          <SlidersHorizontal aria-hidden className="size-3.5" /> Adjust weights
-        </Button>
-        <span id={`${h.id}-weights-note`} className="text-muted-foreground">
-          Re-weighting creates a rescore-only branch; it arrives with branching
-          (M8).
-        </span>
-      </div>
+      <AdjustWeights hypothesisId={h.id} />
+    </div>
+  );
+}
+
+const BRANCHABLE = [
+  "COMPLETED",
+  "COMPLETED_WITH_LIMITS",
+  "AWAITING_HYPOTHESIS_SELECTION",
+];
+
+/** Re-weighting opens a rescore-only branch (M8); the original experiment never changes. */
+function AdjustWeights({ hypothesisId }: { hypothesisId: string }) {
+  const { projectId, view, run } = useProject();
+  const [open, setOpen] = useState(false);
+  const ready = !!view && !!run && BRANCHABLE.includes(run.state);
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={!ready}
+        aria-describedby={`${hypothesisId}-weights-note`}
+        onClick={() => setOpen(true)}
+      >
+        <SlidersHorizontal aria-hidden className="size-3.5" /> Adjust weights
+      </Button>
+      <span
+        id={`${hypothesisId}-weights-note`}
+        className="text-muted-foreground"
+      >
+        {ready
+          ? "Creates a rescore-only branch in the What-if lab (no new Qloo data)."
+          : "Available once the hypothesis loop has finished."}
+      </span>
+      {open && view ? (
+        <AdjustWeightsDialog
+          projectId={projectId}
+          experimentId={view.experiment.id}
+          current={view.experiment.definition.scoringWeights}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

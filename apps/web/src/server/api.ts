@@ -3,6 +3,12 @@ import {
   CreateBriefRequest,
   CreateProjectRequest,
   RunConfig,
+  VariableDelta,
+  buildEvidenceGraph,
+  compareExperiments,
+  metricValues,
+  renderNarrative,
+  templateNarrative,
   StartExperimentRequest,
   canonicalHash,
   isPaused,
@@ -18,7 +24,16 @@ import {
   createWorkspace,
   evidenceTrace,
   experimentView,
+  compareSide,
+  createCounterfactualBranch,
+  getComparison,
+  getGraphLayout,
+  getUsage,
+  listBranches,
+  previewCounterfactual,
+  saveComparison,
   invocationTrace,
+  saveGraphLayout,
   getBriefVersion,
   getProject,
   listProjects,
@@ -464,6 +479,225 @@ export const getExperiment = handle(
     );
     assertNoFixtures(s, view);
     return json({ ...view, runs: view.runs.map(runView) });
+  },
+);
+
+// GET /api/v1/experiments/:experimentId/graph?include=threads,retired
+export const getExperimentGraph = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const id = Uuid.parse(params.experimentId);
+    const view = await experimentView(s.handle.db, workspace.id, id);
+    assertNoFixtures(s, view);
+    const include = new Set(
+      (new URL(req.url).searchParams.get("include") ?? "").split(","),
+    );
+    const graph = buildEvidenceGraph(view, {
+      includeThreads: include.has("threads"),
+      includeRetired: include.has("retired"),
+    });
+    return json({ ...graph, layout: await getGraphLayout(s.handle.db, id) });
+  },
+);
+
+const GraphLayoutRequest = z.object({
+  positions: z
+    .array(
+      z.object({
+        nodeId: z.uuid(),
+        x: z.number().finite().min(-1e5).max(1e5),
+        y: z.number().finite().min(-1e5).max(1e5),
+      }),
+    )
+    .max(2000),
+});
+
+// PUT /api/v1/experiments/:experimentId/graph-layout
+export const putGraphLayout = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    checkCsrf(req);
+    const workspace = await requireWorkspace(s, req);
+    s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+    const id = Uuid.parse(params.experimentId);
+    // Ownership check: throws 404 for another workspace's experiment.
+    await experimentView(s.handle.db, workspace.id, id);
+    const { positions } = await readJson(req, GraphLayoutRequest);
+    await saveGraphLayout(
+      s.handle.db,
+      id,
+      Object.fromEntries(positions.map((p) => [p.nodeId, { x: p.x, y: p.y }])),
+    );
+    return new Response(null, { status: 204 });
+  },
+);
+
+// --- M8 What-if (API_CONTRACTS §4.5) ---
+
+const BranchRequest = z.object({
+  delta: VariableDelta,
+  mode: z.enum(["hold_hypotheses", "regenerate"]).default("hold_hypotheses"),
+  label: z.string().trim().min(1).max(80).optional(),
+});
+
+// POST /api/v1/experiments/:experimentId/branches/preview — dependency analysis, no side effects
+export const previewBranch = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    checkCsrf(req);
+    const workspace = await requireWorkspace(s, req);
+    s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+    const { delta } = await readJson(req, BranchRequest);
+    const { src, plan } = await previewCounterfactual(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.experimentId),
+      delta,
+    );
+    assertNoFixtures(s, src.view);
+    const count = (d: string) =>
+      plan.claims.filter((c) => c.decision === d).length;
+    return json({
+      dirtyQueries: plan.dirtyQueries,
+      reusedQueries: plan.reusedQueries,
+      estimatedQlooCalls: plan.estimatedQlooCalls,
+      rescoreOnly: plan.rescoreOnly,
+      needsConfirmation: plan.needsConfirmation,
+      dirtyList: plan.dirtyList,
+      claims: {
+        reuse: count("REUSE"),
+        inherit: count("INHERIT"),
+        dirty: count("DIRTY"),
+        unsupported: count("UNSUPPORTED"),
+      },
+      unsupported: plan.unsupported,
+      mode: src.view.experiment.mode,
+      qlooCallsToday: await getUsage(s.handle.db, {
+        scope: "global",
+        scopeId: "qloo",
+        metric: "qloo_calls",
+      }),
+    });
+  },
+);
+
+// POST /api/v1/experiments/:experimentId/branches
+export const postBranch = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    checkCsrf(req);
+    const workspace = await requireWorkspace(s, req);
+    s.limiter.check(`start:ws:${workspace.id}`, 6);
+    s.limiter.check(`start:ip:${clientIpHash(req, s.pepper)}`, 20);
+    const body = await readJson(req, BranchRequest);
+    const experimentId = Uuid.parse(params.experimentId);
+    const { config } = await liveWorker(s);
+    const { src, plan } = await previewCounterfactual(
+      s.handle.db,
+      workspace.id,
+      experimentId,
+      body.delta,
+    );
+    if (src.view.experiment.mode === "live" && plan.dirtyQueries > 0) {
+      const used = await consumeWithinLimit(s.handle.db, {
+        scope: "workspace",
+        scopeId: workspace.id,
+        metric: "live_runs",
+        limit: s.dailyRunsPerWorkspace,
+      });
+      if (used === null)
+        throw new HttpError(
+          "QUOTA_GUARD_ACTIVE",
+          "This workspace has used today's live experiments. Rescore-only branches remain available.",
+        );
+    }
+    const result = await createCounterfactualBranch(s.handle, await s.boss(), {
+      workspaceId: workspace.id,
+      experimentId,
+      delta: body.delta,
+      mode: body.mode,
+      label: body.label ?? null,
+      runConfig: config,
+    });
+    return json(result, 202);
+  },
+);
+
+// GET /api/v1/experiments/:experimentId/branches — the whole tree (root and branches)
+export const getBranches = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const items = await listBranches(
+      s.handle.db,
+      workspace.id,
+      Uuid.parse(params.experimentId),
+    );
+    return json({
+      items: items.map((i) => ({
+        ...i,
+        latestRun: i.latestRun ? runView(i.latestRun) : null,
+      })),
+    });
+  },
+);
+
+const ComparisonRequest = z.object({
+  baseExperimentId: z.uuid(),
+  otherExperimentId: z.uuid(),
+});
+
+// POST /api/v1/comparisons — metrics computed synchronously (deterministic template narrative)
+export const postComparison = handle(async (s: Services, req: Request) => {
+  checkCsrf(req);
+  const workspace = await requireWorkspace(s, req);
+  s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+  const body = await readJson(req, ComparisonRequest);
+  if (body.baseExperimentId === body.otherExperimentId)
+    throw new HttpError(
+      "VALIDATION_FAILED",
+      "Choose two different experiments.",
+    );
+  // Ownership: both must be in this workspace and the same project.
+  const [a, b] = await Promise.all([
+    experimentView(s.handle.db, workspace.id, body.baseExperimentId),
+    experimentView(s.handle.db, workspace.id, body.otherExperimentId),
+  ]);
+  if (a.experiment.projectId !== b.experiment.projectId)
+    throw new HttpError(
+      "VALIDATION_FAILED",
+      "Compare experiments of one project.",
+    );
+  assertNoFixtures(s, [a, b]);
+  const metrics = compareExperiments(
+    await compareSide(s.handle.db, a.experiment.id),
+    await compareSide(s.handle.db, b.experiment.id),
+  );
+  const text = templateNarrative(metrics);
+  const row = await saveComparison(s.handle.db, {
+    projectId: a.experiment.projectId,
+    baseExperimentId: a.experiment.id,
+    otherExperimentId: b.experiment.id,
+    kind: "AD_HOC",
+    metrics,
+    narrative: {
+      text,
+      rendered: renderNarrative(text, metricValues(metrics)),
+      citedEvidenceIds: [],
+      provenance: "APP_DERIVED",
+      source: "template",
+    },
+  });
+  return json(row, 201);
+});
+
+// GET /api/v1/comparisons/:comparisonId
+export const getComparisonView = handle(
+  async (s: Services, req: Request, params: { comparisonId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    return json(
+      await getComparison(
+        s.handle.db,
+        workspace.id,
+        Uuid.parse(params.comparisonId),
+      ),
+    );
   },
 );
 

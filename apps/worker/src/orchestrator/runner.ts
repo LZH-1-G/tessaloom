@@ -27,7 +27,7 @@ import {
   type RunStepJob,
 } from "@tessaloom/db";
 import { applyCommit } from "./commit";
-import { buildStepContext } from "./context";
+import { buildStepContext, enrichCounterfactualContext } from "./context";
 
 export interface RunnerDeps {
   handle: DbHandle;
@@ -91,6 +91,7 @@ export async function runStep(
   if (!snap) return { outcome: "skipped" };
   const controller = new AbortController();
   const ctx = buildStepContext(snap, now(), controller.signal);
+  await enrichCounterfactualContext(db, ctx);
 
   let result: StepResult;
   if (run.cancelRequestedAt) {

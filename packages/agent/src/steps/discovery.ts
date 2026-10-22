@@ -95,6 +95,121 @@ function tagRecords(
   return result.items.length;
 }
 
+export interface ThreadEntry {
+  qlooId: string;
+  seeds: Set<string>;
+  best: number;
+  prov: QlooProvenanceLike;
+}
+
+/**
+ * Discovery threads (§16 step 1): one `recommend` per (seed, target domain), recorded as
+ * THREAD relations with ingest-verified affinity facts. Shared by discovery and by
+ * counterfactual branches that add a target domain (ADR-027).
+ */
+export async function runThreads(
+  ctx: StepContext,
+  ports: Ports,
+  acc: StepResult,
+  seeds: EntityView[],
+  calls: { seed: EntityView; target: string }[],
+  commit: {
+    entities: NonNullable<CommitPlan["entities"]>;
+    relations: NonNullable<CommitPlan["relations"]>;
+  },
+  budget: () => number,
+): Promise<{
+  ok: number;
+  items: Map<string, ThreadEntry>;
+  failed: StepResult | null;
+}> {
+  let ok = 0;
+  const items = new Map<string, ThreadEntry>();
+  for (const { seed, target } of calls) {
+    if (budget() <= 0) break;
+    const input =
+      seed.kind === "tag"
+        ? {
+            targetType: target as "book",
+            signalTags: [seed.qlooId],
+            limit: THREAD_K,
+          }
+        : {
+            targetType: target as "book",
+            signals: [seed.qlooId],
+            limit: THREAD_K,
+          };
+    const result = await qlooCall(
+      ctx,
+      acc,
+      "recommend",
+      () =>
+        ports.qloo.recommend(input, qctx(ctx, `discover:${seed.id}:${target}`)),
+      `${target} for "${truncate(seed.name, 40)}"`,
+    );
+    const failed = qlooFailure(result);
+    if (failed) return { ok, items, failed };
+    if (result.kind !== "OK" || !result.provenance.toolInvocationId) continue;
+    ok++;
+    const prov = result.provenance;
+    result.items.forEach((item, position) => {
+      if (item.qlooId === seed.qlooId) return;
+      // Another seed in this thread: link to it, never overwrite the resolved seed record.
+      const seedHit = seeds.find((s) => s.qlooId === item.qlooId);
+      if (!seedHit)
+        commit.entities.push({
+          kind: "entity",
+          qlooId: item.qlooId,
+          name: item.name,
+          qlooType: item.type ?? null,
+          domain: domainFromType(item.type) ?? target,
+          snapshot: {
+            popularity: item.popularity ?? null,
+            affinity: item.affinity ?? null,
+            missingFields: item.missingFields,
+          },
+          sourceToolInvocationId: prov.toolInvocationId,
+          provenanceClass: provenanceOf(prov),
+        });
+      const affinity = item.affinity;
+      commit.relations.push({
+        from: seed.id,
+        to: seedHit ? seedHit.id : { kind: "entity", qlooId: item.qlooId },
+        kind: "THREAD",
+        provenanceClass: provenanceOf(prov),
+        toolInvocationIds: [prov.toolInvocationId!],
+        facts:
+          typeof affinity === "number"
+            ? [
+                {
+                  statement: `Rank ${position + 1} of ${result.items.length} ${target} results for audiences of ${truncate(seed.name, 60)} (aggregate affinity)`,
+                  jsonPointer: `/results/${position}/affinity`,
+                  value: affinity,
+                  measure: "AUDIENCE_AFFINITY",
+                  verifiedAtIngest:
+                    rawAt(result.raw, position, item.qlooId, "affinity") ===
+                    affinity,
+                },
+              ]
+            : [],
+        weight: Number((1 - position / THREAD_K).toFixed(4)),
+      });
+      if (!seedHit) {
+        const entry = items.get(item.qlooId) ?? {
+          qlooId: item.qlooId,
+          seeds: new Set<string>(),
+          best: position,
+          prov,
+        };
+        entry.seeds.add(seed.id);
+        entry.best = Math.min(entry.best, position);
+        items.set(item.qlooId, entry);
+      }
+    });
+  }
+  return { ok, items, failed: null };
+}
+
 export async function discover(
   ctx: StepContext,
   ports: Ports,
@@ -171,99 +286,17 @@ export async function discover(
   const calls = seeds.flatMap((s) =>
     targets.filter((t) => t !== s.domain).map((t) => ({ seed: s, target: t })),
   );
-  let ok = 0;
-  const items = new Map<
-    string,
-    {
-      qlooId: string;
-      seeds: Set<string>;
-      best: number;
-      prov: QlooProvenanceLike;
-    }
-  >();
-  for (const { seed, target } of calls) {
-    if (budget() <= 0) break;
-    const input =
-      seed.kind === "tag"
-        ? {
-            targetType: target as "book",
-            signalTags: [seed.qlooId],
-            limit: THREAD_K,
-          }
-        : {
-            targetType: target as "book",
-            signals: [seed.qlooId],
-            limit: THREAD_K,
-          };
-    const result = await qlooCall(
-      ctx,
-      acc,
-      "recommend",
-      () =>
-        ports.qloo.recommend(input, qctx(ctx, `discover:${seed.id}:${target}`)),
-      `${target} for "${truncate(seed.name, 40)}"`,
-    );
-    const failed = qlooFailure(result);
-    if (failed) return fail(failed);
-    if (result.kind !== "OK" || !result.provenance.toolInvocationId) continue;
-    ok++;
-    const prov = result.provenance;
-    result.items.forEach((item, position) => {
-      if (item.qlooId === seed.qlooId) return;
-      // Another seed in this thread: link to it, never overwrite the resolved seed record.
-      const seedHit = seeds.find((s) => s.qlooId === item.qlooId);
-      if (!seedHit)
-        commit.entities.push({
-          kind: "entity",
-          qlooId: item.qlooId,
-          name: item.name,
-          qlooType: item.type ?? null,
-          domain: domainFromType(item.type) ?? target,
-          snapshot: {
-            popularity: item.popularity ?? null,
-            affinity: item.affinity ?? null,
-            missingFields: item.missingFields,
-          },
-          sourceToolInvocationId: prov.toolInvocationId,
-          provenanceClass: provenanceOf(prov),
-        });
-      const affinity = item.affinity;
-      commit.relations.push({
-        from: seed.id,
-        to: seedHit ? seedHit.id : { kind: "entity", qlooId: item.qlooId },
-        kind: "THREAD",
-        provenanceClass: provenanceOf(prov),
-        toolInvocationIds: [prov.toolInvocationId!],
-        facts:
-          typeof affinity === "number"
-            ? [
-                {
-                  statement: `Rank ${position + 1} of ${result.items.length} ${target} results for audiences of ${truncate(seed.name, 60)} (aggregate affinity)`,
-                  jsonPointer: `/results/${position}/affinity`,
-                  value: affinity,
-                  measure: "AUDIENCE_AFFINITY",
-                  verifiedAtIngest:
-                    rawAt(result.raw, position, item.qlooId, "affinity") ===
-                    affinity,
-                },
-              ]
-            : [],
-        weight: Number((1 - position / THREAD_K).toFixed(4)),
-      });
-      if (!seedHit) {
-        const entry = items.get(item.qlooId) ?? {
-          qlooId: item.qlooId,
-          seeds: new Set<string>(),
-          best: position,
-          prov,
-        };
-        entry.seeds.add(seed.id);
-        entry.best = Math.min(entry.best, position);
-        items.set(item.qlooId, entry);
-      }
-    });
-  }
-
+  const threads = await runThreads(
+    ctx,
+    ports,
+    acc,
+    seeds,
+    calls,
+    commit,
+    budget,
+  );
+  if (threads.failed) return fail(threads.failed);
+  const { ok, items } = threads;
   // 3. Tag enrichment (CI-5): per-entity entity_tags calls (V1: a multi-entity call merges
   // tags without attribution). Items that bridge several seeds come first, then by rank.
   const ranked = [...items.values()].sort(
@@ -373,4 +406,56 @@ export function buildPool(ctx: StepContext): StepResult {
     };
   acc.pendingConfirmation = { kind: "POOL", tension };
   return acc;
+}
+
+/**
+ * Counterfactual branches that add a target domain re-run discovery for it: one thread per
+ * (branch seed, added domain), recorded exactly like the root run's threads (ADR-027).
+ * Returns a failure result to commit, or null when done; relations are added to `acc`.
+ */
+export async function branchThreads(
+  ctx: StepContext,
+  ports: Ports,
+  acc: StepResult,
+): Promise<StepResult | null> {
+  const added = (ctx.experiment.variableDelta?.targetDomains?.add ?? []).filter(
+    (d) => INSIGHT.has(d),
+  );
+  if (!added.length) return null;
+  const calls = ctx.seeds.flatMap((seed) =>
+    added
+      .filter((target) => target !== seed.domain)
+      .map((target) => ({ seed, target })),
+  );
+  const commit = {
+    entities: acc.commit.entities ?? [],
+    relations: acc.commit.relations ?? [],
+  };
+  const threads = await runThreads(
+    ctx,
+    ports,
+    acc,
+    ctx.seeds,
+    calls,
+    commit,
+    () => remainingNow(ctx, acc).qlooCalls,
+  );
+  acc.commit.entities = commit.entities;
+  acc.commit.relations = commit.relations;
+  // Keep the claims graded so far: a failed thread query never discards evidence.
+  if (threads.failed)
+    return {
+      ...threads.failed,
+      commit: acc.commit,
+      events: acc.events,
+      usage: acc.usage,
+    };
+  acc.events.push({
+    type: "DECISION_SUMMARY",
+    role: "R2",
+    summary: truncate(
+      `Discovery into the added ${added.join(", ")} domain${added.length === 1 ? "" : "s"}: ${threads.ok} of ${calls.length} thread queries returned data`,
+    ),
+  });
+  return null;
 }

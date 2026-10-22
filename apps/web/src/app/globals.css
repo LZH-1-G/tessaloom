@@ -80,6 +80,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-warp: var(--tl-warp);
+  --color-warp-ink: var(--tl-warp-ink);
   --color-weft: var(--tl-weft);
   --color-saffron: var(--tl-saffron);
   --color-saffron-tint: var(--tl-saffron-tint);

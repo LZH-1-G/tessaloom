@@ -273,8 +273,13 @@ export class QlooAdapter {
 
     const maxAttempts = (this.options.maxRetries ?? 2) + 1;
     for (let attempt = 1; ; attempt++) {
-      // The quota is reserved before every live call, retries included.
-      if (quota && !(await quota.consume(ctx))) {
+      // The quota is reserved before every live call, retries included. Fixture transports
+      // generate no Qloo traffic, so they never draw on the shared live quota (ADR-027).
+      if (
+        quota &&
+        transport.name !== "FIXTURE" &&
+        !(await quota.consume(ctx))
+      ) {
         return this.errorOutcome("QUOTA_GUARD_ACTIVE", false, null);
       }
       let result: RawHarnessResult;

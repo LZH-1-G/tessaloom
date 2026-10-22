@@ -45,6 +45,9 @@ export function ProjectFrame({ children }: { children: React.ReactNode }) {
             hypotheses: hasHypotheses
               ? null
               : "Generate hypotheses from the collision pool first",
+            "what-if": hasHypotheses
+              ? null
+              : "Branch once the experiment has hypotheses",
           }}
         />
         <main id="main" className="min-w-0">

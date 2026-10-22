@@ -3,6 +3,7 @@ import {
   createResolution,
   insertCollisionCandidates,
   insertEvidence,
+  saveComparison,
   insertExperimentSeeds,
   insertHypothesis,
   insertRelations,
@@ -173,5 +174,15 @@ export async function applyCommit(
       ...e,
       experimentId: scope.experimentId,
       runId: scope.runId,
+    });
+
+  if (plan.comparison)
+    await saveComparison(tx, {
+      projectId: scope.projectId,
+      baseExperimentId: plan.comparison.baseExperimentId,
+      otherExperimentId: plan.comparison.otherExperimentId,
+      kind: "COUNTERFACTUAL",
+      metrics: plan.comparison.metrics,
+      narrative: plan.comparison.narrative,
     });
 }

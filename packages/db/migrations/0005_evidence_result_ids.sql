@@ -1,0 +1,2 @@
+ALTER TABLE "evidence_records" ADD COLUMN "result_ids" text[];--> statement-breakpoint
+ALTER TABLE "evidence_records" ADD CONSTRAINT "evidence_result_ids_len" CHECK ("evidence_records"."result_ids" IS NULL OR cardinality("evidence_records"."result_ids") <= 50);

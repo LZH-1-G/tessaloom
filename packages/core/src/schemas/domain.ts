@@ -194,6 +194,14 @@ export const CritiqueReport = z.object({
 });
 export type CritiqueReport = z.infer<typeof CritiqueReport>;
 
+/** R5 comparison narrative (AGENT_WORKFLOW §15.3): numbers only through placeholders. */
+export const ComparisonNarrative = z.object({
+  text: z.string().min(1).max(900),
+  citedEvidenceIds: z.array(Uuid).max(10),
+  decisionSummary: DecisionSummary,
+});
+export type ComparisonNarrative = z.infer<typeof ComparisonNarrative>;
+
 export const BlueprintSectionKind = z.enum([
   "audience",
   "programming",

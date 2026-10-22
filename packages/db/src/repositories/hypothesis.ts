@@ -141,6 +141,8 @@ export async function insertEvidence(
       | "ERROR";
     provenanceClass: "QLOO_SOURCED" | "APP_DERIVED" | "DEVELOPMENT_FIXTURE";
     rationale?: string | null;
+    /** Ordered top-K Qloo ids of the graded result (identifiers only). */
+    resultIds?: string[] | null;
     criticNote?: string | null;
     criticDowngrade?: boolean;
   },
@@ -163,6 +165,7 @@ export async function insertEvidence(
       quality: input.quality,
       provenanceClass: input.provenanceClass,
       rationale: input.rationale ?? null,
+      resultIds: input.resultIds?.slice(0, 50) ?? null,
       criticNote: input.criticNote ?? null,
       criticDowngrade: input.criticDowngrade ?? false,
     })

@@ -95,16 +95,11 @@ export function TopBar({
   );
 }
 
-const STEPS = [
+const STEPS: { href: string; label: string; n: number; disabled?: string }[] = [
   { href: "brief", label: "Brief", n: 1 },
   { href: "discovery", label: "Discover", n: 2 },
   { href: "hypotheses", label: "Hypotheses", n: 3 },
-  {
-    href: "what-if",
-    label: "What-if",
-    n: 4,
-    disabled: "Arrives with the What-if Lab (M8)",
-  },
+  { href: "what-if", label: "What-if", n: 4 },
   {
     href: "blueprint",
     label: "Blueprint",

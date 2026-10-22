@@ -217,6 +217,17 @@ export async function insertComparison(
   return row ?? null;
 }
 
+export async function getGraphLayout(db: Executor, experimentId: string) {
+  const [row] = await db
+    .select()
+    .from(graphLayouts)
+    .where(eq(graphLayouts.experimentId, experimentId));
+  return (row?.positions ?? null) as Record<
+    string,
+    { x: number; y: number }
+  > | null;
+}
+
 export async function saveGraphLayout(
   db: Executor,
   experimentId: string,

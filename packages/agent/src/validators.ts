@@ -307,6 +307,51 @@ export function numericFidelityIssues(
   return issues;
 }
 
+/** Phrases that claim fresh data; forbidden when the branch was rescored only (§15.2). */
+const NEW_DATA =
+  /\b(new|fresh|additional|re-?queried|newly retrieved)\b[^.]{0,40}\b(data|results?|quer(y|ies)|evidence|signals?)\b/i;
+
+/**
+ * R5 comparison narrative (WI-A4): numbers only through known `{{metric:ID}}` placeholders,
+ * citations only to evidence in the comparison, and no claim of new data when the branch was
+ * rescored with existing evidence.
+ */
+export function comparisonNarrativeValidator(ctx: {
+  metricIds: ReadonlySet<string>;
+  evidenceIds: ReadonlySet<string>;
+  rescoreOnly: boolean;
+}): Validator<{ text: string; citedEvidenceIds: string[] }> {
+  return (n) => {
+    const issues = numericFidelityIssues(n.text, new Set(), "text");
+    for (const m of n.text.matchAll(/\{\{metric:([A-Za-z0-9_.-]+)\}\}/g))
+      if (!ctx.metricIds.has(m[1]!))
+        issues.push({
+          code: "UNKNOWN_METRIC",
+          path: "text",
+          message: `Unknown metric placeholder ${m[1]}`,
+        });
+    n.citedEvidenceIds.forEach((id, i) => {
+      if (!ctx.evidenceIds.has(id))
+        issues.push({
+          code: "UNKNOWN_EVIDENCE",
+          path: `citedEvidenceIds.${i}`,
+          message: `Evidence ${id} is not part of this comparison`,
+        });
+    });
+    if (
+      ctx.rescoreOnly &&
+      NEW_DATA.test(n.text.replace(/\bno new Qloo data\b/gi, ""))
+    )
+      issues.push({
+        code: "IMPLIES_NEW_DATA",
+        path: "text",
+        message:
+          "The branch was rescored with existing evidence; the narrative must not imply new data",
+      });
+    return issues;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Provenance labels (blueprint display text)
 
