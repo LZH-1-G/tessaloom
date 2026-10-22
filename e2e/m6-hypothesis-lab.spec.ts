@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
 import {
   createProject,
   expectAccessible,
   expectFixtureBanner,
   fillBrief,
   snap,
+  expect,
+  test,
 } from "./helpers";
 
 // Typed multi-word titles resolve exactly on the synthetic transport, so this run goes

@@ -1,5 +1,10 @@
-import { expect, test } from "@playwright/test";
-import { expectAccessible, expectFixtureBanner, snap } from "./helpers";
+import {
+  expectAccessible,
+  expectFixtureBanner,
+  snap,
+  expect,
+  test,
+} from "./helpers";
 
 test("liveness, readiness with the worker heartbeat, and the studio dashboard", async ({
   request,
