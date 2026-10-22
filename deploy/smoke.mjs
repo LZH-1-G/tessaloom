@@ -46,6 +46,7 @@ const composeArgs = [
 const compose = (...args) => docker(...composeArgs, ...args);
 const log = (event, details = {}) =>
   console.log(JSON.stringify({ event, ...details }));
+let phase = "deployment_checks";
 async function until(check, timeout = 90_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -415,15 +416,33 @@ if(!found) process.exit(2);
     );
     log("proxy_error_log_redaction_passed");
     // docker kill/stop is an operator stop and suppresses restart policy. Signal PID 1
-    // from inside the container to exercise an actual process exit instead.
-    docker("exec", appId, "node", "-e", "process.kill(1, 'SIGTERM')");
+    // from inside the container to exercise an actual process exit instead. Detach:
+    // PID 1 exiting also kills exec processes, so an attached sender can return 137.
+    phase = "container_restart_signal";
+    const restartCount = () =>
+      Number(docker("inspect", appId, "--format", "{{.RestartCount}}"));
+    const restartsBefore = restartCount();
+    log("container_restart_started", { restartsBefore });
+    docker(
+      "exec",
+      "--detach",
+      appId,
+      "node",
+      "-e",
+      // Keep the sender alive to exercise Docker terminating it on container exit.
+      "process.kill(1, 'SIGTERM'); setInterval(() => {}, 1000)",
+    );
+    phase = "container_restart_observed";
+    // Readiness alone can still come from the old process during graceful shutdown.
+    await until(() => restartCount() > restartsBefore);
+    phase = "container_restart_https_ready";
     await until(
       async () => (await request("/api/health/ready")).status === 200,
     );
     assert.equal(sql("SELECT name FROM projects"), "Deployment smoke");
-    assert(
-      Number(docker("inspect", appId, "--format", "{{.RestartCount}}")) >= 1,
-    );
+    assert(restartCount() > restartsBefore);
+    log("container_restart_recovered", { restartsAfter: restartCount() });
+    phase = "resource_snapshot";
     const stats = docker(
       "stats",
       "--no-stream",
@@ -477,9 +496,11 @@ if(!found) process.exit(2);
   console.error(
     JSON.stringify({
       event: "deployment_smoke_failed",
+      phase,
+      exitStatus: Number.isInteger(error.status) ? error.status : null,
       reason:
         error instanceof assert.AssertionError
-          ? error.message
+          ? scrub(error.message)
           : "Local command failed; see redacted diagnostics",
     }),
   );

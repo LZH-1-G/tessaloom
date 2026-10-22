@@ -2,6 +2,52 @@
 
 Date: 2026-10-22. Repository: `/Users/lzh/Documents/GitHub/tessaloom`. Branch: `codex/m10b-deployment`. Baseline: `96d48c1` (PR #12 merge). This is local preparation, not a public deployment. No hosting purchase/provisioning, live Qloo/paid LLM calls, push or merge commit occurred. The owner explicitly authorized the initial fetch and fast-forward from the stale M9 branch.
 
+## PR #13 Docker push failure: local fix
+
+Inspected on 2026-10-22, starting from a clean working tree at `b7b057fe2c35ff965a2d951ee4e675788cd8b33a`. This follow-up changes only the deployment smoke and its documentation. No application, image, Compose, TLS, supervisor, access-control, dependency or CI workflow configuration changed.
+
+### CI comparison
+
+| Evidence | Failing push | Successful pull request |
+|---|---|---|
+| Docker job | [119863859403](https://github.com/LZH-1-G/tessaloom/actions/runs/39790184842/job/119863859403) | [119864258695](https://github.com/LZH-1-G/tessaloom/actions/runs/39790298051/job/119864258695) |
+| Checkout SHA | `b7b057fe2c35ff965a2d951ee4e675788cd8b33a` | Synthetic merge `004525c70f73672c3a5b27b3d6e70f6f685c673f` |
+| Git tree | `8539fecc16d2069012180592ec5e2b2361ecc976` | Identical tree, confirmed through GitHub commit metadata |
+| Runner | Ubuntu 24.04, image `20261018.339.1` | Ubuntu 24.04, image `20261012.334.1` |
+| Host Node / application platform | v22.23.3 / linux/amd64 | v22.23.3 / linux/amd64 |
+| Invocation | `node deploy/smoke.mjs`, `M10B_IMAGE=tessaloom:m0` | Identical |
+| Docker build / existing container smoke | Both PASS | Both PASS |
+| Deployment step (UTC) | 13:50:49–13:51:43, FAIL | 13:51:53–13:52:56, PASS |
+| Last shared successful marker | `proxy_error_log_redaction_passed` at 13:51:42.596 | Same marker at 13:52:50.870 |
+| Outcome after that marker | Command failure at 13:51:42.994, under 0.4 seconds later | Recovery and final success at 13:52:55.397 |
+
+Both runs exercised the same full smoke, isolated networks, pinned database/proxy images, verified TLS and zero provider allowances. No push-specific workflow branch exists. Runner image versions differ; the logs do not record exact Docker/Compose versions, so a specific daemon-version regression is not established. The successful runner's published inventory lists Docker 28.0.4 and Compose 2.38.2; the failing runner's linked inventory was unavailable during inspection.
+
+### Root cause and correction
+
+The failing phase is the final process-exit/restart check, immediately after proxy-error redaction verification: the original attached `docker exec ... process.kill(1, 'SIGTERM')` races container shutdown. When PID 1 exits before the signal-sending Node process exits, Docker terminates that exec process as well. The synchronous wrapper treats its nonzero status as a test failure even though the requested shutdown occurred. The original CI failure summary omitted the exit status; attributing it to this race is supported by its location/timing and a local deterministic reproduction with the same empty-stderr command-failure symptom, not a recorded remote exit code.
+
+A disposable `--network none` container reproduced attached sender exit **137** with empty stderr when the sender remained alive after signaling PID 1. Detached signaling on the same container succeeded and automatic restart count advanced again. This separates the Docker exec lifecycle problem from DNS, TLS, provider access, Compose startup and database health, all of which had already passed in the failing run.
+
+The fix uses detached exec for this signal only. The sender deliberately stays alive until Docker terminates it, making the smoke exercise the formerly racy lifecycle on every run. Before signaling, the smoke records the restart count; it then waits for a strictly greater count before accepting verified HTTPS readiness and checking persisted project data. This also closes a second race where the old process could still answer readiness during graceful shutdown. Existing bounded waits remain unchanged; failed signaling, missing restart, failed TLS/readiness and missing data still fail the smoke. There is no catch-and-ignore of exit 137, test skip or security relaxation.
+
+Failure diagnostics now include a fixed phase name and numeric command exit status, and assertion messages pass through the existing redactor. New start/recovery markers report only restart counts. No command arguments, credentials or container environments are added to diagnostics.
+
+### Verification of the fix
+
+| Check | Actual result |
+|---|---|
+| Isolated Docker lifecycle reproduction | PASS: attached sender returned 137 with empty stderr; detached sender succeeded; automatic restart count reached 2. Disposable container removed. |
+| Full `REQUIRE_ARM64=1 M10B_IMAGE=tessaloom:m10b node deploy/smoke.mjs` | PASS, exit **0**; `container_restart_started` count **0**, `container_restart_recovered` count **1**, final `deployment_smoke_passed`. |
+| Deployment security regression within that full smoke | PASS: production off/invite denial with zero runs/reservations; open mode rejected; both child UIDs denied mounted secrets; actual web/worker credential boundaries; HTTPS/DB TLS and plaintext rejection; Secure cookies/CSP/HSTS; forged-XFF throttling across workspaces; request size limit; proxy-log redaction; samples; runtime DDL denial. |
+| Recovery regression within that full smoke | PASS: migration rerun, backup/restore, database recreation and persistent project, database outage readiness/liveness, proxy recovery, actual app restart and HTTPS recovery. |
+| Focused unit tests | PASS: **7 tests / 2 files**, `tests/unit/redaction.test.mjs` and `tests/unit/deployment.test.mjs`. |
+| Changed-script ESLint / Prettier / whitespace | PASS. |
+| Deployment source secret scan | PASS: gitleaks v8.30.0, no leaks. |
+| Cleanup | PASS: no disposable deployment or reproduction containers remain. |
+
+Local runtime: Docker Engine **29.8.1**, Compose **5.5.1**, host Node **26.11.1**. Reused the unchanged ARM64 application image `sha256:947781a053c8e7fa83acaafe202bcc34b6ceb1aa471961c10348fa34179c02ea`; its Node runtime is **22.23.4**. The smoke runs from the checkout, so an image rebuild is unnecessary for this script-only change. This confirms the fix locally on ARM64; the new checkpoint has **not** been pushed or tested by remote AMD64 CI. The prior PR run confirms AMD64 compatibility of the unchanged application baseline, not remote verification of this fix. Unrelated successful suites were not repeated. Cloud prerequisites remain unchanged.
+
 ## Resumed security verification
 
 The interrupted working tree contained six modified tracked files, the deployment directory, deployment documentation and a new unit-test file. All were preserved. Docker Desktop was stopped and was restarted locally; the earlier ARM64 image remained available. Previous `/private/tmp` test logs were no longer present, so earlier successful results below are retained from this task's captured execution results rather than falsely described as newly rerun.
