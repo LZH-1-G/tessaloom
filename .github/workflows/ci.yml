@@ -141,3 +141,6 @@ jobs:
           node-version-file: .nvmrc
       - run: docker build -t tessaloom:m0 .
       - run: node scripts/container-smoke.mjs
+      - run: node deploy/smoke.mjs
+        env:
+          M10B_IMAGE: tessaloom:m0
