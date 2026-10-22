@@ -55,6 +55,26 @@ export function worstCaseCostUsd(
   );
 }
 
+/**
+ * Conservative reservation: every prompt byte, plus protocol/schema overhead, at the
+ * highest input/cache rate, plus the full output cap (including thinking). This is a local
+ * bound, not a provider billing guarantee; a billing overrun latches paid work off.
+ */
+export function upperBoundCostUsd(
+  model: string,
+  promptBytes: number,
+  maxOutputTokens: number,
+): number {
+  const price = PRICES[model];
+  if (!price) return 0;
+  return (
+    ((promptBytes + 4096) *
+      Math.max(price.input, price.cacheWrite, price.cacheRead) +
+      maxOutputTokens * price.output) /
+    1_000_000
+  );
+}
+
 export const emptyUsage = (): ProviderUsage => ({
   inputTokens: 0,
   cachedInputTokens: 0,

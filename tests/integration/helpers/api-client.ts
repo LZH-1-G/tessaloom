@@ -34,6 +34,12 @@ export async function makeServices(
     heartbeatMaxAgeMs: 30_000,
     sse: { pollMs: 10, pingMs: 30, maxDurationMs: 5_000 },
     dailyRunsPerWorkspace: 50,
+    admission: {
+      access: "open",
+      maxActivePerWorkspace: 50,
+      maxWorkingGlobal: 200,
+      dailyRunsPerWorkspace: 500,
+    },
   };
 }
 

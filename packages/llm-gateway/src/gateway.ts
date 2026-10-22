@@ -6,6 +6,7 @@ import {
   emptyUsage,
   estimateCostUsd,
   hasPrice,
+  upperBoundCostUsd,
   worstCaseCostUsd,
 } from "./cost";
 import {
@@ -23,6 +24,7 @@ import {
   type LlmInvocationRecorder,
   type LlmProvider,
   type ProviderResponse,
+  type SpendGuard,
   type ValidationIssue,
 } from "./types";
 
@@ -41,6 +43,8 @@ export interface LlmGatewayOptions {
   maxOutputTokensCeiling?: number;
   /** Allow models without a price entry (scripted provider only). */
   allowUnpricedModels?: boolean;
+  /** M10-A: reserve and settle every provider attempt in the spend ledger (fail-closed). */
+  spendGuard?: SpendGuard;
   now?: () => number;
 }
 
@@ -65,6 +69,7 @@ export class LlmGateway {
   private readonly maxRepairs: number;
   private readonly ceiling: number;
   private readonly allowUnpriced: boolean;
+  private readonly spendGuard?: SpendGuard;
   private readonly now: () => number;
 
   constructor(options: LlmGatewayOptions) {
@@ -76,7 +81,10 @@ export class LlmGateway {
     this.recorder = options.recorder;
     this.maxRepairs = options.maxRepairs ?? 1;
     this.ceiling = options.maxOutputTokensCeiling ?? 32_000;
-    this.allowUnpriced = options.allowUnpricedModels ?? false;
+    this.allowUnpriced =
+      options.provider.name === "scripted" &&
+      (options.allowUnpricedModels ?? false);
+    this.spendGuard = options.spendGuard;
     this.now = options.now ?? (() => performance.now());
   }
 
@@ -154,6 +162,28 @@ export class LlmGateway {
 
     for (;;) {
       if (req.ctx.signal?.aborted) return fail("CANCELLED");
+      if (this.provider.name !== "scripted" && !this.spendGuard)
+        return fail("CONFIGURATION", [
+          {
+            code: "SPEND_GUARD_REQUIRED",
+            message: "Paid calls require spending reservations",
+          },
+        ]);
+      if (!this.allowUnpriced && !hasPrice(attempt.model))
+        return fail("CONFIGURATION", [
+          {
+            code: "UNPRICED_MODEL",
+            message: "The serving model must have a verified price",
+          },
+        ]);
+      if (
+        !Number.isSafeInteger(maxTokens) ||
+        maxTokens <= 0 ||
+        maxTokens > this.ceiling
+      )
+        return fail("CONFIGURATION", [
+          { code: "OUTPUT_LIMIT", message: "Invalid output token limit" },
+        ]);
       const budgetIssue = this.checkBudget(
         req,
         meta,
@@ -163,6 +193,33 @@ export class LlmGateway {
         messages,
       );
       if (budgetIssue) return fail("BUDGET", [budgetIssue]);
+
+      // Reserve before the provider sees anything; a refusal or a ledger error stops the call.
+      let reservationId: string | null = null;
+      if (this.spendGuard) {
+        const bytes = new TextEncoder().encode(
+          prompt.system +
+            messages.map((m) => m.content).join("") +
+            JSON.stringify(jsonSchema),
+        ).length;
+        const reserved = await this.spendGuard.reserve({
+          ctx: req.ctx,
+          model: attempt.model,
+          upperBoundUsd: upperBoundCostUsd(attempt.model, bytes, maxTokens),
+          maxOutputTokens: maxTokens,
+        });
+        if (!reserved.ok)
+          return fail("BUDGET", [
+            { code: reserved.code, message: reserved.message },
+          ]);
+        reservationId = reserved.reservationId;
+      }
+      const settle = async (actualUsd: number | null) => {
+        if (!reservationId || !this.spendGuard) return;
+        // A failed settlement leaves the upper bound charged, which errs on the safe side.
+        await this.spendGuard.settle(reservationId, actualUsd).catch(() => {});
+        reservationId = null;
+      };
 
       meta.attempts += 1;
       const started = this.now();
@@ -179,6 +236,7 @@ export class LlmGateway {
           signal: req.ctx.signal,
         });
       } catch (error) {
+        await settle(null); // the provider may have billed: keep the full reservation
         const pe =
           error instanceof ProviderError
             ? error
@@ -215,7 +273,34 @@ export class LlmGateway {
       const latencyMs = Math.round(this.now() - started);
 
       const servedBy = response.modelId || attempt.model;
+      if (
+        this.provider.name !== "scripted" &&
+        (!hasPrice(servedBy) || servedBy !== attempt.model)
+      ) {
+        await settle(null);
+        return fail("CONFIGURATION", [
+          {
+            code: "UNEXPECTED_MODEL",
+            message:
+              "Provider returned an unexpected model; reservation retained",
+          },
+        ]);
+      }
+      if (
+        Object.values(response.usage).some(
+          (n) => !Number.isSafeInteger(n) || n < 0,
+        )
+      ) {
+        await settle(null);
+        return fail("CONFIGURATION", [
+          {
+            code: "INVALID_USAGE",
+            message: "Provider usage is invalid; reservation retained",
+          },
+        ]);
+      }
       const costUsd = estimateCostUsd(servedBy, response.usage);
+      await settle(costUsd);
       meta.usage = addUsage(meta.usage, response.usage);
       meta.costUsd += costUsd;
       meta.modelId = servedBy;

@@ -1,3 +1,4 @@
+import { admitRun, type RunAdmission } from "./cost";
 import { and, asc, desc, eq, gt, max, sql } from "drizzle-orm";
 import {
   ExperimentDefinition,
@@ -169,8 +170,11 @@ export async function createRun(
     budget: unknown;
     config: unknown;
     blueprintId?: string | null;
+    /** M10-A: admission policy for user-started runs (omitted by internal tooling/tests). */
+    admission?: RunAdmission;
   },
 ) {
+  if (input.admission) await admitRun(db, input.experimentId, input.admission);
   const [row] = await db
     .insert(agentRuns)
     .values({

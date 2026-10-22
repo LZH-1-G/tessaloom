@@ -57,7 +57,11 @@ export class AnthropicProvider implements LlmProvider {
   private readonly timeoutMs: number;
 
   constructor(options: AnthropicProviderOptions) {
-    this.serverSideFallback = options.serverSideFallback ?? true;
+    if (options.serverSideFallback || (options.maxRetries ?? 0) !== 0)
+      throw new Error(
+        "Retries and fallback must pass through the spending guard",
+      );
+    this.serverSideFallback = false;
     this.timeoutMs = options.timeoutMs ?? 120_000;
     if (options.client) {
       this.client = options.client;
@@ -66,7 +70,7 @@ export class AnthropicProvider implements LlmProvider {
         throw new Error("AnthropicProvider requires an API key");
       this.client = new Anthropic({
         apiKey: options.apiKey,
-        maxRetries: options.maxRetries ?? 2,
+        maxRetries: 0,
         timeout: this.timeoutMs,
       }) as unknown as AnthropicMessagesClient;
     }

@@ -1,11 +1,49 @@
-import { recordLlmInvocation, type Executor } from "@tessaloom/db";
+import {
+  recordLlmInvocation,
+  reserveLlmSpend,
+  settleLlmSpend,
+  type DbHandle,
+  type Executor,
+  type LlmSpendLimits,
+} from "@tessaloom/db";
 import {
   AnthropicProvider,
   LlmGateway,
   type LlmInvocationRecorder,
   type LlmProvider,
+  type SpendGuard,
 } from "@tessaloom/llm-gateway";
 import { createScriptedDemoProvider } from "./scripted-llm";
+
+/**
+ * M10-A spend ledger: every provider attempt reserves its upper-bound cost against the global,
+ * workspace, experiment, run, and grant caps before the call (fail-closed: a call without a
+ * run, or a ledger error, never reaches the provider).
+ */
+export function createSpendGuard(
+  handle: DbHandle,
+  limits: LlmSpendLimits,
+): SpendGuard {
+  return {
+    async reserve({ ctx, model, upperBoundUsd, maxOutputTokens }) {
+      if (!ctx.runId)
+        return {
+          ok: false,
+          code: "NO_RUN",
+          message: "LLM calls are only allowed inside a budgeted run",
+        };
+      return reserveLlmSpend(handle, {
+        runId: ctx.runId,
+        model,
+        upperBoundUsd,
+        maxOutputTokens,
+        limits,
+      });
+    },
+    settle: (reservationId, actualUsd) =>
+      settleLlmSpend(handle, reservationId, actualUsd),
+  };
+}
 
 /** Persists each provider call as one `llm_invocations` row (ADR-022: injected recorder). */
 export function createDbLlmRecorder(db: Executor): LlmInvocationRecorder {
@@ -69,6 +107,7 @@ export function createLlmGateway(
   settings: LlmSettings,
   recorder: LlmInvocationRecorder,
   provider?: LlmProvider,
+  spendGuard?: SpendGuard,
 ): LlmGateway | null {
   let resolved = provider;
   let models = {
@@ -91,5 +130,6 @@ export function createLlmGateway(
     mode: settings.LLM_MODE,
     recorder,
     allowUnpricedModels: resolved.name === "scripted",
+    spendGuard,
   });
 }

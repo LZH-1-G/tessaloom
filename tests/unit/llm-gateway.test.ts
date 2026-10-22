@@ -462,7 +462,7 @@ describe("AnthropicProvider (fake client, no network)", () => {
     maxOutputTokens: 4000,
   };
 
-  it("builds the verified request shape: cached system, adaptive thinking, effort, json_schema, server fallback", async () => {
+  it("builds the verified request shape: cached system, adaptive thinking, effort, json_schema, guarded client fallback", async () => {
     const { client, calls } = fakeClient({});
     const provider = new AnthropicProvider({ client });
     const response = await provider.generate(request);
@@ -481,8 +481,6 @@ describe("AnthropicProvider (fake client, no network)", () => {
         effort: "medium",
         format: { type: "json_schema", schema: request.jsonSchema },
       },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
     });
     expect(params).not.toHaveProperty("temperature");
     expect(params).not.toHaveProperty("tool_choice");
@@ -578,5 +576,148 @@ describe("cost model", () => {
     expect(estimateCostUsd(PRIMARY, usage)).toBeCloseTo(4 + 20 + 0.2, 10);
     expect(estimateCostUsd(FALLBACK, usage)).toBeCloseTo(2 + 10 + 0.1, 10);
     expect(estimateCostUsd("scripted-model", usage)).toBe(0);
+  });
+});
+
+describe("M10-A spending boundary", () => {
+  it("requires a guard for paid providers and forbids hidden SDK retries/fallback", async () => {
+    let calls = 0;
+    const gateway = new LlmGateway({
+      provider: {
+        name: "anthropic",
+        async generate() {
+          calls++;
+          throw new Error("must not call");
+        },
+      },
+      primaryModel: PRIMARY,
+    });
+    expect(await gateway.generate(baseRequest)).toMatchObject({
+      ok: false,
+      reason: "CONFIGURATION",
+      attempts: 0,
+    });
+    expect(calls).toBe(0);
+    expect(
+      () => new AnthropicProvider({ apiKey: "test-only", maxRetries: 1 }),
+    ).toThrow(/spending guard/);
+    expect(
+      () =>
+        new AnthropicProvider({
+          apiKey: "test-only",
+          serverSideFallback: true,
+        }),
+    ).toThrow(/spending guard/);
+  });
+
+  it("reserves every truncation, repair and fallback attempt before provider execution", async () => {
+    const order: string[] = [];
+    const scripted = new ScriptedLlmProvider();
+    scripted.on(
+      "r1.intent",
+      { text: "{", stopReason: "max_tokens" },
+      { text: "bad json" },
+      { error: new ProviderError("unavailable", "offline", true) },
+      { output: good },
+    );
+    const gateway = new LlmGateway({
+      primaryModel: PRIMARY,
+      fallbackModel: FALLBACK,
+      provider: {
+        name: "scripted",
+        async generate(req) {
+          order.push("call");
+          return scripted.generate(req);
+        },
+      },
+      spendGuard: {
+        async reserve() {
+          order.push("reserve");
+          return { ok: true, reservationId: String(order.length) };
+        },
+        async settle() {
+          order.push("settle");
+        },
+      },
+    });
+    expect((await gateway.generate(baseRequest)).ok).toBe(true);
+    expect(order).toEqual(
+      Array.from({ length: 4 }, () => ["reserve", "call", "settle"]).flat(),
+    );
+  });
+
+  it("does not call a provider after reservation failure or database error", async () => {
+    const { provider, gateway } = setup({
+      spendGuard: {
+        async reserve() {
+          return { ok: false, code: "GLOBAL_BUDGET", message: "exhausted" };
+        },
+        async settle() {},
+      },
+    });
+    expect(await gateway.generate(baseRequest)).toMatchObject({
+      ok: false,
+      reason: "BUDGET",
+      attempts: 0,
+    });
+    expect(provider.requests).toHaveLength(0);
+    const broken = setup({
+      spendGuard: {
+        async reserve() {
+          throw new Error("ledger unavailable");
+        },
+        async settle() {},
+      },
+    });
+    await expect(broken.gateway.generate(baseRequest)).rejects.toThrow(
+      /ledger unavailable/,
+    );
+    expect(broken.provider.requests).toHaveLength(0);
+  });
+
+  it("rejects an unpriced fallback and retains reservations for unknown serving models", async () => {
+    const { provider, gateway } = setup({ fallbackModel: "unpriced" });
+    provider.on("r1.intent", {
+      error: new ProviderError("unavailable", "offline", true),
+    });
+    expect(await gateway.generate(baseRequest)).toMatchObject({
+      ok: false,
+      reason: "CONFIGURATION",
+      attempts: 1,
+    });
+    expect(provider.requests).toHaveLength(1);
+    const settled: (number | null)[] = [];
+    const live = new LlmGateway({
+      primaryModel: PRIMARY,
+      provider: {
+        name: "anthropic",
+        async generate() {
+          return {
+            text: "{}",
+            modelId: "unexpected",
+            stopReason: "end_turn",
+            usage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              cacheWriteTokens: 0,
+              cachedInputTokens: 0,
+            },
+          };
+        },
+      },
+      spendGuard: {
+        async reserve() {
+          return { ok: true, reservationId: "r" };
+        },
+        async settle(_id, cost) {
+          settled.push(cost);
+        },
+      },
+    });
+    expect(await live.generate(baseRequest)).toMatchObject({
+      ok: false,
+      reason: "CONFIGURATION",
+    });
+    expect(settled).toEqual([null]);
   });
 });

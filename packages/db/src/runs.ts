@@ -1,4 +1,6 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import type { RunAdmission } from "./repositories/cost";
+import { admitRun } from "./repositories/cost";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   ConfirmationResponse,
   DEFAULT_BUDGETS,
@@ -123,6 +125,7 @@ export async function startExploration(
     scoringWeights?: { support: number; novelty: number; feasibility: number };
     mode: "live" | "fixture";
     runConfig: RunConfig;
+    admission?: RunAdmission;
   },
 ) {
   const { db } = handle;
@@ -180,6 +183,7 @@ export async function startExploration(
       kind: "EXPLORATION",
       budget: budgets,
       config,
+      admission: input.admission,
     });
     await appendRunEvents(tx, run.id, [
       {
@@ -315,15 +319,19 @@ export async function cancelRun(
 
 // --- Retry a transient failure (UI_UX_SPEC §6 "Retry step") ---
 
+export const MAX_MANUAL_RETRIES = 3;
+
 export async function retryRun(
   handle: DbHandle,
   boss: PgBoss,
   workspaceId: string,
   runId: string,
+  admission?: RunAdmission,
 ) {
   await getRunForWorkspace(handle.db, workspaceId, runId);
   return withPgTx(handle, async (tx, raw) => {
     const run = (await lockRun(tx, runId))!;
+    if (admission) await admitRun(tx, run.experimentId, admission, run.id);
     const error = (run.error ?? {}) as {
       transient?: boolean;
       failedState?: RunState;
@@ -334,6 +342,15 @@ export async function retryRun(
       !error.failedState
     )
       throw new StateConflictError("Only a transient failure can be retried");
+    // M10-A: a run cannot be retried forever (each retry may spend again; the spend ledger
+    // still bounds the run's total cost).
+    const retries = await tx.execute<{ n: string }>(sql`
+      SELECT count(*) AS n FROM run_events
+      WHERE run_id = ${runId} AND payload->>'retry' = 'true'`);
+    if (Number(retries.rows[0]?.n ?? 0) >= MAX_MANUAL_RETRIES)
+      throw new StateConflictError(
+        `This run was already retried ${MAX_MANUAL_RETRIES} times. Start a new run instead.`,
+      );
     return runView(
       await commitTransition(
         tx,
@@ -348,6 +365,7 @@ export async function retryRun(
               type: "DECISION_SUMMARY",
               state: "FAILED",
               summary: `Retrying ${error.failedState} after a transient failure`,
+              payload: { retry: true },
             },
           ],
           clearError: true,
@@ -365,6 +383,7 @@ export async function confirmRun(
   workspaceId: string,
   runId: string,
   body: unknown,
+  admission?: RunAdmission,
 ) {
   const response = ConfirmationResponse.parse(body);
   const { experiment } = await getRunForWorkspace(
@@ -374,6 +393,7 @@ export async function confirmRun(
   );
   return withPgTx(handle, async (tx, raw) => {
     const run = (await lockRun(tx, runId))!;
+    if (admission) await admitRun(tx, run.experimentId, admission, run.id);
     const pending = run.pendingConfirmation as { kind?: string } | null;
     if (!isPaused(run.state) || pending?.kind !== response.kind)
       throw new StateConflictError("The run is not awaiting this confirmation");

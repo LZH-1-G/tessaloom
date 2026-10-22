@@ -103,3 +103,88 @@ test("SECURITY §7: injected markup without the nonce cannot run (stored-XSS sim
   });
   expect(ran).toEqual({ inline: undefined, onerror: undefined });
 });
+
+test("M10-A cost safety UI: invite-only access notice, code redemption, and read-only samples", async ({
+  page,
+}) => {
+  watchCsp(page);
+  // The E2E server runs with RUN_ACCESS=open; the invite-mode API answers are simulated here
+  // (the server-side policy itself is covered by tests/integration/m10a-cost-safety.test.ts).
+  let redeemed = false;
+  await page.route("**/api/v1/workspace/access", async (route) => {
+    if (route.request().method() === "POST") {
+      const { code } = route.request().postDataJSON() as { code: string };
+      if (code !== "valid-demo-code-for-judges") {
+        await route.fulfill({
+          status: 400,
+          json: {
+            error: {
+              code: "VALIDATION_FAILED",
+              message: "This access code is not valid or no longer active.",
+              retryable: false,
+              requestId: "r",
+              details: {},
+            },
+          },
+        });
+        return;
+      }
+      redeemed = true;
+    }
+    await route.fulfill({
+      json: redeemed
+        ? {
+            access: "invite",
+            allowed: true,
+            grant: { label: "judge-1", expiresAt: "2026-11-30T00:00:00Z" },
+          }
+        : { access: "invite", allowed: false, grant: null },
+    });
+  });
+  await page.route("**/api/v1/samples", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "01a16228-963b-71a2-a7eb-5e0b37e3f710",
+            scope: "project",
+            projectName: "Harbor Lights sample",
+            useCase: "cafe",
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  const notice = page.getByTestId("run-access");
+  await expect(notice).toContainText(
+    "AI runs on this demo need an access code",
+  );
+  const samples = page.getByTestId("demo-samples");
+  await expect(
+    samples.getByRole("link", { name: /Harbor Lights sample/ }),
+  ).toHaveAttribute("href", "/samples/01a16228-963b-71a2-a7eb-5e0b37e3f710");
+  await expectAccessible(page);
+
+  await notice.getByLabel("Access code").fill("wrong-code-attempt");
+  await notice.getByRole("button", { name: "Unlock AI runs" }).click();
+  await expect(notice.getByRole("alert")).toHaveText(
+    "This access code is not valid or no longer active.",
+  );
+  await notice.getByLabel("Access code").fill("valid-demo-code-for-judges");
+  await notice.getByRole("button", { name: "Unlock AI runs" }).click();
+  await expect(notice).toContainText("Demo access active (judge-1)");
+  await expectAccessible(page);
+});
+
+test("M10-A: an unknown sample shows the inactive message (no workspace, no AI)", async ({
+  page,
+}) => {
+  watchCsp(page);
+  await page.goto("/samples/01a16228-963b-71a2-a7eb-5e0b37e3f710");
+  await expect(page.getByText("This link is no longer active.")).toBeVisible();
+  await expect(page.getByTestId("readonly-badge")).toHaveText(
+    /Read-only demo sample/,
+  );
+  await expectAccessible(page);
+});

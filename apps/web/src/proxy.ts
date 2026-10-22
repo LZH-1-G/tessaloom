@@ -17,7 +17,10 @@ export function proxy(request: NextRequest) {
   const appEnv = process.env.APP_ENV;
   const api = pathname.startsWith("/api/");
   const share =
-    pathname.startsWith("/share/") || pathname.startsWith("/api/v1/share/");
+    pathname.startsWith("/share/") ||
+    pathname.startsWith("/api/v1/share/") ||
+    pathname.startsWith("/samples/") ||
+    pathname.startsWith("/api/v1/samples");
   const kind = share ? "share" : api ? "api" : "page";
 
   let response: NextResponse;

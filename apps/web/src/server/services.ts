@@ -1,9 +1,10 @@
-import { parseWebEnv } from "@tessaloom/config/env";
+import { parseWebEnv, runAccessFor } from "@tessaloom/config/env";
 import {
   createBoss,
   createDb,
   type DbHandle,
   type PgBoss,
+  type RunAdmission,
 } from "@tessaloom/db";
 import { RateLimiter, secureCookiesFor } from "./http";
 
@@ -23,6 +24,9 @@ export interface Services {
   /** SSE timings (tests shorten them). */
   sse: { pollMs: number; pingMs: number; maxDurationMs: number };
   dailyRunsPerWorkspace: number;
+  /** M10-A: who may start paid work, and the job-creation limits (admitted in-transaction). */
+  admission: RunAdmission;
+  trustedProxyHops?: number;
 }
 
 let singleton: Services | null = null;
@@ -51,10 +55,17 @@ export function services(): Services {
     pepper: env.SHARE_TOKEN_PEPPER,
     secureCookies: secureCookiesFor(env.APP_ENV),
     limiter: new RateLimiter(),
+    trustedProxyHops: env.TRUSTED_PROXY_HOPS,
     now: () => new Date(),
     heartbeatMaxAgeMs: 30_000,
     sse: { pollMs: 1000, pingMs: 15_000, maxDurationMs: 10 * 60_000 },
     dailyRunsPerWorkspace: 10,
+    admission: {
+      access: runAccessFor(env.APP_ENV, env.RUN_ACCESS),
+      maxActivePerWorkspace: env.MAX_ACTIVE_RUNS_PER_WORKSPACE,
+      maxWorkingGlobal: env.MAX_WORKING_RUNS,
+      dailyRunsPerWorkspace: env.WORKSPACE_DAILY_RUNS,
+    },
   };
   return singleton;
 }

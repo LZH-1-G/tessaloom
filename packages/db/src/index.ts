@@ -13,7 +13,13 @@ export * from "./queue";
 export * from "./runs";
 export * from "./repositories/orchestrator";
 export { runMigrations, MIGRATIONS_FOLDER } from "./migrate";
-export { DomainRuleError, NotFoundError, StateConflictError } from "./errors";
+export {
+  AdmissionError,
+  DomainRuleError,
+  NotFoundError,
+  StateConflictError,
+} from "./errors";
+export * from "./repositories/cost";
 export * from "./repositories/workspace";
 export * from "./repositories/resolution";
 export * from "./repositories/experiment";

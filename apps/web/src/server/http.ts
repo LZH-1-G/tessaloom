@@ -4,10 +4,12 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import { isIP } from "node:net";
 import type { z } from "zod";
 import { ZodError } from "zod";
 import { uuidv7 } from "@tessaloom/core";
 import {
+  AdmissionError,
   DomainRuleError,
   NotFoundError,
   StateConflictError,
@@ -24,7 +26,11 @@ export type ApiErrorCode =
   | "IDEMPOTENCY_MISMATCH"
   | "RATE_LIMITED"
   | "QUOTA_GUARD_ACTIVE"
-  | "WORKER_OFFLINE";
+  | "WORKER_OFFLINE"
+  | "RUN_ACCESS_REQUIRED"
+  | "PAID_RUNS_DISABLED"
+  | "RUN_LIMIT"
+  | "BUSY";
 
 const STATUS: Record<ApiErrorCode, number> = {
   VALIDATION_FAILED: 400,
@@ -37,6 +43,10 @@ const STATUS: Record<ApiErrorCode, number> = {
   RATE_LIMITED: 429,
   QUOTA_GUARD_ACTIVE: 429,
   WORKER_OFFLINE: 503,
+  RUN_ACCESS_REQUIRED: 403,
+  PAID_RUNS_DISABLED: 503,
+  RUN_LIMIT: 429,
+  BUSY: 503,
 };
 
 export class HttpError extends Error {
@@ -83,6 +93,8 @@ export function errorResponse(error: unknown): Response {
     e = new HttpError("STATE_CONFLICT", error.message);
   else if (error instanceof DomainRuleError)
     e = new HttpError("VALIDATION_FAILED", error.message);
+  else if (error instanceof AdmissionError)
+    e = new HttpError(error.code, error.message);
   else {
     console.error(
       JSON.stringify({
@@ -109,7 +121,7 @@ export function errorResponse(error: unknown): Response {
       error: {
         code: e.code,
         message: e.message,
-        retryable: e.code === "RATE_LIMITED" || e.code === "WORKER_OFFLINE",
+        retryable: ["RATE_LIMITED", "WORKER_OFFLINE", "BUSY"].includes(e.code),
         requestId,
         details: e.details,
       },
@@ -125,8 +137,36 @@ export async function readJson<S extends z.ZodType>(
   req: Request,
   schema: S,
 ): Promise<z.output<S>> {
-  const text = await req.text();
-  if (Buffer.byteLength(text) > MAX_BODY_BYTES)
+  const tooLarge = () =>
+    new HttpError("VALIDATION_FAILED", "The request body is too large.");
+  const length = req.headers.get("content-length");
+  if (
+    length !== null &&
+    (!/^\d+$/.test(length) || Number(length) > MAX_BODY_BYTES)
+  ) {
+    void req.body?.cancel().catch(() => {});
+    throw tooLarge();
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = req.body?.getReader();
+  try {
+    if (reader)
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_BODY_BYTES) {
+          void reader.cancel().catch(() => {});
+          throw tooLarge();
+        }
+        chunks.push(value);
+      }
+  } finally {
+    reader?.releaseLock();
+  }
+  const text = Buffer.concat(chunks, size).toString("utf8");
+  if (size > MAX_BODY_BYTES)
     throw new HttpError("VALIDATION_FAILED", "The request body is too large.");
   let body: unknown;
   try {
@@ -204,7 +244,7 @@ export function checkCsrf(req: Request): void {
   if (!token || !header || !safeEqual(token, header))
     throw new HttpError("CSRF_FAILED", "Missing or invalid CSRF token.");
   const origin = req.headers.get("origin");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const host = req.headers.get("host");
   if (!origin || !host)
     throw new HttpError("CSRF_FAILED", "Origin check failed.");
   let originHost: string;
@@ -221,11 +261,30 @@ export function checkCsrf(req: Request): void {
 
 export class RateLimiter {
   private readonly hits = new Map<string, number[]>();
-  constructor(private readonly now: () => number = Date.now) {}
+  private readonly expires = new Map<string, number>();
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly capacity = 10_000,
+  ) {}
 
   /** Sliding window. Throws 429 with Retry-After when the limit is exceeded. */
   check(key: string, limit: number, windowMs = 60_000): void {
     const t = this.now();
+    if (!this.hits.has(key) && this.hits.size >= this.capacity) {
+      for (const [old, expiry] of this.expires)
+        if (expiry <= t) {
+          this.hits.delete(old);
+          this.expires.delete(old);
+        }
+      // Never clear active buckets: attackers could churn keys to reset their allowance.
+      if (this.hits.size >= this.capacity)
+        throw new HttpError(
+          "RATE_LIMITED",
+          "Too many requests. Please slow down.",
+          {},
+          { "Retry-After": "60" },
+        );
+    }
     const recent = (this.hits.get(key) ?? []).filter((x) => t - x < windowMs);
     if (recent.length >= limit) {
       const retryAfter = Math.max(
@@ -242,14 +301,35 @@ export class RateLimiter {
     }
     recent.push(t);
     this.hits.set(key, recent);
-    if (this.hits.size > 10_000) this.hits.clear(); // bounded memory under abuse
+    this.expires.set(key, t + windowMs);
   }
 }
 
 /** IP is only used hashed, as a rate-limit key. */
-export function clientIpHash(req: Request, pepper: string): string {
+export function clientIpHash(
+  req: Request,
+  pepper: string,
+  trustedProxyHops = 0,
+): string {
+  // Request has no authenticated socket peer. Trust is opt-in and requires ingress to
+  // append/overwrite XFF and prevent direct access. Default: ignore all supplied headers.
+  const chain =
+    req.headers
+      .get("x-forwarded-for")
+      ?.split(",")
+      .map((part) => part.trim()) ?? [];
+  const candidate =
+    Number.isInteger(trustedProxyHops) && trustedProxyHops > 0
+      ? chain[chain.length - trustedProxyHops]
+      : undefined;
+  const valid = candidate && isIP(candidate);
+  // URL canonicalizes IPv6 spellings so equivalent addresses share a bucket.
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    valid === 6
+      ? new URL(`http://[${candidate}]`).hostname
+      : valid
+        ? candidate
+        : "untrusted";
   return createHash("sha256")
     .update(`${pepper}:${ip}`)
     .digest("hex")

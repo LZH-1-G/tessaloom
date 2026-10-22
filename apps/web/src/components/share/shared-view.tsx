@@ -74,11 +74,19 @@ interface Shared {
  * The read-only share page (UI_UX_SPEC §4.8). It uses plain fetch (no workspace is created),
  * shows no controls, and labels fixture data exactly as the studio does.
  */
-export function SharedView({ token }: { token: string }) {
+export function SharedView(
+  props:
+    { token: string; sampleId?: never } | { sampleId: string; token?: never },
+) {
+  const { token, sampleId } = props;
+  // Samples (M10-A) are featured project links served by id: stored data only, no AI runs.
+  const source = sampleId
+    ? `/api/v1/samples/${encodeURIComponent(sampleId)}`
+    : `/api/v1/share/${encodeURIComponent(token!)}`;
   const [data, setData] = useState<Shared | null | "inactive">(null);
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/v1/share/${encodeURIComponent(token)}`, {
+    void fetch(source, {
       credentials: "omit",
       referrerPolicy: "no-referrer",
     })
@@ -90,7 +98,7 @@ export function SharedView({ token }: { token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [source]);
 
   const fixture =
     data &&
@@ -116,7 +124,8 @@ export function SharedView({ token }: { token: string }) {
             className="inline-flex items-center gap-1.5 rounded-full border border-warp px-2.5 py-0.5 text-xs font-semibold text-warp"
             data-testid="readonly-badge"
           >
-            <Eye aria-hidden className="size-3.5" /> Read-only shared view
+            <Eye aria-hidden className="size-3.5" />{" "}
+            {sampleId ? "Read-only demo sample" : "Read-only shared view"}
           </span>
           {data && data !== "inactive" ? (
             <span className="text-xs text-muted-foreground">
@@ -149,11 +158,13 @@ export function SharedView({ token }: { token: string }) {
         {data && data !== "inactive" ? (
           <>
             <p className="text-sm text-muted-foreground">
-              Shared from the project{" "}
+              {sampleId
+                ? "Demo sample from the project"
+                : "Shared from the project"}{" "}
               <strong className="text-foreground">{data.project.name}</strong>
             </p>
             {data.blueprint ? (
-              <SharedBlueprint token={token} bp={data.blueprint} />
+              <SharedBlueprint token={token ?? null} bp={data.blueprint} />
             ) : null}
             {data.experiment ? (
               <SharedExperiment exp={data.experiment} />
@@ -170,7 +181,7 @@ function SharedBlueprint({
   token,
   bp,
 }: {
-  token: string;
+  token: string | null;
   bp: NonNullable<Shared["blueprint"]>;
 }) {
   if (!bp.revision)
@@ -185,13 +196,15 @@ function SharedBlueprint({
           revision {r.revisionNumber} · from{" "}
           {bp.hypotheses.map((h) => h.title).join("; ")}
         </p>
-        <a
-          className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs hover:bg-surface-2 print:hidden"
-          href={`/api/v1/share/${encodeURIComponent(token)}/export?format=md`}
-          rel="noreferrer"
-        >
-          <FileText aria-hidden className="size-3.5" /> Download Markdown
-        </a>
+        {token ? (
+          <a
+            className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-xs hover:bg-surface-2 print:hidden"
+            href={`/api/v1/share/${encodeURIComponent(token)}/export?format=md`}
+            rel="noreferrer"
+          >
+            <FileText aria-hidden className="size-3.5" /> Download Markdown
+          </a>
+        ) : null}
       </header>
       <TraceabilityMeter report={r.traceabilityReport} />
       <BlueprintDocument

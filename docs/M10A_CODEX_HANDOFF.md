@@ -17,11 +17,11 @@
 
 ## 3. Work in progress
 
-- WS-COST (new, owner request 2026-10-22, **highest priority after WS1**): public demo cost safety. See §4.
+- WS-COST and WS2 completed locally on 2026-10-22; checkpoint message `feat(m10a): guard demo access and spending across every attempt`. Next: WS3 runtime/supervisor and WS4 operations.
 
 ## 4. Remaining tasks (priority order)
 
-0. **WS-COST: Public Demo Cost Safety (owner requirement; part of the M10-A acceptance criteria).** Server-side and fail-closed:
+0. **WS-COST (completed locally): Public Demo Cost Safety (owner requirement; part of the M10-A acceptance criteria).** Server-side and fail-closed:
    - Paid LLM generation is **disabled for anonymous visitors by default**.
    - Restricted, revocable demo access for authorized testers and judges.
    - Atomic **global, per-workspace, and per-experiment** spending reservations before every provider call.
@@ -43,10 +43,10 @@
      - API responses get `default-src 'none'; frame-ancestors 'none'`.
    - Make the root layout dynamic (`await connection()`) so nonces apply.
    - Tests: unit (header builder), runtime (standalone server with `APP_ENV=production` and `test`), E2E (headers on every page, no CSP console violations).
-2. **WS2 Abuse hardening (`apps/web/src/server/http.ts`):**
+2. **WS2 Abuse hardening (completed locally) (`apps/web/src/server/http.ts`):**
    - Enforce the 64 KB body limit while streaming (check `Content-Length` first).
-   - Stop the rate limiter from clearing every window when the key count exceeds 10k; evict expired and oldest keys instead.
-   - Derive the client IP from `X-Forwarded-For` using `TRUSTED_PROXY_HOPS` (default 1 = right-most entry), not the spoofable left-most entry.
+   - Bound the limiter at 10k keys; prune expired buckets and refuse new keys at capacity. Active limits are never evicted by attacker-controlled key churn.
+   - Use `TRUSTED_PROXY_HOPS` from the right of `X-Forwarded-For`. Default **0** ignores untrusted headers; explicit 1 requires an ingress that overwrites/appends the client address and blocks direct origin access. CSRF compares Origin to Host, never a client-supplied forwarded host.
 3. **WS3 Runtime and supervisor:**
    - Pipe child stdout/stderr through a line redactor that removes secret env values, URL credentials, and `Bearer` / `sk-ant-` patterns.
    - Per-child heap limits (`TL_WEB_MAX_OLD_SPACE_MB`, `TL_WORKER_MAX_OLD_SPACE_MB`).
@@ -105,7 +105,7 @@ See [M10A_VERIFICATION.md](M10A_VERIFICATION.md).
 
 ## 10. Next implementation step
 
-WS-COST (§4.0): audit the existing LLM gateway budget checks (`packages/llm-gateway`), run budgets (`agent_runs.budget/usage`), the global daily caps (`GLOBAL_DAILY_LLM_USD`, `GLOBAL_DAILY_QLOO_CALLS`), and the rate limits in `apps/web/src/server/api.ts` before adding anything.
+WS3: supervisor log redaction and heap limits; production TLS/provider validation; serialized migrations. Then WS4 operations and final regression.
 
 ## 11. Restrictions (must be respected by any agent)
 
@@ -116,3 +116,14 @@ WS-COST (§4.0): audit the existing LLM gateway budget checks (`packages/llm-gat
 - Do not migrate or modify any live external database. Local Postgres only (`tessaloom-postgres-1`; databases `tessaloom`, `tessaloom_dev`, `tessaloom_e2e`).
 - Keep the `tessaloom-dev-stack` preview (port 3300) usable.
 - Do not start M11.
+
+## WS-COST checkpoint details (2026-10-22)
+
+Preserved and completed the 31 modified and 10 untracked Claude files present at handoff.
+Added real invite-mode browser tests (`INVITE_E2E=1 pnpm exec playwright test`), using a separate local `tessaloom_e2e_invite` database and scripted providers. Anonymous starts are denied; invalid/expired/revoked codes are rejected; a valid one-run grant admits exactly one run and revocation prevents subsequent work. Existing mocked UI coverage remains as separate coverage.
+
+Every gateway attempt (repair, truncation retry, client fallback) reserves first; SDK retries and unobservable server fallback are disabled. Unknown serving models retain their reservation. Durable per-run call and output-token reservations survive crashes, cancellation and retry. Global/workspace/experiment/run/grant USD reservations settle atomically and once; unknown billing retains the full reservation. A measured billing overrun sets a persistent `llm_billing_overrun` counter and blocks new calls until operator review. Resume/retry also rechecks access and concurrency. Read-only samples require explicitly featured active share links and omit private identifiers/access hashes; revoked/expired/private samples remain unavailable.
+
+The byte-based reserve includes schema/protocol headroom and the highest cache/input rate. It is a conservative local estimate, **not a provider billing guarantee**. Price/model verification and provider-side hard spending limits remain mandatory before authorized live use; no live billing was tested.
+
+Validation: build, lint, typecheck, migration journal check; 290 unit, 76 integration, 7 runtime, 28 Chromium/WebKit full E2E, 2 real invite E2E; browser-bundle check; production dependency audit, OSV, gitleaks history and current nonignored source; Docker build and complete container smoke all passed locally. Remote CI/CodeQL and hosted checks were not run. See verification report for scan scope and initial test failures.

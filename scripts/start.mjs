@@ -16,7 +16,13 @@ export const CHILD_PATH = [
 ].join(path.delimiter);
 /** @typedef {Record<string, string | undefined>} Environment */
 /** @typedef {"web" | "worker"} ChildRole */
-const common = ["NODE_ENV", "APP_ENV", "DATABASE_URL", "LOG_LEVEL"];
+const common = [
+  "NODE_ENV",
+  "APP_ENV",
+  "DATABASE_URL",
+  "LOG_LEVEL",
+  "RUN_ACCESS",
+];
 const allowlists = {
   web: [
     ...common,
@@ -25,6 +31,11 @@ const allowlists = {
     "SESSION_SECRET",
     "SHARE_TOKEN_PEPPER",
     "ADMIN_TOKEN",
+    "TRUSTED_PROXY_HOPS",
+    // M10-A run admission limits.
+    "MAX_ACTIVE_RUNS_PER_WORKSPACE",
+    "MAX_WORKING_RUNS",
+    "WORKSPACE_DAILY_RUNS",
   ],
   worker: [
     ...common,
@@ -41,6 +52,9 @@ const allowlists = {
     "LLM_MODEL",
     "LLM_FALLBACK_MODEL",
     "LLM_MODE",
+    // M10-A spend ledger caps (GLOBAL_DAILY_* are matched by pattern below).
+    "WORKSPACE_DAILY_LLM_USD",
+    "EXPERIMENT_LLM_USD",
   ],
 };
 

@@ -22,6 +22,10 @@ import {
 
 // --- Usage counters (quota and cost guards; one atomic upsert per increment) ---
 
+/** Daily counters use `day` = YYYY-MM-DD; lifetime caps (experiment, run, grant) use "total". */
+export type UsageScope =
+  "global" | "workspace" | "experiment" | "run" | "grant";
+
 export function utcDay(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
@@ -29,7 +33,7 @@ export function utcDay(date = new Date()): string {
 export async function incrementUsage(
   db: Executor,
   input: {
-    scope: "global" | "workspace";
+    scope: UsageScope;
     scopeId: string;
     metric: string;
     amount?: number;
@@ -63,7 +67,7 @@ export async function incrementUsage(
 export async function consumeWithinLimit(
   db: Executor,
   input: {
-    scope: "global" | "workspace";
+    scope: UsageScope;
     scopeId: string;
     metric: string;
     limit: number;
@@ -87,7 +91,7 @@ export async function consumeWithinLimit(
 export async function getUsage(
   db: Executor,
   input: {
-    scope: "global" | "workspace";
+    scope: UsageScope;
     scopeId: string;
     metric: string;
     day?: string;
