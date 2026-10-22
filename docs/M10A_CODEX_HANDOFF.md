@@ -14,12 +14,14 @@
 |---|---|---|---|
 | — | Repository verification: M9 (`ad7b302`) is in `origin/main`; local `main` fast-forwarded (already equal); branch created | — | `git merge-base --is-ancestor` |
 | 1 | WS1 security headers: `apps/web/src/proxy.ts` + `apps/web/src/server/security-headers.ts` (per-request CSP nonce, HSTS on staging/production only, nosniff, DENY framing, Referrer/Permissions/COOP/CORP, share-page policy); root layout dynamic; `next.config` share headers moved to the proxy. E2E: CSP-violation watcher in `e2e/helpers.ts`, per-test client address (`X-Forwarded-For`, TEST-NET-3), new `e2e/m10-security.spec.ts` (headers, nonce rotation, XSS markup as text, stored-XSS simulation blocked). Fixed: the dock timeline scroll region was not keyboard-focusable (axe, intermittent in WebKit) | see `git log` (message `feat(m10a): site-wide CSP …`) | unit 280, runtime 7, E2E 24/24 (4 workers) and 24/24 (CI=1) |
+| 2 | WS-COST and WS2: invite access, durable spending reservations, provider-attempt guards, proxy trust and abuse controls | `e8afaf3` | unit 290, integration 76, runtime 7, browser 28/28 + invite 2/2, security scans, Docker smoke |
+| 3 | WS3 and WS4: runtime logging and heap limits, production validation, serialized migrations, recovery drills and operational documentation | see `git log` (message `feat(m10a): harden runtime migrations and production operations`) | unit 298, integration 78, runtime 10, browser 28/28 + invite 2/2, security scans, extended Docker smoke |
 
-## 3. Work in progress
+## 3. Current status
 
-- WS-COST and WS2 completed locally on 2026-10-22; checkpoint message `feat(m10a): guard demo access and spending across every attempt`. Next: WS3 runtime/supervisor and WS4 operations.
+- Locally executable M10-A work is complete: WS-COST/WS2 checkpoint `e8afaf3`; WS3/WS4 checkpoint message `feat(m10a): harden runtime migrations and production operations`. No push, merge, deployment or live provider calls. Hosted M10-B checks remain blocked on authorization and infrastructure.
 
-## 4. Remaining tasks (priority order)
+## 4. Workstream record (local implementation complete)
 
 0. **WS-COST (completed locally): Public Demo Cost Safety (owner requirement; part of the M10-A acceptance criteria).** Server-side and fail-closed:
    - Paid LLM generation is **disabled for anonymous visitors by default**.
@@ -47,14 +49,14 @@
    - Enforce the 64 KB body limit while streaming (check `Content-Length` first).
    - Bound the limiter at 10k keys; prune expired buckets and refuse new keys at capacity. Active limits are never evicted by attacker-controlled key churn.
    - Use `TRUSTED_PROXY_HOPS` from the right of `X-Forwarded-For`. Default **0** ignores untrusted headers; explicit 1 requires an ingress that overwrites/appends the client address and blocks direct origin access. CSRF compares Origin to Host, never a client-supplied forwarded host.
-3. **WS3 Runtime and supervisor:**
+3. **WS3 Runtime and supervisor (completed locally):**
    - Pipe child stdout/stderr through a line redactor that removes secret env values, URL credentials, and `Bearer` / `sk-ant-` patterns.
    - Per-child heap limits (`TL_WEB_MAX_OLD_SPACE_MB`, `TL_WORKER_MAX_OLD_SPACE_MB`).
    - The supervisor rejects `LLM_PROVIDER=scripted` in production.
    - Production and staging require a TLS `DATABASE_URL` (`sslmode=require|verify-ca|verify-full`).
    - Production requires `QLOO_MODE=live`.
    - Migrations take a `pg_advisory_lock` and use a longer statement timeout.
-4. **WS4 Operations:**
+4. **WS4 Operations (completed locally):**
    - A runbook: backup/restore, rollback, monitoring, quota and spend guards, incident response.
    - Update `M10_DEPLOYMENT_CHECKLIST.md`.
    - Run the full regression (all suites, E2E on both browsers, Docker + container smoke, gitleaks, OSV).
@@ -105,7 +107,7 @@ See [M10A_VERIFICATION.md](M10A_VERIFICATION.md).
 
 ## 10. Next implementation step
 
-WS3: supervisor log redaction and heap limits; production TLS/provider validation; serialized migrations. Then WS4 operations and final regression.
+No further local M10-A implementation is pending. Review the checkpoints and `M10A_OPERATIONS.md`. Hosted ingress/TLS, managed restore, monitoring, real provider pricing/billing validation and remote CI/CodeQL remain unverified; do not start M10-B deployment or M11 without owner authorization.
 
 ## 11. Restrictions (must be respected by any agent)
 
@@ -127,3 +129,13 @@ Every gateway attempt (repair, truncation retry, client fallback) reserves first
 The byte-based reserve includes schema/protocol headroom and the highest cache/input rate. It is a conservative local estimate, **not a provider billing guarantee**. Price/model verification and provider-side hard spending limits remain mandatory before authorized live use; no live billing was tested.
 
 Validation: build, lint, typecheck, migration journal check; 290 unit, 76 integration, 7 runtime, 28 Chromium/WebKit full E2E, 2 real invite E2E; browser-bundle check; production dependency audit, OSV, gitleaks history and current nonignored source; Docker build and complete container smoke all passed locally. Remote CI/CodeQL and hosted checks were not run. See verification report for scan scope and initial test failures.
+
+## WS3 / WS4 completion (2026-10-22)
+
+- Supervisor validates production live Qloo/non-scripted LLM and unambiguous staging/production database TLS before spawning. Web and worker validators independently enforce their applicable requirements. Per-child old-space limits default to 512/768 MB; UID separation, controlled PATH and secret allowlists remain intact.
+- Both child streams are piped through bounded UTF-8 line redaction, including split/encoded known secrets, URL credentials, auth/cookie/share tokens. Oversized lines are dropped entirely. Operator CLI failures no longer echo arbitrary database messages.
+- Release migrations hold one PostgreSQL advisory lock through Drizzle and pg-boss, use 120-second statement / 60-second lock timeouts, and release connections/locks on failure. Three concurrent first migrations, idempotent rerun, and interrupted lock-holder recovery are tested.
+- Added `docs/M10A_OPERATIONS.md`; updated deployment checklist and ADR-018/ADR-022 precedence for guarded retries. CI now includes the real invite-mode suite. Local test-database helpers refuse non-loopback hosts before creating/dropping databases.
+- Final verification: 298 unit, 78 integration, 10 runtime, 28 full Chromium/WebKit E2E in CI mode, 2 invite E2E; build/lint/typecheck/db check/browser bundle and source/history secret scans pass. Dependency audit and OSV remain clean for the unchanged lockfile. Local Linux arm64 image and extended container smoke pass, including backup/restore, real child-stream redaction, worker restart, database outage/recovery and shutdown.
+- Port 3300 had no listener at the final preview check. Restored a local synthetic/scripted preview using the existing `tessaloom_dev` database (already at migration 0007), without resetting data. Reused local session/pepper settings without printing them; no provider keys passed. Readiness returned `{db:true, worker:true}`. The session uses `/private/tmp/tessaloom-m10-preview.mjs` and writes redacted logs to `/private/tmp/tessaloom-m10-preview.log`; this launcher is temporary and not committed.
+- Remaining limitations: pre-existing pg 8 concurrent-query deprecation (must resolve before pg 9); optional pre-existing gap-fill/ad-hoc-resolution/revalidation gaps; automated retention is not implemented and is documented as an operations risk. No remote CI/CodeQL, hosted ingress or managed PITR, Linux amd64, or real billing validation was claimed.

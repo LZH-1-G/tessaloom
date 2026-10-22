@@ -213,6 +213,8 @@
 
 ### ADR-018: LLM model verification, fallback model, cost model, and credentials
 
+> M10-A cost-safety amendment (2026-10-22): SDK retries and server-side refusal fallback are disabled. Every availability fallback, truncation retry and repair must go through the gateway's durable spending guard before another provider request. Refusals stop immediately. This supersedes the retry/server-fallback settings below and the corresponding ADR-022 request-shape notes; client-side whole-step fallback and economy mode remain supported. Unrecognized serving models fail closed and retain the reservation. Price-based reservations are conservative estimates, not provider billing guarantees; provider-side hard limits and price validation are required before live use.
+
 - **Date:** 2026-10-20 (architecture review).
 - **Verification of model identifiers** (official provider documentation, fetched 2026-10-20):
   - The Anthropic **Models overview** (`platform.claude.com/docs/en/about-claude/models/overview`) lists **`claude-opus-5-5`** (Claude Opus 5.5) as a current Claude API ID. It is a pinned dateless snapshot with a 1M context window, 128K max output, adaptive thinking (always on), **default effort `medium`**, and retirement "not sooner than September 22, 2027".

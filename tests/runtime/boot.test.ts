@@ -54,13 +54,14 @@ it("the standalone web process refuses production fixtures", async () => {
 });
 
 it.each(["SIGTERM", "SIGINT"] as const)(
-  "the keyless M0 worker stops cleanly on %s",
+  "the keyless production worker stops cleanly on %s",
   async (signal) => {
     const child = spawn(process.execPath, ["apps/worker/dist/main.js"], {
       env: {
         APP_ENV: "production",
         NODE_ENV: "production",
-        DATABASE_URL: base.DATABASE_URL,
+        DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+        QLOO_MODE: "live",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -123,7 +124,11 @@ async function headersFrom(
 
 it("serves CSP and security headers; HSTS only on HTTPS environments (SECURITY ยง7)", async () => {
   const [page, api, share] = await headersFrom(
-    { APP_ENV: "production", QLOO_MODE: "live" },
+    {
+      APP_ENV: "production",
+      QLOO_MODE: "live",
+      DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+    },
     ["/", "/api/health", "/share/not-a-token"],
   );
   expect(page!.get("content-security-policy")).toMatch(
@@ -153,3 +158,35 @@ it("serves CSP and security headers; HSTS only on HTTPS environments (SECURITY ย
   );
   expect(local!.get("content-security-policy")).toContain("'strict-dynamic'");
 });
+
+it.each([
+  { APP_ENV: "production", QLOO_MODE: "live", DATABASE_URL: base.DATABASE_URL },
+  { APP_ENV: "staging", DATABASE_URL: base.DATABASE_URL },
+  {
+    APP_ENV: "production",
+    QLOO_MODE: "live",
+    DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+    LLM_PROVIDER: "scripted",
+  },
+])(
+  "supervisor rejects unsafe deployed configuration before spawning children",
+  async (change) => {
+    try {
+      await run(process.execPath, ["scripts/start.mjs"], {
+        env: { ...base, ...change },
+        timeout: 5000,
+      });
+      throw new Error("Expected configuration rejection");
+    } catch (error) {
+      const result = error as Error & {
+        code: number;
+        stdout: string;
+        stderr: string;
+      };
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("supervisor_config_invalid");
+      expect(result.stdout).not.toContain("child_start");
+      expect(result.stdout + result.stderr).not.toContain("placeholder@");
+    }
+  },
+);

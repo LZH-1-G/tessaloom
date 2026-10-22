@@ -15,14 +15,18 @@ export interface DbHandle {
 
 export function createDb(
   connectionString: string,
-  options: { max?: number; applicationName?: string } = {},
+  options: {
+    max?: number;
+    applicationName?: string;
+    statementTimeoutMs?: number;
+  } = {},
 ): DbHandle {
   const pool = new pg.Pool({
     connectionString,
     max: options.max ?? 5,
     application_name: options.applicationName ?? "tessaloom",
     connectionTimeoutMillis: 5_000,
-    statement_timeout: 15_000,
+    statement_timeout: options.statementTimeoutMs ?? 15_000,
   });
   // Idle-client errors must not crash the process; queries surface their own errors.
   pool.on("error", () => {});

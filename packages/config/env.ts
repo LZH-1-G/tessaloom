@@ -33,9 +33,15 @@ export const runAccessFor = (
   (appEnv === "staging" || appEnv === "production" ? "invite" : "open");
 
 function fixtureGuard(
-  value: { APP_ENV: string; QLOO_MODE?: string },
+  value: { APP_ENV: string; QLOO_MODE?: string; DATABASE_URL: string },
   ctx: z.RefinementCtx,
 ) {
+  if (!databaseTlsAllowed(value.APP_ENV, value.DATABASE_URL))
+    ctx.addIssue({
+      code: "custom",
+      path: ["DATABASE_URL"],
+      message: "Database TLS is required",
+    });
   if (
     value.APP_ENV === "production" &&
     (value.QLOO_MODE === "fixture" || value.QLOO_MODE === "synthetic")
@@ -45,6 +51,27 @@ function fixtureGuard(
       path: ["QLOO_MODE"],
       message: "Fixtures are forbidden in production",
     });
+  }
+}
+
+/** Explicit TLS only; reject duplicate/conflicting options rather than relying on driver precedence. */
+export function databaseTlsAllowed(
+  appEnv: string | undefined,
+  value: string,
+): boolean {
+  if (appEnv !== "production" && appEnv !== "staging") return true;
+  try {
+    const url = new URL(value);
+    const modes = url.searchParams.getAll("sslmode");
+    return (
+      ["postgres:", "postgresql:"].includes(url.protocol) &&
+      modes.length === 1 &&
+      ["require", "verify-ca", "verify-full"].includes(modes[0] ?? "") &&
+      !url.searchParams.has("ssl") &&
+      !url.searchParams.has("uselibpqcompat")
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -116,6 +143,12 @@ export const workerEnvSchema = z
   })
   .superRefine(fixtureGuard)
   .superRefine((value, ctx) => {
+    if (value.APP_ENV === "production" && value.QLOO_MODE !== "live")
+      ctx.addIssue({
+        code: "custom",
+        path: ["QLOO_MODE"],
+        message: "Production requires live mode",
+      });
     // Scripted LLM output is test data; like fixtures it must never reach production users.
     if (value.APP_ENV === "production" && value.LLM_PROVIDER === "scripted") {
       ctx.addIssue({

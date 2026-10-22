@@ -6,7 +6,9 @@ import {
 } from "../../../packages/db/src";
 
 /** Creates an isolated, fully migrated database for one test file. */
-export async function createTestDatabase(): Promise<{
+export async function createTestDatabase(
+  options: { migrate?: (url: string) => Promise<void> } = {},
+): Promise<{
   handle: DbHandle;
   url: string;
   drop: () => Promise<void>;
@@ -14,6 +16,8 @@ export async function createTestDatabase(): Promise<{
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl)
     throw new Error("DATABASE_URL is required for integration tests");
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(adminUrl).hostname))
+    throw new Error("Integration tests require local PostgreSQL");
   const name = `tl_test_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
@@ -22,7 +26,7 @@ export async function createTestDatabase(): Promise<{
 
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
-  await runMigrations(url.toString());
+  await (options.migrate ?? runMigrations)(url.toString());
   const handle = createDb(url.toString(), {
     max: 10,
     applicationName: "tessaloom-test",

@@ -48,15 +48,25 @@ describe("environment isolation", () => {
       ).toBe(false);
     },
   );
-  it("accepts development fixtures and keyless production M0 lifecycle", () => {
+  it("accepts development fixtures and TLS-protected keyless production lifecycle", () => {
     expect(parseWorkerEnv({ ...base, QLOO_MODE: "fixture" }).QLOO_MODE).toBe(
       "fixture",
     );
     expect(
-      parseWorkerEnv({ ...base, APP_ENV: "production", QLOO_MODE: "live" })
-        .LLM_MODEL,
+      parseWorkerEnv({
+        ...base,
+        APP_ENV: "production",
+        QLOO_MODE: "live",
+        DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+      }).LLM_MODEL,
     ).toBe("claude-opus-5-5");
-    expect(parseWebEnv({ ...base, APP_ENV: "production" }).PORT).toBe(3000);
+    expect(
+      parseWebEnv({
+        ...base,
+        APP_ENV: "production",
+        DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+      }).PORT,
+    ).toBe(3000);
   });
   it("strips unrelated fields and keeps the fallback model", () => {
     const parsed = parseWorkerEnv({ ...base, UNKNOWN: "discard" });
@@ -124,5 +134,47 @@ describe("hackathon endpoint settings (V1, ADR-019)", () => {
     expect(workerEnvSchema.safeParse({ ...live, ...change }).success).toBe(
       false,
     );
+  });
+});
+
+describe("M10-A production TLS", () => {
+  it.each(["production", "staging"])(
+    "requires unambiguous TLS in %s",
+    (APP_ENV) => {
+      for (const suffix of [
+        "",
+        "?sslmode=disable",
+        "?sslmode=prefer",
+        "?sslmode=require&ssl=false",
+        "?sslmode=require&sslmode=disable",
+        "?sslmode=require&uselibpqcompat=true",
+      ])
+        expect(() =>
+          parseWorkerEnv({
+            ...base,
+            APP_ENV,
+            QLOO_MODE: "live",
+            DATABASE_URL: base.DATABASE_URL + suffix,
+          }),
+        ).toThrow(/DATABASE_URL/);
+      for (const mode of ["require", "verify-ca", "verify-full"])
+        expect(
+          parseWorkerEnv({
+            ...base,
+            APP_ENV,
+            QLOO_MODE: "live",
+            DATABASE_URL: `${base.DATABASE_URL}?sslmode=${mode}`,
+          }).APP_ENV,
+        ).toBe(APP_ENV);
+    },
+  );
+  it("requires an explicit live Qloo mode in production", () => {
+    expect(() =>
+      parseWorkerEnv({
+        ...base,
+        APP_ENV: "production",
+        DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+      }),
+    ).toThrow(/QLOO_MODE/);
   });
 });

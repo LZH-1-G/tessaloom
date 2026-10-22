@@ -24,32 +24,34 @@ import { listSamples, setSampleFeatured } from "./repositories/blueprint";
 const USAGE =
   "usage: admin.mjs grant create --label L [--days 14] [--runs 10] [--usd 5] | grant list | grant revoke <id> | sample feature|unfeature|list [<shareLinkId>] | spend today";
 
+class AdminInputError extends Error {}
+
 const out = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 
 function flag(args: string[], name: string, fallback?: string) {
   const i = args.indexOf(`--${name}`);
   const value = i >= 0 ? args[i + 1] : fallback;
-  if (value === undefined) throw new Error(`Missing --${name}`);
+  if (value === undefined) throw new AdminInputError(`Missing --${name}`);
   return value;
 }
 
 function positiveNumber(value: string, name: string, max: number) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > max)
-    throw new Error(`--${name} must be between 0 and ${max}`);
+    throw new AdminInputError(`--${name} must be between 0 and ${max}`);
   return n;
 }
 
 async function main(argv: string[]) {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
+  if (!url) throw new AdminInputError("DATABASE_URL is required");
   const [area, action, ...rest] = argv;
   const handle = createDb(url, { max: 1, applicationName: "tessaloom-admin" });
   try {
     if (area === "grant" && action === "create") {
       const pepper = process.env.SHARE_TOKEN_PEPPER;
       if (!pepper || pepper.length < 32)
-        throw new Error(
+        throw new AdminInputError(
           "SHARE_TOKEN_PEPPER (as used by the web process) is required",
         );
       const label = flag(rest, "label");
@@ -94,7 +96,7 @@ async function main(argv: string[]) {
     } else if (area === "spend" && action === "today") {
       out({ globalLlmUsdToday: await globalLlmSpendToday(handle.db) });
     } else {
-      throw new Error(USAGE);
+      throw new AdminInputError(USAGE);
     }
   } finally {
     await handle.close();
@@ -103,11 +105,14 @@ async function main(argv: string[]) {
 
 main(process.argv.slice(2)).catch((error: unknown) => {
   // Never print connection strings or secrets: only the message of our own validation errors.
-  const message = error instanceof Error ? error.message : "failed";
+  const message =
+    error instanceof AdminInputError
+      ? error.message
+      : "Database or operation failed";
   console.error(
     JSON.stringify({
       event: "admin_failed",
-      message: /postgres(ql)?:\/\//i.test(message) ? "database error" : message,
+      message,
     }),
   );
   process.exit(1);

@@ -23,8 +23,13 @@ export const runStepKey = (job: RunStepJob) =>
  * role has no DDL rights, roles.sql) and from test database setup.
  */
 export async function installQueues(connectionString: string): Promise<void> {
+  const migrationUrl = new URL(connectionString);
+  migrationUrl.searchParams.set(
+    "options",
+    `${migrationUrl.searchParams.get("options") ?? ""} -c statement_timeout=120000 -c lock_timeout=60000`.trim(),
+  );
   const boss = new PgBoss({
-    connectionString,
+    connectionString: migrationUrl.toString(),
     schema: BOSS_SCHEMA,
     application_name: "tessaloom-migrate",
     max: 1,
@@ -33,8 +38,8 @@ export async function installQueues(connectionString: string): Promise<void> {
     schedule: false,
   });
   boss.on("error", () => {});
-  await boss.start();
   try {
+    await boss.start();
     const ensure = async (
       name: string,
       options: Parameters<PgBoss["createQueue"]>[1],
@@ -56,7 +61,7 @@ export async function installQueues(connectionString: string): Promise<void> {
     });
     await ensure(QUEUES.recoverRuns, { policy: "singleton", retryLimit: 0 });
   } finally {
-    await boss.stop({ graceful: false });
+    await boss.stop({ graceful: false }).catch(() => {});
   }
 }
 
