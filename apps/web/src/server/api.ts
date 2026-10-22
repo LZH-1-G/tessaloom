@@ -66,9 +66,9 @@ import {
 } from "./http";
 import type { Services } from "./services";
 
-const Uuid = z.uuid();
+export const Uuid = z.uuid();
 
-async function requireWorkspace(s: Services, req: Request) {
+export async function requireWorkspace(s: Services, req: Request) {
   const secret = parseCookies(req)[WORKSPACE_COOKIE];
   if (!secret)
     throw new HttpError("WORKSPACE_REQUIRED", "A workspace is required.");
@@ -82,7 +82,7 @@ async function requireWorkspace(s: Services, req: Request) {
 }
 
 /** A fresh heartbeat with a published run configuration, or 503 WORKER_OFFLINE. */
-async function liveWorker(s: Services) {
+export async function liveWorker(s: Services) {
   const beat = await latestHeartbeat(s.handle.db);
   const fresh =
     beat && s.now().getTime() - beat.lastBeatAt.getTime() < s.heartbeatMaxAgeMs;
@@ -95,7 +95,7 @@ async function liveWorker(s: Services) {
   return { beat: beat!, config: config.data };
 }
 
-const handle =
+export const handle =
   <A extends unknown[]>(fn: (...args: A) => Promise<Response>) =>
   async (...args: A): Promise<Response> => {
     try {
@@ -457,7 +457,7 @@ export const getBrief = handle(
 );
 
 /** AGENT_WORKFLOW §13.1: fixture-derived records are never served by a production build. */
-function assertNoFixtures(s: Services, value: unknown) {
+export function assertNoFixtures(s: Services, value: unknown) {
   if (
     s.appEnv === "production" &&
     JSON.stringify(value).includes('"DEVELOPMENT_FIXTURE"')

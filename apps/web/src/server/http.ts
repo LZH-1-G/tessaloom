@@ -183,6 +183,10 @@ export function cookie(
 
 export const randomToken = () => randomBytes(32).toString("base64url");
 
+/** Share tokens: only sha256(token ‖ SHARE_TOKEN_PEPPER) is stored (SECURITY §4.3). */
+export const hashShareToken = (token: string, pepper: string) =>
+  createHash("sha256").update(`${token}${pepper}`).digest("hex");
+
 /** The server stores only HMAC-SHA-256(secret, SESSION_SECRET). */
 export const hashWorkspaceSecret = (secret: string, sessionSecret: string) =>
   createHmac("sha256", sessionSecret).update(secret).digest("hex");

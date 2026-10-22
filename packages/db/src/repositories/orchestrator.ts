@@ -167,6 +167,8 @@ export async function listHypothesisState(db: Executor, experimentId: string) {
         stance: evidenceRecords.stance,
         toolInvocationId: evidenceRecords.toolInvocationId,
         evaluatorId: evidenceRecords.evaluatorId,
+        rationale: evidenceRecords.rationale,
+        provenanceClass: evidenceRecords.provenanceClass,
         createdAt: evidenceRecords.createdAt,
       })
       .from(evidenceRecords)

@@ -139,7 +139,7 @@ const BRANCHABLE = [
 
 /** Re-weighting opens a rescore-only branch (M8); the original experiment never changes. */
 function AdjustWeights({ hypothesisId }: { hypothesisId: string }) {
-  const { projectId, view, run } = useProject();
+  const { projectId, view, explorationRun: run } = useProject();
   const [open, setOpen] = useState(false);
   const ready = !!view && !!run && BRANCHABLE.includes(run.state);
   return (

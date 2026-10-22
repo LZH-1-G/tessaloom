@@ -21,6 +21,8 @@ interface ProjectState {
   overview: ProjectOverview | null;
   view: ExperimentViewData | null;
   run: RunView | null;
+  /** The main experiment's hypothesis-loop run (never a composition run). */
+  explorationRun: RunView | null;
   status: SystemStatus | null;
   error: string | null;
   loading: boolean;
@@ -117,6 +119,8 @@ export function ProjectProvider({
         overview,
         view,
         run,
+        explorationRun:
+          view?.runs.find((r) => r.kind === "EXPLORATION") ?? null,
         status,
         error,
         loading,

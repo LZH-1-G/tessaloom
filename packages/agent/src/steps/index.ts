@@ -1,5 +1,6 @@
 import type { RunState } from "@tessaloom/core";
 import { Cancelled, base, fatal } from "./common";
+import { composeStep, validateBlueprintStep } from "./blueprint";
 import { compareStep, planCounterfactualStep } from "./counterfactual";
 import { buildPool, discover } from "./discovery";
 import { analyzeIntent } from "./intent";
@@ -50,8 +51,12 @@ export async function executeStep(
         return planCounterfactualStep(ctx);
       case "COMPARING":
         return await compareStep(ctx, ports);
+      case "COMPOSING_BLUEPRINT":
+        return await composeStep(ctx, ports);
+      case "VALIDATING_BLUEPRINT":
+        return validateBlueprintStep(ctx);
       default:
-        // COMPOSITION and REVALIDATION handlers arrive with M9.
+        // REVALIDATION handlers arrive with M10.
         return fatal(
           "STATE_NOT_IMPLEMENTED",
           `No handler for ${ctx.run.state}`,
@@ -73,6 +78,7 @@ export function stateNeeds(state: RunState): { llm: boolean; qloo: boolean } {
       "EVALUATING_EVIDENCE",
       "REVISING_HYPOTHESES",
       "COMPARING",
+      "COMPOSING_BLUEPRINT",
     ].includes(state),
     qloo: ["RESOLVING_ENTITIES", "DISCOVERING"].includes(state),
   };

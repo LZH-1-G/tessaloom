@@ -1,4 +1,5 @@
 import type {
+  BlueprintContent,
   BriefInput,
   CompareSide,
   ComparisonMetrics,
@@ -65,7 +66,24 @@ export interface HypothesisView {
     claimId: string;
     stance: EvidenceStance;
     toolInvocationId: string | null;
+    /** The evaluator's plain-language rule (APP_DERIVED). */
+    rationale?: string | null;
+    provenanceClass?: string;
   }[];
+}
+
+/** COMPOSITION runs: the blueprint being composed (ADR-028). */
+export interface BlueprintView {
+  id: string;
+  format: "event" | "series" | "installation";
+  hypothesisIds: string[];
+  draft: BlueprintContent | null;
+  repairAttempts: number;
+  issues: string[];
+  recompose: { section: string; instruction: string | null } | null;
+  /** The current revision (recompose merges into it). */
+  base: BlueprintContent | null;
+  baseRevisionId: string | null;
 }
 
 export interface ResolutionView {
@@ -116,6 +134,8 @@ export interface StepContext {
     plannedReusedQueries: number;
     mode: string;
   } | null;
+  /** COMPOSITION runs. */
+  blueprint?: BlueprintView | null;
   /** COMPARING: both sides loaded from the database. */
   comparison?: { parent: CompareSide; branch: CompareSide } | null;
   brief: {
@@ -230,6 +250,16 @@ export interface CommitPlan {
     stance?: EvidenceStance | null;
     queryRequestHash?: string | null;
   }[];
+  /** COMPOSITION: the in-progress draft and/or the validated revision. */
+  blueprint?: {
+    draft?: BlueprintContent | null;
+    draftMeta?: Record<string, unknown> | null;
+    revision?: {
+      content: BlueprintContent;
+      traceabilityReport: Record<string, unknown>;
+      changeSummary: string;
+    };
+  };
   /** COMPARING: the parent ↔ branch comparison (APP_DERIVED metrics + narrative). */
   comparison?: {
     baseExperimentId: string;

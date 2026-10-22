@@ -179,3 +179,37 @@
   --xy-controls-button-color: var(--tl-ink);
   --xy-minimap-background-color: var(--tl-surface);
 }
+
+/* Print / PDF (PRD EB-5, UI_UX_SPEC §4.6): the blueprint, its provenance labels, and the
+   evidence appendix — without navigation, the activity dock, or editing controls. */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+  header,
+  nav[aria-label="Experiment steps"],
+  aside[aria-label="Decisions and actions"],
+  a[href="#main"] {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+  }
+  [data-print-frame] {
+    display: block !important;
+    padding: 0 !important;
+  }
+  [data-testid="blueprint-document"] section,
+  [data-testid="traceability-meter"] {
+    break-inside: avoid-page;
+    box-shadow: none !important;
+  }
+  [data-testid="fixture-banner"] {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

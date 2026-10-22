@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useProject } from "../project-context";
 import { StatusPill } from "../provenance";
 import { Button, EmptyState, SectionTitle, Skeleton } from "../ui";
+import { ComposeDialog } from "../blueprint/compose-dialog";
 import { ComparisonView } from "./comparison-view";
 import { VariableEditor } from "./variable-editor";
 
@@ -67,8 +68,15 @@ export function describeDelta(
 
 /** What-if Lab (UI_UX_SPEC §4.5): branch tree, variable editor with preview, comparison. */
 export function WhatIfLab() {
-  const { projectId, view, loading, focusView, setFocusExperiment, refresh } =
-    useProject();
+  const {
+    projectId,
+    view,
+    explorationRun,
+    loading,
+    focusView,
+    setFocusExperiment,
+    refresh,
+  } = useProject();
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get("branch");
@@ -76,7 +84,8 @@ export function WhatIfLab() {
   const [comparison, setComparison] = useState<ComparisonRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cap, setCap] = useState<string>("");
-  const rootRun = view?.runs[0] ?? null;
+  const [composeBranch, setComposeBranch] = useState(false);
+  const rootRun = explorationRun;
   const focusRun = focusView?.runs[0] ?? null;
 
   // The dock follows the selected branch's run.
@@ -371,6 +380,49 @@ export function WhatIfLab() {
                   finish:{" "}
                   {focusRun.terminalReason?.replace(/_/g, " ").toLowerCase()}.
                 </p>
+              ) : null}
+              {focusRun?.state === "COMPLETED" && focusView ? (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+                  <span className="flex-1">
+                    Like this branch? Compose a blueprint from its hypotheses —
+                    its evidence is cited exactly as in the comparison.
+                  </span>
+                  <Button
+                    variant="weft"
+                    size="sm"
+                    onClick={() => setComposeBranch(true)}
+                  >
+                    Compose a blueprint from this branch
+                  </Button>
+                </div>
+              ) : null}
+              {composeBranch && focusView ? (
+                <ComposeDialog
+                  projectId={projectId}
+                  experimentId={focusView.experiment.id}
+                  choices={focusView.hypotheses
+                    .filter((h) => !h.retired)
+                    .sort(
+                      (a, b) =>
+                        (b.compositeScore ?? 0) - (a.compositeScore ?? 0),
+                    )
+                    .map((h) => ({
+                      id: h.id,
+                      title: h.title,
+                      status: h.status,
+                      compositeScore: h.compositeScore,
+                    }))}
+                  preselected={focusView.hypotheses
+                    .filter((h) => !h.retired)
+                    .sort(
+                      (a, b) =>
+                        (b.compositeScore ?? 0) - (a.compositeScore ?? 0),
+                    )
+                    .slice(0, 1)
+                    .map((h) => h.id)}
+                  source={`From the What-if branch: ${describeDelta(current.variableDelta, names)}`}
+                  onClose={() => setComposeBranch(false)}
+                />
               ) : null}
               {comparison && comparison.id === comparisonId ? (
                 <ComparisonView comparison={comparison} names={names} />

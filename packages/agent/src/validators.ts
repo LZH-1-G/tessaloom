@@ -352,6 +352,70 @@ export function comparisonNarrativeValidator(ctx: {
   };
 }
 
+/** Outcome promises the evidence cannot support (affinity is not demand; ADR-028). */
+const OUTCOME_CLAIM =
+  /\b(guarantee[sd]?|proven (demand|success)|will (definitely|surely|certainly) (sell|succeed|draw|attract)|sell[- ]?outs?|sold[- ]out|certain to (succeed|sell)|guaranteed (turnout|attendance|revenue))\b/i;
+
+/**
+ * R6 draft validator: citations only to the selected hypotheses' evidence, numbers only from
+ * the brief or the evidence, no outcome promises, mitigations only for derived constraints.
+ */
+export function blueprintDraftValidator(ctx: {
+  evidenceIds: ReadonlySet<string>;
+  allowedNumbers: ReadonlySet<string>;
+  constraintKeys: ReadonlySet<string>;
+}): Validator<{
+  concept: string;
+  blocks: { text: string; evidenceIds: string[] }[];
+  mitigations: { constraintKey: string; text: string }[];
+  openQuestions: string[];
+}> {
+  return (d) => {
+    const issues: ValidationIssue[] = [];
+    const texts: [string, string][] = [
+      ["concept", d.concept],
+      ...d.blocks.map((b, i): [string, string] => [`blocks.${i}.text`, b.text]),
+      ...d.mitigations.map((m, i): [string, string] => [
+        `mitigations.${i}.text`,
+        m.text,
+      ]),
+      ...d.openQuestions.map((q, i): [string, string] => [
+        `openQuestions.${i}`,
+        q,
+      ]),
+    ];
+    for (const [path, text] of texts) {
+      issues.push(...numericFidelityIssues(text, ctx.allowedNumbers, path));
+      if (OUTCOME_CLAIM.test(text))
+        issues.push({
+          code: "OUTCOME_CLAIM",
+          path,
+          message:
+            "Do not promise attendance, sales, or success; audience affinity is not demand",
+        });
+    }
+    d.blocks.forEach((b, i) =>
+      b.evidenceIds.forEach((id) => {
+        if (!ctx.evidenceIds.has(id))
+          issues.push({
+            code: "UNKNOWN_CITATION",
+            path: `blocks.${i}.evidenceIds`,
+            message: `Evidence ${id} does not belong to the selected hypotheses`,
+          });
+      }),
+    );
+    d.mitigations.forEach((m, i) => {
+      if (!ctx.constraintKeys.has(m.constraintKey))
+        issues.push({
+          code: "UNKNOWN_CONSTRAINT",
+          path: `mitigations.${i}.constraintKey`,
+          message: `Unknown constraint key ${m.constraintKey}`,
+        });
+    });
+    return issues;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Provenance labels (blueprint display text)
 

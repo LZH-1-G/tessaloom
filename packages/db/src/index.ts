@@ -23,3 +23,4 @@ export * from "./repositories/ops";
 export { sql } from "drizzle-orm";
 export * from "./repositories/views";
 export * from "./repositories/branch";
+export * from "./repositories/blueprint";

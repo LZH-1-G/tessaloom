@@ -94,6 +94,8 @@ export function buildStepContext(
       claimId: e.claimId,
       stance: e.stance,
       toolInvocationId: e.toolInvocationId,
+      rationale: e.rationale,
+      provenanceClass: e.provenanceClass,
     })),
   }));
   return {

@@ -269,6 +269,13 @@ gantt
 
 ### M9 — Experience Blueprint Composer and sharing (D8)
 
+> **Status: COMPLETED 2026-10-22** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-028. **Deviations from the plan below:**
+> - Fact and constraint blocks are written deterministically by the app from stored evidence and the brief. R6 adds only AI interpretation and creative speculation, mitigations, and open questions (ADR-028 §1).
+> - Optional gap-fill queries (≤ 4) are **not implemented**. Blueprints use only evidence that the selected hypotheses already collected.
+> - Section-level recompose (R6 with `onlySection`), Accept/Reopen status, restore-as-new-revision, and experiment- and project-scoped share links were added beyond the minimum.
+> - Global CSP/HSTS headers remain M10 hardening. Only `/share/*` and the share API carry the M9 header set.
+> - The M10 deployment prerequisites are tracked in [M10_DEPLOYMENT_CHECKLIST.md](M10_DEPLOYMENT_CHECKLIST.md).
+
 - **Objective:** traceable blueprints, revisions, exports, and share links.
 - **Inputs:** PRD §6.6, §6.8; UI_UX_SPEC §4.6, §4.8; API_CONTRACTS §4.6; SECURITY §4.3.
 - **Scope:** R6 composition + the traceability validator (max 1 repair); optional gap-fill queries (≤ 4); blueprint pages (sections, blocks, citations, constraints, traceability meter, revisions, edit-in-place); Markdown and JSON export; the print stylesheet; share links (create/list/revoke; token shown once); the `/share/[token]` page with noindex and no-referrer.

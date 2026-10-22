@@ -644,6 +644,40 @@ Every read is workspace-scoped, and a production build refuses to serialize `DEV
 - `POST /api/v1/comparisons` `{ baseExperimentId, otherExperimentId }` (same project) returns `201`. Metrics are computed synchronously, with a deterministic narrative labeled APP_DERIVED. `GET /api/v1/comparisons/:id` returns the stored comparison, including the R5 narrative for branch comparisons, labeled MODEL_INTERPRETATION.
 - Gate H4: `{ kind: "COUNTERFACTUAL_COST", action: "run" | "cancel", maxQlooCalls? }`. `maxQlooCalls` may only lower the run's cap.
 
+### 6.13 M9 API status (2026-10-22)
+
+**Blueprints**
+
+- `POST /api/v1/experiments/:experimentId/blueprints` `{ hypothesisIds (1–3), format: "event" | "series" | "installation" }` returns `202 { blueprintId, runId }`.
+  - It starts a COMPOSITION run.
+  - It returns `409 STATE_CONFLICT` while any run on the experiment is non-terminal (at gate H3, record the selection first).
+  - It returns `400 VALIDATION_FAILED` when the source run is not COMPLETED / COMPLETED_WITH_LIMITS.
+  - Hypotheses must belong to the experiment.
+- `GET /api/v1/projects/:projectId/blueprints` returns `{ items: [{ id, experimentId, format, status, title, revisionNumber, updatedAt }] }`.
+- `GET /api/v1/blueprints/:id` returns `{ blueprint, experiment, hypotheses, current, appendix, revisions, latestRun }`.
+  - `current` holds the content and its `traceabilityReport`.
+  - `appendix` entries carry `E-n` labels, claim, stance, rationale, provenance, data origin, and retrieval date.
+- `GET /api/v1/blueprints/:id/revisions` lists the revisions. `GET .../revisions/:revisionId` returns one revision with its appendix.
+- `POST /api/v1/blueprints/:id/revisions` `{ baseRevisionId, content, restoreOfRevisionNumber? }` returns `201`.
+  - A stale base returns `409`.
+  - Unchanged content, unresolvable citations, or changed constraints return `400 VALIDATION_FAILED`.
+  - The server re-derives provenance (ADR-028 §3).
+  - With `restoreOfRevisionNumber`, the server copies that stored revision and ignores the client's `content`. Restoring the current content returns `400`.
+- `POST /api/v1/blueprints/:id/status` `{ status: "DRAFT" | "ACCEPTED" }`.
+- `POST /api/v1/blueprints/:id/sections/:sectionKind/recompose` `{ instruction? (≤ 300) }` returns `202 { runId }`: a COMPOSITION run limited to one section.
+- `GET /api/v1/blueprints/:id/export?format=md|json` returns `200` with `Content-Disposition: attachment; filename="<slug>-r<n>.md|json"`.
+
+**Share links**
+
+- `POST /api/v1/projects/:projectId/share-links` `{ scope: "project" | "experiment" | "blueprint", targetId, expiresInDays? (1–90, default 30) }` returns `201 { shareLinkId, url: "/share/<token>", expiresAt }`. The token is never returned again. A target outside the project returns `404`.
+- `GET /api/v1/projects/:projectId/share-links` returns metadata only: id, scope, targetId, createdAt, expiresAt, revokedAt, viewCount.
+- `DELETE /api/v1/share-links/:id` returns `204`. Revocation is immediate.
+- `GET /api/v1/share/:token` (no session needed) returns the scoped read-only payload. `GET /api/v1/share/:token/export` returns the Markdown export (blueprint scope only).
+  - Headers: `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow`.
+  - Limited to 30 lookups/min per IP hash (`429`).
+  - An unknown, revoked, or expired token returns a uniform `404` "This link is no longer active.".
+- Every mutation is CSRF-checked, rate-limited, and workspace-scoped (`404` otherwise). Fixture records are refused in production, as for every read.
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts

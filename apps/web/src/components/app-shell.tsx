@@ -100,12 +100,7 @@ const STEPS: { href: string; label: string; n: number; disabled?: string }[] = [
   { href: "discovery", label: "Discover", n: 2 },
   { href: "hypotheses", label: "Hypotheses", n: 3 },
   { href: "what-if", label: "What-if", n: 4 },
-  {
-    href: "blueprint",
-    label: "Blueprint",
-    n: 5,
-    disabled: "Arrives with the Blueprint composer (M9)",
-  },
+  { href: "blueprint", label: "Blueprint", n: 5 },
 ];
 
 export function ProjectRail({
