@@ -6,6 +6,7 @@ import {
   ExperimentVariables,
   IllegalTransition,
   ResolutionCandidates,
+  RunBudget,
   RunConfig,
   canonicalHash,
   isPaused,
@@ -675,11 +676,63 @@ export async function confirmRun(
           ),
         );
       }
-      case "COUNTERFACTUAL_COST":
-        // Counterfactual runs arrive in M8; no run can be waiting for this gate yet.
-        throw new StateConflictError(
-          "The run is not awaiting this confirmation",
+      case "COUNTERFACTUAL_COST": {
+        // Gate H4 (AGENT_WORKFLOW §11): the user approves the live calls a branch needs.
+        if (response.action === "cancel")
+          return runView(
+            await commitTransition(
+              tx,
+              raw,
+              boss,
+              run,
+              "CANCEL",
+              {},
+              {
+                events: [
+                  {
+                    ...received,
+                    payload: { kind: response.kind, action: "cancel" },
+                  },
+                ],
+                terminalReason: "USER_CANCELLED",
+              },
+            ),
+          );
+        const budget = RunBudget.parse(run.budget);
+        if (response.maxQlooCalls !== undefined) {
+          // The user may lower the cap (never raise it above the run's budget).
+          budget.maxQlooCalls = Math.min(
+            budget.maxQlooCalls,
+            response.maxQlooCalls,
+          );
+          await tx
+            .update(agentRuns)
+            .set({ budget })
+            .where(eq(agentRuns.id, run.id));
+        }
+        return runView(
+          await commitTransition(
+            tx,
+            raw,
+            boss,
+            run,
+            "USER_CONFIRMED_COUNTERFACTUAL",
+            {},
+            {
+              events: [
+                {
+                  ...received,
+                  payload: {
+                    kind: response.kind,
+                    action: "run",
+                    maxQlooCalls: budget.maxQlooCalls,
+                  },
+                },
+              ],
+            },
+          ),
         );
+      }
     }
   });
 }

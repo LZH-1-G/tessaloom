@@ -636,6 +636,14 @@ Every read is workspace-scoped, and a production build refuses to serialize `DEV
 - `GET /api/v1/experiments/:experimentId/graph?include=threads,retired` returns `EvidenceGraph { version, nodes[], edges[], layout }` from `core/graph.ts`. Nodes are `entity | hypothesis | claim | evidence`. Edges are `THREAD | ELEMENT_OF | HAS_CLAIM | TESTED_BY | CITES | REVISION_OF`. Each node and edge carries a provenance class, and data-backed nodes carry the `invocationId` for Trace. Fixture records are refused in production, as for every read.
 - `PUT /api/v1/experiments/:experimentId/graph-layout` takes `{ positions: { nodeId, x, y }[] }` (at most 2000) and returns `204`. It is CSRF-checked, rate-limited, and workspace-scoped (404 otherwise).
 
+### 6.12 M8 API status (2026-10-22)
+
+- `POST /api/v1/experiments/:id/branches/preview` `{ delta, mode? }` returns the dependency plan: `{ dirtyQueries, reusedQueries, estimatedQlooCalls, rescoreOnly, needsConfirmation, dirtyList[], claims{reuse,inherit,dirty,unsupported}, unsupported[], mode, qlooCallsToday }`. It has no side effects (CSRF-checked and rate-limited, like every POST).
+- `POST /api/v1/experiments/:id/branches` `{ delta, mode: "hold_hypotheses", label? }` returns `202 { branchExperimentId, experimentKey, runId, plannedDirtyQueries, reusedQueries, reused }`. An identical delta returns the existing branch (`reused: true`, WI-A5). A delta the harness cannot apply returns `422` with the reason. The parent's hypotheses must be final (its run finished or awaits H3).
+- `GET /api/v1/experiments/:id/branches` returns the whole tree (root and branches), each with its delta, planned counts, latest run, and comparison id.
+- `POST /api/v1/comparisons` `{ baseExperimentId, otherExperimentId }` (same project) returns `201`. Metrics are computed synchronously, with a deterministic narrative labeled APP_DERIVED. `GET /api/v1/comparisons/:id` returns the stored comparison, including the R5 narrative for branch comparisons, labeled MODEL_INTERPRETATION.
+- Gate H4: `{ kind: "COUNTERFACTUAL_COST", action: "run" | "cancel", maxQlooCalls? }`. `maxQlooCalls` may only lower the run's cap.
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts

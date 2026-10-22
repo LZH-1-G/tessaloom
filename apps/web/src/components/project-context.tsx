@@ -25,6 +25,10 @@ interface ProjectState {
   error: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  /** A branch the What-if Lab is following; the dock streams its run (null = the root). */
+  focusExperimentId: string | null;
+  focusView: ExperimentViewData | null;
+  setFocusExperiment: (id: string | null) => void;
 }
 
 const Ctx = createContext<ProjectState | null>(null);
@@ -47,6 +51,9 @@ export function ProjectProvider({
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [focusExperimentId, setFocusExperiment] = useState<string | null>(null);
+  const [focusView, setFocusView] = useState<ExperimentViewData | null>(null);
+  const focusRef = useRef<string | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(() => {
@@ -58,12 +65,20 @@ export function ProjectProvider({
         ]);
         setOverview(o);
         setStatus(s);
-        const latest = o.experiments[0];
+        // The project's main experiment is its latest root; branches live in the What-if Lab.
+        const root =
+          o.experiments.find((e) => e.kind === "ROOT") ?? o.experiments[0];
         setView(
-          latest
+          root
             ? await api.get<ExperimentViewData>(
-                `/api/v1/experiments/${latest.id}`,
+                `/api/v1/experiments/${root.id}`,
               )
+            : null,
+        );
+        const focus = focusRef.current;
+        setFocusView(
+          focus
+            ? await api.get<ExperimentViewData>(`/api/v1/experiments/${focus}`)
             : null,
         );
         setError(null);
@@ -88,7 +103,13 @@ export function ProjectProvider({
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const run = view?.runs[0] ?? null;
+  useEffect(() => {
+    focusRef.current = focusExperimentId;
+    void refresh();
+  }, [focusExperimentId, refresh]);
+
+  const run =
+    (focusExperimentId ? focusView?.runs[0] : null) ?? view?.runs[0] ?? null;
   return (
     <Ctx.Provider
       value={{
@@ -100,6 +121,9 @@ export function ProjectProvider({
         error,
         loading,
         refresh,
+        focusExperimentId,
+        focusView,
+        setFocusExperiment,
       }}
     >
       {children}

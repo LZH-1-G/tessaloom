@@ -251,6 +251,16 @@ gantt
 
 ### M8 — What-if Experimentation Simulator (D7)
 
+> **Status: COMPLETED 2026-10-22** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-027. **Deviations from the plan below:**
+> - Branches are materialized in the web transaction that creates them, using the pure planner in `core/counterfactual.ts`: held-fixed hypotheses, re-parameterized claims, and reused evidence through CACHE invocations. The worker's COUNTERFACTUAL run then executes only the dirty queries, re-grades, rescores, and compares. The preview, the stored plan, and the executed plan therefore cannot diverge.
+> - Hold-hypotheses mode only. Regenerate stays optional (it is shown disabled).
+> - Some deltas are rejected with an explanation, never approximated:
+>   - adding a brand-new seed (needs ad hoc resolution, `/resolve`);
+>   - tag constraints and audience bands (harness parameters still PENDING);
+>   - a location change, unless another resolved locality exists.
+> - REVALIDATION and ad hoc resolution (`POST /projects/:id/resolve`) are not implemented. They move to M9/M10.
+> - Charts are inline SVG with table views, not Recharts (ADR-026).
+
 - **Objective:** genuine counterfactual branches and comparisons.
 - **Inputs:** AGENT_WORKFLOW §15; API_CONTRACTS §4.5, §4.7; UI_UX_SPEC §4.5.
 - **Scope:** the delta planner (`dependsOn` + `requestHash` diff); branch creation with the deterministic key; gate H4; the COUNTERFACTUAL run kind (hold-fixed; regenerate is stretch); the comparison metrics; R5 narrative with placeholders and numeric fidelity; ad hoc resolution (`/resolve`); the What-if Lab page (variable editor, preview, comparison header, hypothesis delta table, per-query diff, slope and stance charts with table toggles, branch tree); REVALIDATION.

@@ -1,5 +1,8 @@
 import type {
   BriefInput,
+  CompareSide,
+  ComparisonMetrics,
+  VariableDelta,
   ClaimParams,
   ClaimTestKind,
   EvidenceFact,
@@ -103,7 +106,18 @@ export interface StepContext {
     projectId: string;
     variables: ExperimentVariables;
     scoringWeights: { support: number; novelty: number; feasibility: number };
+    /** Branches only: the parent experiment and the applied delta (ADR-027). */
+    parentExperimentId?: string | null;
+    variableDelta?: VariableDelta | null;
   };
+  /** COUNTERFACTUAL runs: the dependency plan stored when the branch was created. */
+  branch?: {
+    plannedDirtyQueries: number;
+    plannedReusedQueries: number;
+    mode: string;
+  } | null;
+  /** COMPARING: both sides loaded from the database. */
+  comparison?: { parent: CompareSide; branch: CompareSide } | null;
   brief: {
     versionId: string;
     content: BriefInput;
@@ -216,6 +230,13 @@ export interface CommitPlan {
     stance?: EvidenceStance | null;
     queryRequestHash?: string | null;
   }[];
+  /** COMPARING: the parent ↔ branch comparison (APP_DERIVED metrics + narrative). */
+  comparison?: {
+    baseExperimentId: string;
+    otherExperimentId: string;
+    metrics: ComparisonMetrics;
+    narrative: Record<string, unknown>;
+  };
   evidence?: {
     id: string;
     claimId: string;
@@ -225,6 +246,8 @@ export interface CommitPlan {
     evaluatorId: string;
     rulesetVersion: string;
     rationale: string;
+    /** Ordered top-K Qloo ids of the graded result (identifiers only; ADR-027). */
+    resultIds?: string[] | null;
     facts: EvidenceFact[];
     primaryMeasure: QlooMeasure;
     quality:

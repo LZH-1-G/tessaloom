@@ -8,6 +8,10 @@ const DATABASE_URL =
 
 export default defineConfig({
   testDir: "./e2e",
+  // Every test is one anonymous workspace from 127.0.0.1. The API's per-IP abuse limits
+  // (SECURITY.md: 20 workspace creations and 20 run starts per minute) are kept as-is, so
+  // local parallelism is capped to stay within them; CI runners use fewer workers anyway.
+  workers: process.env.CI ? 2 : 4,
   timeout: 90_000,
   expect: { timeout: 20_000 },
   use: { baseURL: "http://127.0.0.1:3100", trace: "retain-on-failure" },

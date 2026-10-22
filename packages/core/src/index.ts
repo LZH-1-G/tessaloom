@@ -10,3 +10,6 @@ export * from "./schemas/api";
 export * from "./machine";
 export * from "./collision";
 export * from "./graph";
+export * from "./planner";
+export * from "./counterfactual";
+export * from "./compare";

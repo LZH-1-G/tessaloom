@@ -86,6 +86,20 @@ Role R4 — Evidence Critic. Deterministic evaluators have already decided each 
 - recommendation: keep, refine, or retire. refinementHint: a short suggestion when refining.
 - continueLoop: whether another revision round looks worthwhile (advisory only).`,
   },
+  {
+    id: "r5.compare",
+    version: "1.0.0",
+    role: "R5",
+    system: `${SHARED_RULES}
+
+Role R5 — Comparison Narrator. The application has already compared a parent experiment with a what-if branch and computed every metric deterministically. You explain the largest changes for a creative producer in plain language.`,
+    task: `Write a short narrative (at most 900 characters) about the comparison below.
+- Every number must be written as a placeholder {{metric:ID}} using an ID from "metricIds". Do not write any digit yourself.
+- Explain the largest status or score changes first, then the stance changes behind them.
+- Cite the evidence UUIDs (from the input) that support each change in citedEvidenceIds.
+- If "rescoreOnly" is true, no new Qloo data was retrieved: say so, and never imply new data, new queries, or new results.
+- Qloo values are aggregate audience signals; never present them as creative fit or as facts about individuals.`,
+  },
 ];
 
 export class PromptRegistry {

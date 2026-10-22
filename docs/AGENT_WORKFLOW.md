@@ -464,6 +464,15 @@ Each `EvidenceQuery` in the stored evidence plan has a `dependsOn: VariablePath[
 
 **Genuineness guarantee.** The comparison header always reports `dirtyQueries`, `reusedQueries`, `newQlooResults`, and `changedStances`. If `dirtyQueries = 0`, the UI labels the result "Rescored with existing evidence — no new Qloo data was retrieved". The LLM narrative is forbidden from implying new data (`NumericFidelityValidator` plus a template check).
 
+**M8 implementation (ADR-027).** The plan is computed by `core/counterfactual.ts` with the same deterministic planner as exploration, holding the parent's plan date so trend windows stay comparable. Each held claim is classified:
+
+- REUSE: same query and evaluator inputs, and parent evidence exists. The evidence is copied through a CACHE invocation that links to the original call.
+- INHERIT: unchanged, but never tested (for example trimmed by the budget). It keeps the parent's outcome.
+- DIRTY: the query or evaluator inputs changed. It is re-run.
+- UNSUPPORTED: its target domain was removed, its only seed was removed, or it is no longer plannable.
+
+Added target domains add discovery threads (seed × domain). The branch is materialized when it is created. The COUNTERFACTUAL run executes only DIRTY claims and new threads (gate H4 above 6 calls), re-grades deterministically without the critic, rescores with the branch weights and constraints, and stores the comparison. Fixture transports never draw on the live Qloo quota.
+
 ### 15.3 Comparison metrics (APP_DERIVED, `core/metrics/compare.ts`)
 
 | Metric | Definition | Granularity |

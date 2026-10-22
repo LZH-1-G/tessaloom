@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   createProject,
   expectAccessible,
@@ -99,6 +99,8 @@ test("M7 evidence graph: provenance labels, keyboard navigation, inspector trace
     api.edges.length,
   );
   await expectAccessible(page);
+
+  await measureLargeGraph(page, info);
 });
 
 test("M7 activity monitor: first event latency, reconnect without gaps, full view, cancel", async ({
@@ -316,11 +318,12 @@ function largeGraph() {
   };
 }
 
-test("EG-A2 (reported): 300 nodes / 600 edges render time and pan frame rate", async ({
-  page,
-}, info) => {
-  test.setTimeout(150_000);
-  await runToSelection(page, "Graph load");
+/**
+ * EG-A2 (reported, warning threshold): a generated 300-node / 600-edge graph served through
+ * route interception (no test-only app code), measured on the lab page already loaded.
+ */
+async function measureLargeGraph(page: Page, info: TestInfo) {
+  await page.getByRole("tab", { name: "Board" }).click();
   const big = largeGraph();
   expect(big.nodes).toHaveLength(300);
   expect(big.edges).toHaveLength(600);
@@ -382,4 +385,4 @@ test("EG-A2 (reported): 300 nodes / 600 edges render time and pan frame rate", a
   console.info("EG-A2", JSON.stringify(report));
   if (renderMs > 1500 || panFps < 30)
     console.warn("EG-A2 warning threshold exceeded", JSON.stringify(report));
-});
+}

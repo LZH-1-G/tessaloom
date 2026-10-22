@@ -362,6 +362,7 @@ describe("prompts and untrusted input", () => {
       "r3.generate",
       "r3.revise",
       "r4.critique",
+      "r5.compare",
     ]);
     for (const v of Object.values(versions))
       expect(v).toMatch(/^\d+\.\d+\.\d+\+[0-9a-f]{12}$/);

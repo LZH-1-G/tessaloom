@@ -124,9 +124,11 @@ test("H2b + E2E-05 + E2E-06: pool tension → live loop → Hypothesis Lab, evid
   const breakdown = first.getByTestId("score-breakdown");
   await expect(breakdown).toContainText("Composite");
   await expect(breakdown).toContainText("feasibility-1.0.0");
+  // M8: re-weighting is available once the loop has finished (a rescore-only branch).
   await expect(
     breakdown.getByRole("button", { name: "Adjust weights" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
+  await expect(breakdown).toContainText("rescore-only branch");
 
   // E2E-06: evidence drawer → trace with redacted request, envelope, pointer value, rule.
   await first.getByRole("button", { name: "Inspect evidence" }).click();

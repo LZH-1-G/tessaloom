@@ -461,6 +461,19 @@ describe("adapter behavior", () => {
     });
     expect(transport.calls).toHaveLength(0);
   });
+  it("never charges fixture traffic to the shared live Qloo quota", async () => {
+    const quota = { consume: vi.fn(async () => false) };
+    const fixture = new FakeTransport([raw(recommendOk)], "FIXTURE");
+    const adapter = new QlooAdapter({
+      transport: fixture,
+      harnessVersion: "fixture",
+      quota,
+      sleep: noSleep,
+    });
+    // Even with the live quota exhausted, fixture calls run and consume nothing.
+    expect((await adapter.recommend(recommendInput, ctx)).kind).toBe("OK");
+    expect(quota.consume).not.toHaveBeenCalled();
+  });
   it("retries only retryable errors and reserves quota for every attempt", async () => {
     const quota = { consume: vi.fn(async () => true) };
     const retrying = new FakeTransport([

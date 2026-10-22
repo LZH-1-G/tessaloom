@@ -35,6 +35,7 @@
 | ADR-024 | M5 discovery decisions: V1-based resolution strategy, tag enrichment budget, synthetic fixtures and scripted AI for development/E2E, fixture firewall through the cache, collision engine in core | **Accepted** | 2026-10-21 (M5) |
 | ADR-025 | M6 hypothesis-loop decisions: pool gate H2b, evaluation ruleset `ruleset-2026.10-m6` (rank/structure-based, honest INSUFFICIENT where calibration is pending), rule-based feasibility, salvage after a failed repair, tag signals in the planner, evidence rationale | **Accepted** | 2026-10-21 (M6) |
 | ADR-026 | M7 graph and monitor decisions: graph projection in core, citation links on demand, SVG charts with table views, monitor full view as a dialog | **Accepted** | 2026-10-22 (M7) |
+| ADR-027 | M8 counterfactual engine: pure dependency planner in core, branch materialized at creation, CACHE-labeled reuse, stored top-K result ids, deterministic comparison metrics with placeholder-only narratives, fixtures exempt from the live quota | **Accepted** | 2026-10-22 (M8) |
 
 ---
 
@@ -481,6 +482,33 @@
   6. **No reasoning anywhere (AM-A3).** The provider keeps only text blocks. Unit tests check that no `llm_invocations` or `run_events` column names reasoning or thinking. An integration test walks every stored event payload for such keys.
 - **Consequences:** EG-A2 is measured on local hardware only. CI runners may be slower; the test reports the numbers and does not fail on them.
 
+### ADR-027: M8 What-if engine
+
+- **Date:** 2026-10-22 (M8).
+- **Decisions:**
+  1. **One planner, two processes.** The evidence planner moved from `agent` to `core`, because the web process (preview and branch creation) and the worker must compute identical query keys. `core/counterfactual.ts` applies the delta and re-plans every held claim under the branch variables, holding the parent's plan date. It then classifies each claim as REUSE, INHERIT, DIRTY, or UNSUPPORTED (AGENT_WORKFLOW §15.2). Dirty queries are counted per unique query key; reused queries per unique parent key.
+  2. **Materialize at creation.** One transaction:
+     - creates the branch experiment (deterministic key: the same delta returns the same branch);
+     - copies seeds with the delta applied;
+     - copies the parent's threads and pool, re-selecting the pool at the branch tension;
+     - copies the hypotheses (`inherited_from_id`, same lineage) and re-parameterizes the claims;
+     - copies reused evidence through new CACHE invocations whose `cache_source_invocation_id` points at the original call.
+
+     The critic's notes are not carried over, because they described the parent's evidence set. The COUNTERFACTUAL run then only collects (dirty claims plus threads into added domains), re-grades deterministically, rescores, and compares.
+  3. **Stored result identifiers.** `evidence_records.result_ids` (migration 0005) keeps the ordered top-K Qloo ids of each graded result: identifiers only, at most 50, never the payload. That is the same kind of derived data the THREAD relations already store. It makes overlap@K, RBO, and entered/exited computable without raw retention (R-08).
+  4. **Deterministic metrics, honest narratives.**
+     - `core/compare.ts` computes per-query, per-claim, and per-hypothesis deltas, plus the drift index.
+     - The R5 narrative may contain numbers only as `{{metric:ID}}` placeholders and may cite only evidence in the comparison.
+     - A rescore-only branch must not imply new data (validator `IMPLIES_NEW_DATA`).
+     - If R5 fails, the deterministic template (APP_DERIVED) is used. The page labels which one it shows.
+  5. **Unsupported deltas are refused, not approximated:** new seeds (need ad hoc resolution), tag constraints and audience bands (harness parameters PENDING), and regenerate mode.
+  6. **Fixtures never draw on the live quota.** The adapter reserves the global daily Qloo quota only for non-fixture transports. M4–M7 charged synthetic calls too, which made a long synthetic E2E session hit `QUOTA_GUARD_ACTIVE`. The M4 crash-recovery test asserted that old behavior and now asserts 0 for fixture traffic. Per-attempt reservation for live transports stays pinned by the adapter unit tests.
+  7. **Experiment focus.** The project's main views use its latest root experiment. The What-if Lab sets a focus experiment, so the activity dock streams the selected branch's run and its gate H4.
+- **Consequences:**
+  - Branching is fast and exact, but hold-fixed hypotheses keep their parent's wording; a swapped seed changes the evidence, not the text.
+  - Live-provider behavior (cache hits and retries reducing or adding transport calls relative to `plannedDirtyQueries`) is unverified.
+  - Ad hoc resolution and REVALIDATION remain open.
+
 ---
 
 ## 3. Key trade-offs
@@ -555,6 +583,7 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-22 | M8 implemented: counterfactual planner and comparison metrics in core, branch materialization with CACHE-labeled reuse, COUNTERFACTUAL run (gate H4, deterministic re-grading, R5 narrative with placeholder validation), What-if Lab (branch tree, variable editor with live preview, comparison view with charts and per-query diffs), Adjust weights → rescore-only branch, fixture traffic exempted from the live quota; ADR-027 recorded | IMPLEMENTATION_PLAN M8 |
 | 2026-10-22 | M7 implemented: evidence graph (core projection, API, layout persistence, React Flow canvas with provenance encoding, filters, keyboard navigation, inspector with trace, equivalent List view) and the Activity Monitor full view (state durations, tool and LLM cost tables, complete timeline, reconnect indicator), cancelled/limited ribbon; ADR-026 recorded | IMPLEMENTATION_PLAN M7 |
 | 2026-10-21 | M6 implemented: pool gate H2b with a client-side tension preview, evaluation ruleset `ruleset-2026.10-m6`, rule-based feasibility, salvage after a failed repair, planner tag signals, evidence rationale, Hypothesis Lab (cards, status groups, retired group, evidence drawer, trace, score breakdown, iteration timeline, gate H3); ADR-025 recorded | IMPLEMENTATION_PLAN M6 |
 | 2026-10-21 | M5 implemented: Creative Brief (form, preview, H1 chips, versions), V1-based resolution with tags and locality (H2), budgeted tag enrichment, Discovery Canvas (lanes, list, inspector, trace), synthetic fixtures and scripted AI for development and E2E, fixture-firewall-through-cache fix; ADR-024 recorded | IMPLEMENTATION_PLAN M5 |

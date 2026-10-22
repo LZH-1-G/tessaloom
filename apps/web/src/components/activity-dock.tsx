@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { stateSpans } from "@/lib/activity";
 import { api } from "@/lib/api";
 import type { RunEventView, RunView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,10 @@ const GATE_COPY: Record<string, { text: string; page: string }> = {
   HYPOTHESIS_SELECTION: {
     text: "Select hypotheses to carry forward.",
     page: "hypotheses",
+  },
+  COUNTERFACTUAL_COST: {
+    text: "Approve the Qloo calls this what-if needs.",
+    page: "what-if",
   },
 };
 
@@ -228,13 +233,13 @@ export function ActivityDock({
       </aside>
     );
 
-  const elapsed = run.startedAt
-    ? Math.max(
-        0,
-        ((run.finishedAt ? Date.parse(run.finishedAt) : now) -
-          Date.parse(run.startedAt)) /
-          1000,
-      )
+  // The wall-clock budget charges working time only; time waiting at a gate is excluded.
+  const endMs = run.finishedAt ? Date.parse(run.finishedAt) : now;
+  const spans = stateSpans(events, endMs);
+  const elapsed = spans.length
+    ? spans
+        .filter((sp) => !sp.paused && !TERMINAL.includes(sp.state))
+        .reduce((n, sp) => n + (sp.endMs - sp.startMs), 0) / 1000
     : 0;
   const cancel = async () => {
     setBusy(true);
@@ -397,7 +402,7 @@ export function ActivityDock({
               format={(v) => `$${v.toFixed(2)}`}
             />
             <Meter
-              name="Elapsed"
+              name="Active time"
               used={Math.round(elapsed)}
               max={run.budget.wallClockSeconds}
               format={(v) =>

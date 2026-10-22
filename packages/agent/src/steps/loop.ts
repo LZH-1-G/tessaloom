@@ -17,6 +17,7 @@ import {
 } from "../hypothesis";
 import { planEvidence, type PlanEntity, type PlannedQuery } from "../planner";
 import type { QlooResult } from "../ports";
+import { branchThreads } from "./discovery";
 import { assessFeasibility } from "../feasibility";
 import {
   combine,
@@ -383,6 +384,7 @@ export async function collect(
           evaluatorId: evaluation.evaluatorId,
           rulesetVersion: EVALUATION_RULESET.version,
           rationale: evaluation.note,
+          resultIds: resultIdsOf(result),
           facts: evaluation.facts,
           primaryMeasure: evaluation.primaryMeasure,
           quality: evaluation.quality,
@@ -405,6 +407,10 @@ export async function collect(
     (m, e) => ({ ...m, [e.stance]: (m[e.stance] ?? 0) + 1 }),
     {},
   );
+  if (ctx.run.kind === "COUNTERFACTUAL") {
+    const threads = await branchThreads(ctx, ports, acc);
+    if (threads) return threads;
+  }
   acc.events.push({
     type: "DECISION_SUMMARY",
     role: "R4",
@@ -417,6 +423,15 @@ export async function collect(
     ),
   });
   return acc;
+}
+
+/** Ordered top-K identifiers of a result (entities, tags, or cells); never the payload. */
+export function resultIdsOf(result: QlooResult<unknown>): string[] | null {
+  if (result.kind !== "OK") return null;
+  return (result.items as Record<string, unknown>[])
+    .map((i) => i.qlooId ?? i.tagId ?? i.geohash ?? null)
+    .filter((id): id is string => typeof id === "string")
+    .slice(0, 20);
 }
 
 function claimStates(
@@ -437,18 +452,37 @@ function claimStates(
   });
 }
 
-export async function evaluate(
-  ctx: StepContext,
-  ports: Ports,
-): Promise<StepResult> {
-  const acc = base("CONVERGED");
+/**
+ * The brief as this experiment sees it: a branch's constraint delta (capacity, budget band,
+ * duration) overrides the brief for feasibility only (ADR-027).
+ */
+export function effectiveBrief(ctx: StepContext) {
+  const c = ctx.experiment.variables.constraints;
+  const content = ctx.brief.content;
+  return {
+    ...content,
+    venue: {
+      ...content.venue,
+      ...(c.capacity ? { capacity: c.capacity } : {}),
+    },
+    constraints: {
+      ...content.constraints,
+      ...(c.budgetBand ? { budgetBand: c.budgetBand } : {}),
+      ...(c.durationMinutes ? { durationMinutes: c.durationMinutes } : {}),
+    },
+  };
+}
+
+/** Deterministic statuses and scores for the active hypotheses (no LLM). */
+export function scoreHypotheses(ctx: StepContext) {
   const hyps = active(ctx);
+  const brief = effectiveBrief(ctx);
   const computed = hyps.map((h) => {
     const states = claimStates(h);
     const candidate = ctx.pool.find((p) => p.id === h.collisionCandidateId);
     const feasibility = assessFeasibility({
       text: [h.title, h.premise, h.experienceSketch].join(" \n"),
-      brief: ctx.brief.content,
+      brief,
       locationStances: h.claims
         .filter((c) => c.testKind === "LOCATION_FIT")
         .map((c) => c.stance),
@@ -468,6 +502,47 @@ export async function evaluate(
     };
   });
 
+  return computed;
+}
+
+export async function evaluate(
+  ctx: StepContext,
+  ports: Ports,
+): Promise<StepResult> {
+  const acc = base("CONVERGED");
+  const hyps = active(ctx);
+  const computed = scoreHypotheses(ctx);
+  if (ctx.run.kind !== "EXPLORATION") {
+    // Counterfactual re-evaluation is deterministic: stances come from the evaluators and
+    // scores from the branch weights; the critic's interpretation is not re-run (ADR-027).
+    acc.commit.hypothesisUpdates = computed.map(
+      ({ h, status, scores, feasibility, noveltyInputs }) => ({
+        id: h.id,
+        status,
+        supportScore: scores.support,
+        noveltyScore: scores.novelty,
+        feasibilityScore: scores.feasibility,
+        compositeScore: scores.composite,
+        scoreBreakdown: {
+          ...scores.breakdown,
+          feasibility: {
+            version: feasibility.version,
+            rules: feasibility.rules,
+          },
+          noveltyInputs,
+        },
+      }),
+    );
+    acc.guard = { terminationMet: true, kind: ctx.run.kind };
+    acc.events.push({
+      type: "DECISION_SUMMARY",
+      role: null,
+      summary: truncate(
+        `Re-graded ${computed.length} held-fixed hypotheses deterministically with the branch's variables`,
+      ),
+    });
+    return acc;
+  }
   const result = await llmCall(ctx, ports, acc, {
     role: "R4",
     promptId: "r4.critique",

@@ -102,7 +102,11 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
   async function driveToEnd(
     d: RunnerDeps,
     ids: { workspaceId: string; experimentId: string; runId: string },
-    answers: { tension: number; select: boolean },
+    answers: {
+      tension: number;
+      select: boolean;
+      counterfactual?: "run" | "cancel";
+    },
   ) {
     for (let guard = 0; guard < 12; guard++) {
       await drain(d, 80);
@@ -153,7 +157,12 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
           kind: "HYPOTHESIS_SELECTION",
           selectedHypothesisIds: answers.select ? ranked.slice(0, 1) : [],
         };
-      } else throw new Error(`unexpected gate ${pending.kind}`);
+      } else if (pending.kind === "COUNTERFACTUAL_COST")
+        body = {
+          kind: "COUNTERFACTUAL_COST",
+          action: answers.counterfactual ?? "run",
+        };
+      else throw new Error(`unexpected gate ${pending.kind}`);
       await confirmRun(handle, boss, ids.workspaceId, ids.runId, body);
     }
     throw new Error("run did not finish within 12 gates");
