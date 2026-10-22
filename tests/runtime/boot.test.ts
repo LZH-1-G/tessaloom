@@ -54,13 +54,14 @@ it("the standalone web process refuses production fixtures", async () => {
 });
 
 it.each(["SIGTERM", "SIGINT"] as const)(
-  "the keyless M0 worker stops cleanly on %s",
+  "the keyless production worker stops cleanly on %s",
   async (signal) => {
     const child = spawn(process.execPath, ["apps/worker/dist/main.js"], {
       env: {
         APP_ENV: "production",
         NODE_ENV: "production",
-        DATABASE_URL: base.DATABASE_URL,
+        DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+        QLOO_MODE: "live",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -89,6 +90,103 @@ it.each(["SIGTERM", "SIGINT"] as const)(
     } finally {
       clearTimeout(timeout);
       if (child.exitCode === null) child.kill("SIGKILL");
+    }
+  },
+);
+
+/** Starts the standalone web server and returns the response headers of `paths`. */
+async function headersFrom(
+  env: Record<string, string>,
+  paths: string[],
+): Promise<Headers[]> {
+  const port = String(3190 + Math.floor(Math.random() * 8));
+  const child = spawn(
+    process.execPath,
+    ["apps/web/.next/standalone/apps/web/server.js"],
+    { env: { ...base, ...env, PORT: port }, stdio: "ignore" },
+  );
+  try {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const out: Headers[] = [];
+        for (const p of paths)
+          out.push((await fetch(`http://127.0.0.1:${port}${p}`)).headers);
+        return out;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    throw new Error("web server did not start");
+  } finally {
+    child.kill("SIGTERM");
+  }
+}
+
+it("serves CSP and security headers; HSTS only on HTTPS environments (SECURITY §7)", async () => {
+  const [page, api, share] = await headersFrom(
+    {
+      APP_ENV: "production",
+      QLOO_MODE: "live",
+      DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+    },
+    ["/", "/api/health", "/share/not-a-token"],
+  );
+  expect(page!.get("content-security-policy")).toMatch(
+    /script-src 'self' 'nonce-[A-Za-z0-9+/=]{24}' 'strict-dynamic';/,
+  );
+  expect(page!.get("content-security-policy")).toContain(
+    "upgrade-insecure-requests",
+  );
+  for (const h of [page!, api!, share!]) {
+    expect(h.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+    expect(h.get("x-content-type-options")).toBe("nosniff");
+    expect(h.get("x-frame-options")).toBe("DENY");
+  }
+  expect(api!.get("content-security-policy")).toBe(
+    "default-src 'none'; frame-ancestors 'none'",
+  );
+  expect(share!.get("referrer-policy")).toBe("no-referrer");
+  expect(share!.get("x-robots-tag")).toBe("noindex, nofollow");
+
+  // Local HTTP test servers: same CSP, but no HSTS and no upgrade to HTTPS.
+  const [local] = await headersFrom({ APP_ENV: "test" }, ["/"]);
+  expect(local!.get("strict-transport-security")).toBeNull();
+  expect(local!.get("content-security-policy")).not.toContain(
+    "upgrade-insecure-requests",
+  );
+  expect(local!.get("content-security-policy")).toContain("'strict-dynamic'");
+});
+
+it.each([
+  { APP_ENV: "production", QLOO_MODE: "live", DATABASE_URL: base.DATABASE_URL },
+  { APP_ENV: "staging", DATABASE_URL: base.DATABASE_URL },
+  {
+    APP_ENV: "production",
+    QLOO_MODE: "live",
+    DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
+    LLM_PROVIDER: "scripted",
+  },
+])(
+  "supervisor rejects unsafe deployed configuration before spawning children",
+  async (change) => {
+    try {
+      await run(process.execPath, ["scripts/start.mjs"], {
+        env: { ...base, ...change },
+        timeout: 5000,
+      });
+      throw new Error("Expected configuration rejection");
+    } catch (error) {
+      const result = error as Error & {
+        code: number;
+        stdout: string;
+        stderr: string;
+      };
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("supervisor_config_invalid");
+      expect(result.stdout).not.toContain("child_start");
+      expect(result.stdout + result.stderr).not.toContain("placeholder@");
     }
   },
 );

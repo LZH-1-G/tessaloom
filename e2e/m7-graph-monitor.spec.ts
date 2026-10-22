@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 import {
   createProject,
   expectAccessible,
@@ -7,6 +7,8 @@ import {
   runToSelection,
   snap,
   TYPED_BRIEF,
+  expect,
+  test,
 } from "./helpers";
 
 async function experimentId(page: Page, projectUrl: string) {

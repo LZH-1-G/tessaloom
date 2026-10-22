@@ -14,6 +14,8 @@ import {
   sharedView,
   startComposition,
   startRecompose,
+  listSamples,
+  sampleView,
 } from "@tessaloom/db";
 import { z } from "zod";
 import {
@@ -53,7 +55,10 @@ export const postBlueprint = handle(
     checkCsrf(req);
     const workspace = await requireWorkspace(s, req);
     s.limiter.check(`start:ws:${workspace.id}`, 6);
-    s.limiter.check(`start:ip:${clientIpHash(req, s.pepper)}`, 20);
+    s.limiter.check(
+      `start:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      20,
+    );
     const body = await readJson(req, ComposeRequest);
     const { config } = await liveWorker(s);
     const result = await startComposition(s.handle, await s.boss(), {
@@ -62,6 +67,7 @@ export const postBlueprint = handle(
       hypothesisIds: body.hypothesisIds,
       format: body.format,
       runConfig: config,
+      admission: s.admission,
     });
     return json(result, 202);
   },
@@ -196,6 +202,7 @@ export const postRecompose = handle(
       section,
       instruction: instruction || null,
       runConfig: config,
+      admission: s.admission,
     });
     return json(result, 202);
   },
@@ -316,7 +323,10 @@ const inactive = () =>
 
 /** Shared lookup: rate-limited per IP hash, constant "inactive" answer for any failure. */
 async function resolveShare(s: Services, req: Request, token: string) {
-  s.limiter.check(`share:ip:${clientIpHash(req, s.pepper)}`, 30);
+  s.limiter.check(
+    `share:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+    30,
+  );
   const parsed = ShareToken.safeParse(token);
   if (!parsed.success) return null;
   return sharedView(s.handle.db, hashShareToken(parsed.data, s.pepper));
@@ -335,7 +345,10 @@ export const getShared = handle(
 // GET /api/v1/share/:token/export?format=md|json — blueprint scope only
 export const getSharedExport = handle(
   async (s: Services, req: Request, params: { token: string }) => {
-    s.limiter.check(`share:ip:${clientIpHash(req, s.pepper)}`, 30);
+    s.limiter.check(
+      `share:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      30,
+    );
     const parsed = ShareToken.safeParse(params.token);
     if (!parsed.success) return inactive();
     const link = await findActiveShareLink(
@@ -354,5 +367,40 @@ export const getSharedExport = handle(
     );
     assertNoFixtures(s, file.body);
     return download(file, SHARE_HEADERS);
+  },
+);
+
+// --- M10-A read-only demo samples (featured project links; no workspace, no AI runs) ---
+
+// GET /api/v1/samples
+export const getSamples = handle(async (s: Services, req: Request) => {
+  s.limiter.check(
+    `samples:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+    60,
+  );
+  const items = await listSamples(s.handle.db);
+  return json({
+    items: items.map((i) => ({
+      id: i.id,
+      scope: i.scope,
+      projectName: i.projectName,
+      useCase: i.useCase,
+    })),
+  });
+});
+
+// GET /api/v1/samples/:sampleId
+export const getSample = handle(
+  async (s: Services, req: Request, params: { sampleId: string }) => {
+    s.limiter.check(
+      `samples:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      60,
+    );
+    const id = Uuid.safeParse(params.sampleId);
+    if (!id.success) return inactive();
+    const view = await sampleView(s.handle.db, id.data);
+    if (!view) return inactive();
+    assertNoFixtures(s, view);
+    return json(view, 200, { "Cache-Control": "no-store" });
   },
 );

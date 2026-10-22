@@ -12,3 +12,17 @@ export class NotFoundError extends Error {
 export class DomainRuleError extends Error {
   readonly code = "VALIDATION_FAILED";
 }
+
+/**
+ * Paid-work admission refused (M10-A cost safety). `code` selects the HTTP status:
+ * RUN_ACCESS_REQUIRED 403, PAID_RUNS_DISABLED 503, RUN_LIMIT 429, BUSY 503.
+ */
+export class AdmissionError extends Error {
+  constructor(
+    readonly code:
+      "RUN_ACCESS_REQUIRED" | "PAID_RUNS_DISABLED" | "RUN_LIMIT" | "BUSY",
+    message: string,
+  ) {
+    super(message);
+  }
+}

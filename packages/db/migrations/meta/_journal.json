@@ -50,6 +50,13 @@
       "when": 1792635725373,
       "tag": "0006_blueprint_draft",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792653056197,
+      "tag": "0007_m10a_cost_safety",
+      "breakpoints": true
     }
   ]
 }

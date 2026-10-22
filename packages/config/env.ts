@@ -19,12 +19,29 @@ const shared = {
     .default("info"),
   // synthetic: deterministic generated fixtures for development and browser E2E (ADR-024).
   QLOO_MODE: z.enum(["fixture", "synthetic", "live"]).optional(),
+  // M10-A cost safety: who may start paid AI work. Unset → `invite` on staging/production
+  // (anonymous visitors cannot spend), `open` on development/test. `off` = kill switch.
+  RUN_ACCESS: z.enum(["off", "invite", "open"]).optional(),
 };
 
+/** The effective RUN_ACCESS: explicit value, else fail-closed for deployed environments. */
+export const runAccessFor = (
+  appEnv: string,
+  value?: "off" | "invite" | "open",
+): "off" | "invite" | "open" =>
+  value ??
+  (appEnv === "staging" || appEnv === "production" ? "invite" : "open");
+
 function fixtureGuard(
-  value: { APP_ENV: string; QLOO_MODE?: string },
+  value: { APP_ENV: string; QLOO_MODE?: string; DATABASE_URL: string },
   ctx: z.RefinementCtx,
 ) {
+  if (!databaseTlsAllowed(value.APP_ENV, value.DATABASE_URL))
+    ctx.addIssue({
+      code: "custom",
+      path: ["DATABASE_URL"],
+      message: "Database TLS is required",
+    });
   if (
     value.APP_ENV === "production" &&
     (value.QLOO_MODE === "fixture" || value.QLOO_MODE === "synthetic")
@@ -34,6 +51,27 @@ function fixtureGuard(
       path: ["QLOO_MODE"],
       message: "Fixtures are forbidden in production",
     });
+  }
+}
+
+/** Explicit TLS only; reject duplicate/conflicting options rather than relying on driver precedence. */
+export function databaseTlsAllowed(
+  appEnv: string | undefined,
+  value: string,
+): boolean {
+  if (appEnv !== "production" && appEnv !== "staging") return true;
+  try {
+    const url = new URL(value);
+    const modes = url.searchParams.getAll("sslmode");
+    return (
+      ["postgres:", "postgresql:"].includes(url.protocol) &&
+      modes.length === 1 &&
+      ["require", "verify-ca", "verify-full"].includes(modes[0] ?? "") &&
+      !url.searchParams.has("ssl") &&
+      !url.searchParams.has("uselibpqcompat")
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -60,6 +98,21 @@ export const webEnvSchema = z
         SESSION_SECRET: z.string().min(32),
         SHARE_TOKEN_PEPPER: z.string().min(32),
         ADMIN_TOKEN: z.string().min(32).optional(),
+        TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+        // M10-A run admission (job-creation limits; see packages/db repositories/cost.ts).
+        MAX_ACTIVE_RUNS_PER_WORKSPACE: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .default(3),
+        MAX_WORKING_RUNS: z.coerce.number().int().min(1).max(100).default(6),
+        WORKSPACE_DAILY_RUNS: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .default(20),
       })
       .superRefine(fixtureGuard),
   );
@@ -79,6 +132,9 @@ export const workerEnvSchema = z
     QLOO_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(20),
     GLOBAL_DAILY_QLOO_CALLS: z.coerce.number().int().nonnegative().default(300),
     GLOBAL_DAILY_LLM_USD: z.coerce.number().nonnegative().default(15),
+    // M10-A spend ledger caps (USD). Every paid attempt reserves against all of them.
+    WORKSPACE_DAILY_LLM_USD: z.coerce.number().nonnegative().default(3),
+    EXPERIMENT_LLM_USD: z.coerce.number().nonnegative().default(5),
     LLM_PROVIDER: z.enum(["anthropic", "scripted"]).default("anthropic"),
     LLM_MODEL: z.string().min(1).default("claude-opus-5-5"),
     LLM_FALLBACK_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
@@ -87,6 +143,12 @@ export const workerEnvSchema = z
   })
   .superRefine(fixtureGuard)
   .superRefine((value, ctx) => {
+    if (value.APP_ENV === "production" && value.QLOO_MODE !== "live")
+      ctx.addIssue({
+        code: "custom",
+        path: ["QLOO_MODE"],
+        message: "Production requires live mode",
+      });
     // Scripted LLM output is test data; like fixtures it must never reach production users.
     if (value.APP_ENV === "production" && value.LLM_PROVIDER === "scripted") {
       ctx.addIssue({

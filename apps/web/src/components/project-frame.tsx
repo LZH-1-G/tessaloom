@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ActivityDock } from "./activity-dock";
 import { ModeBanner, ProjectRail, TopBar } from "./app-shell";
 import { useProject } from "./project-context";
+import { RunAccessNotice } from "./run-access";
 
 export function ProjectFrame({ children }: { children: React.ReactNode }) {
   const { projectId, overview, view, run, status, refresh, error } =
@@ -67,6 +68,9 @@ export function ProjectFrame({ children }: { children: React.ReactNode }) {
                 : error}
             </p>
           ) : null}
+          <div className="mb-4 empty:hidden print:hidden">
+            <RunAccessNotice compact />
+          </div>
           {children}
         </main>
         <div className="xl:sticky xl:top-4 xl:self-start">

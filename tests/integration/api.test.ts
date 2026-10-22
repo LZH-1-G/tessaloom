@@ -67,6 +67,12 @@ beforeAll(async () => {
     heartbeatMaxAgeMs: 30_000,
     sse: { pollMs: 10, pingMs: 30, maxDurationMs: 5_000 },
     dailyRunsPerWorkspace: 10,
+    admission: {
+      access: "open",
+      maxActivePerWorkspace: 50,
+      maxWorkingGlobal: 200,
+      dailyRunsPerWorkspace: 500,
+    },
   };
 });
 afterEach(async () => {

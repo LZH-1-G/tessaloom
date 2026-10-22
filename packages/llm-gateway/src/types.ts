@@ -151,3 +151,21 @@ export interface LlmInvocationRecorder {
     latencyMs: number;
   }): Promise<string>;
 }
+
+/**
+ * M10-A spend ledger hook. The gateway reserves an upper-bound cost before *every* provider
+ * attempt (first try, repair, truncation retry, fallback) and settles it with the actual cost
+ * afterwards; `null` = outcome unknown, so the full reservation stays charged.
+ */
+export interface SpendGuard {
+  reserve(input: {
+    ctx: LlmCallContext;
+    model: string;
+    upperBoundUsd: number;
+    maxOutputTokens?: number;
+  }): Promise<
+    | { ok: true; reservationId: string }
+    | { ok: false; code: string; message: string }
+  >;
+  settle(reservationId: string, actualUsd: number | null): Promise<void>;
+}

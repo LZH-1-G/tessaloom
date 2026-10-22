@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRedactor, pipeRedactedLines } from "./redact.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Trust the running interpreter's directory and fixed system executable paths,
@@ -16,7 +17,13 @@ export const CHILD_PATH = [
 ].join(path.delimiter);
 /** @typedef {Record<string, string | undefined>} Environment */
 /** @typedef {"web" | "worker"} ChildRole */
-const common = ["NODE_ENV", "APP_ENV", "DATABASE_URL", "LOG_LEVEL"];
+const common = [
+  "NODE_ENV",
+  "APP_ENV",
+  "DATABASE_URL",
+  "LOG_LEVEL",
+  "RUN_ACCESS",
+];
 const allowlists = {
   web: [
     ...common,
@@ -25,6 +32,11 @@ const allowlists = {
     "SESSION_SECRET",
     "SHARE_TOKEN_PEPPER",
     "ADMIN_TOKEN",
+    "TRUSTED_PROXY_HOPS",
+    // M10-A run admission limits.
+    "MAX_ACTIVE_RUNS_PER_WORKSPACE",
+    "MAX_WORKING_RUNS",
+    "WORKSPACE_DAILY_RUNS",
   ],
   worker: [
     ...common,
@@ -41,6 +53,9 @@ const allowlists = {
     "LLM_MODEL",
     "LLM_FALLBACK_MODEL",
     "LLM_MODE",
+    // M10-A spend ledger caps (GLOBAL_DAILY_* are matched by pattern below).
+    "WORKSPACE_DAILY_LLM_USD",
+    "EXPERIMENT_LLM_USD",
   ],
 };
 
@@ -71,6 +86,28 @@ export function validateSupervisorEnv(env) {
   ) {
     throw new Error("Invalid QLOO_MODE: fixtures are forbidden in production");
   }
+  if (env.APP_ENV === "production") {
+    if (env.QLOO_MODE !== "live") throw new Error("Invalid QLOO_MODE");
+    if (env.LLM_PROVIDER === "scripted")
+      throw new Error("Invalid LLM_PROVIDER");
+  }
+  if (env.APP_ENV === "production" || env.APP_ENV === "staging") {
+    let valid = false;
+    try {
+      const url = new URL(env.DATABASE_URL ?? "");
+      const modes = url.searchParams.getAll("sslmode");
+      valid =
+        ["postgres:", "postgresql:"].includes(url.protocol) &&
+        modes.length === 1 &&
+        ["require", "verify-ca", "verify-full"].includes(modes[0] ?? "") &&
+        !url.searchParams.has("ssl") &&
+        !url.searchParams.has("uselibpqcompat");
+    } catch {
+      /* Report variable names only. */
+    }
+    if (!valid) throw new Error("Invalid DATABASE_URL: TLS is required");
+  }
+  for (const role of ["web", "worker"]) childHeapLimit(role, env);
   for (const key of [
     "TL_WEB_UID",
     "TL_WEB_GID",
@@ -85,6 +122,15 @@ export function validateSupervisorEnv(env) {
     }
   }
   return role === "all" ? ["web", "worker"] : [/** @type {ChildRole} */ (role)];
+}
+
+/** @param {string} role @param {Environment} env */
+export function childHeapLimit(role, env) {
+  const key = `TL_${role.toUpperCase()}_MAX_OLD_SPACE_MB`;
+  const value = env[key] ?? (role === "web" ? "512" : "768");
+  if (!/^\d+$/.test(value) || Number(value) < 128 || Number(value) > 16_384)
+    throw new Error(`Invalid ${key}`);
+  return Number(value);
 }
 
 /** @param {ChildRole} role @param {Environment} env @param {(() => number) | undefined} getuid */
@@ -130,7 +176,7 @@ export function restartDelay(crashCount) {
 export function startSupervisor({
   env = process.env,
   spawnChild = spawn,
-  log = (entry) => console.log(JSON.stringify(entry)),
+  log: emitLog = (entry) => console.log(JSON.stringify(entry)),
   exit = (code) => process.exit(code),
   now = Date.now,
   getuid = process.getuid,
@@ -149,6 +195,21 @@ export function startSupervisor({
   },
 } = {}) {
   const roles = validateSupervisorEnv(env);
+  const redact = createRedactor(env);
+  /** @param {unknown} value @returns {unknown} */
+  const scrub = (value) =>
+    typeof value === "string"
+      ? redact(value)
+      : Array.isArray(value)
+        ? value.map(scrub)
+        : value && typeof value === "object"
+          ? Object.fromEntries(
+              Object.entries(value).map(([key, field]) => [key, scrub(field)]),
+            )
+          : value;
+  /** @param {Record<string, unknown>} entry */
+  const log = (entry) =>
+    emitLog(/** @type {Record<string, unknown>} */ (scrub(entry)));
   // Validate every selected identity before spawning any child, outside the
   // restart handler. Misconfiguration must never launch a root child.
   const identities = new Map(
@@ -240,14 +301,27 @@ export function startSupervisor({
     }
 
     try {
-      child = spawnChild(process.execPath, [file], {
-        cwd: root,
-        env: childEnv,
-        stdio: "inherit",
-        detached: true,
-        ...identities.get(role),
-      });
+      child = spawnChild(
+        process.execPath,
+        [`--max-old-space-size=${childHeapLimit(role, env)}`, file],
+        {
+          cwd: root,
+          env: childEnv,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+          ...identities.get(role),
+        },
+      );
       children.set(role, child);
+      for (const [stream, output] of /** @type {const} */ ([
+        ["stdout", child.stdout],
+        ["stderr", child.stderr],
+      ]))
+        pipeRedactedLines(
+          output,
+          (message) => log({ event: "child_log", role, stream, message }),
+          redact,
+        );
       child.once("error", stopped);
       child.once("exit", stopped);
     } catch {

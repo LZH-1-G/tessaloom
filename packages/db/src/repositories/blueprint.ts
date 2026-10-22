@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import type { RunAdmission } from "./cost";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   BlueprintContent,
   DEFAULT_BUDGETS,
@@ -121,6 +122,7 @@ async function queueComposition(
     runConfig: RunConfig;
     summary: string;
     payload: Record<string, unknown>;
+    admission?: RunAdmission;
   },
 ) {
   const run = await createRun(tx, {
@@ -129,6 +131,7 @@ async function queueComposition(
     budget: DEFAULT_BUDGETS.COMPOSITION,
     config: RunConfig.parse(input.runConfig),
     blueprintId: input.blueprintId,
+    admission: input.admission,
   });
   await appendRunEvents(tx, run.id, [
     {
@@ -154,6 +157,7 @@ export async function startComposition(
     hypothesisIds: string[];
     format: "event" | "series" | "installation";
     runConfig: RunConfig;
+    admission?: RunAdmission;
   },
 ) {
   const ids = [...new Set(input.hypothesisIds)];
@@ -188,6 +192,7 @@ export async function startComposition(
       experimentId: experiment.id,
       blueprintId: blueprint.id,
       runConfig: input.runConfig,
+      admission: input.admission,
       summary: "Blueprint composition started",
       payload: { blueprintId: blueprint.id, hypotheses: ids.length },
     });
@@ -205,6 +210,7 @@ export async function startRecompose(
     section: string;
     instruction: string | null;
     runConfig: RunConfig;
+    admission?: RunAdmission;
   },
 ) {
   return withPgTx(handle, async (tx, raw) => {
@@ -227,6 +233,7 @@ export async function startRecompose(
       experimentId: bp.experimentId,
       blueprintId: bp.id,
       runConfig: input.runConfig,
+      admission: input.admission,
       summary: `Recomposing the ${input.section} section`,
       payload: { blueprintId: bp.id, section: input.section },
     });
@@ -813,6 +820,69 @@ export async function revokeWorkspaceShareLink(
 export async function sharedView(db: Executor, tokenHash: string) {
   const link = await findActiveShareLink(db, tokenHash);
   if (!link) return null;
+  return sharedViewOfLink(db, link);
+}
+
+/** Featured, active share links listed publicly as read-only demo samples (M10-A). */
+export async function listSamples(db: Executor, now = new Date()) {
+  return db
+    .select({
+      id: shareLinks.id,
+      scope: shareLinks.scope,
+      projectName: projects.name,
+      useCase: projects.useCase,
+      createdAt: shareLinks.createdAt,
+    })
+    .from(shareLinks)
+    .innerJoin(projects, eq(projects.id, shareLinks.projectId))
+    .where(
+      and(
+        eq(shareLinks.featured, true),
+        isNull(shareLinks.revokedAt),
+        gt(shareLinks.expiresAt, now),
+      ),
+    )
+    .orderBy(desc(shareLinks.createdAt));
+}
+
+/** A sample's read-only payload: stored data only, never a run or an LLM call. */
+export async function sampleView(
+  db: Executor,
+  linkId: string,
+  now = new Date(),
+) {
+  const [link] = await db
+    .select()
+    .from(shareLinks)
+    .where(
+      and(
+        eq(shareLinks.id, linkId),
+        eq(shareLinks.featured, true),
+        isNull(shareLinks.revokedAt),
+        gt(shareLinks.expiresAt, now),
+      ),
+    );
+  return link ? sharedViewOfLink(db, link) : null;
+}
+
+/** Operator action (admin CLI): list or unlist a share link as a public sample. */
+export async function setSampleFeatured(
+  db: Executor,
+  linkId: string,
+  featured: boolean,
+) {
+  const rows = await db
+    .update(shareLinks)
+    .set({ featured })
+    .where(eq(shareLinks.id, linkId))
+    .returning({ id: shareLinks.id });
+  return rows.length > 0;
+}
+
+async function sharedViewOfLink(
+  db: Executor,
+  link: typeof shareLinks.$inferSelect,
+) {
   await db
     .update(shareLinks)
     .set({ viewCount: sql`${shareLinks.viewCount} + 1` })

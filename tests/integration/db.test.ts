@@ -232,7 +232,8 @@ describe("migrations and schema", () => {
     const result = await db.execute<{ count: string }>(
       sql`SELECT count(*)::text AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%'`,
     );
-    expect(Number(result.rows[0]!.count)).toBe(28);
+    // 28 documented tables + M10-A demo_access_grants and llm_spend_reservations.
+    expect(Number(result.rows[0]!.count)).toBe(30);
   });
 });
 

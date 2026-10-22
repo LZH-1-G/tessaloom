@@ -1,9 +1,11 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 import {
   expectAccessible,
   expectFixtureBanner,
   runToSelection,
   snap,
+  expect,
+  test,
 } from "./helpers";
 
 test("E2E-07 + E2E-08: seed swap → H4 → comparison with entered/exited and stance changes; adjust weights → rescore-only branch", async ({

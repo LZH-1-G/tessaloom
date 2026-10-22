@@ -1,4 +1,4 @@
-import { parseWorkerEnv } from "@tessaloom/config/env";
+import { parseWorkerEnv, runAccessFor } from "@tessaloom/config/env";
 import {
   QUEUES,
   beatWorker,
@@ -14,7 +14,12 @@ import {
   type QlooReadiness,
 } from "@tessaloom/qloo-adapter";
 import { buildPorts, buildRunConfig, createQlooAdapter } from "./compose";
-import { createDbLlmRecorder, createLlmGateway, effectiveModels } from "./llm";
+import {
+  createDbLlmRecorder,
+  createLlmGateway,
+  createSpendGuard,
+  effectiveModels,
+} from "./llm";
 import {
   expirePausedRuns,
   recoverStalledRuns,
@@ -51,7 +56,18 @@ let stopping = false;
 let queuesStarted = false;
 let lastHeartbeatError: string | null = null;
 
-const gateway = createLlmGateway(env, createDbLlmRecorder(handle.db));
+// Every provider attempt goes through the spend ledger (M10-A public demo cost safety).
+const gateway = createLlmGateway(
+  env,
+  createDbLlmRecorder(handle.db),
+  undefined,
+  createSpendGuard(handle, {
+    access: runAccessFor(env.APP_ENV, env.RUN_ACCESS),
+    globalDailyUsd: env.GLOBAL_DAILY_LLM_USD,
+    workspaceDailyUsd: env.WORKSPACE_DAILY_LLM_USD,
+    experimentUsd: env.EXPERIMENT_LLM_USD,
+  }),
+);
 const harnessVersion = () =>
   env.QLOO_MODE === "fixture" || env.QLOO_MODE === "synthetic"
     ? env.QLOO_MODE

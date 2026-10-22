@@ -19,6 +19,9 @@ import {
   cancelRun,
   confirmRun,
   consumeWithinLimit,
+  hashDemoCode,
+  redeemDemoGrant,
+  workspaceRunAccess,
   createBriefVersion,
   createProject,
   createWorkspace,
@@ -116,7 +119,10 @@ export const getWorkspace = handle(async (s: Services, req: Request) => {
       )
     : null;
   if (!workspace) {
-    s.limiter.check(`ws-create:${clientIpHash(req, s.pepper)}`, 20);
+    s.limiter.check(
+      `ws-create:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      20,
+    );
     const secret = randomToken();
     workspace = await createWorkspace(s.handle.db, {
       secretHash: hashWorkspaceSecret(secret, s.sessionSecret),
@@ -154,7 +160,10 @@ export const startExperiment = handle(
     const workspace = await requireWorkspace(s, req);
     const projectId = Uuid.parse(params.projectId);
     s.limiter.check(`start:ws:${workspace.id}`, 6);
-    s.limiter.check(`start:ip:${clientIpHash(req, s.pepper)}`, 20);
+    s.limiter.check(
+      `start:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      20,
+    );
     const body = await readJson(req, StartExperimentRequest);
     const key = req.headers.get("idempotency-key");
     const requestHash = canonicalHash({ projectId, body });
@@ -200,6 +209,7 @@ export const startExperiment = handle(
       scoringWeights: body.scoringWeights,
       mode,
       runConfig: config,
+      admission: s.admission,
     });
     if (key)
       await storeIdempotentResponse(s.handle.db, {
@@ -249,6 +259,7 @@ export const postConfirmation = mutation(async (s, workspaceId, runId, req) =>
     workspaceId,
     runId,
     await readJson(req, z.unknown()),
+    s.admission,
   ),
 );
 // POST /api/v1/runs/:runId/cancel
@@ -257,7 +268,7 @@ export const postCancel = mutation(async (s, workspaceId, runId) =>
 );
 // POST /api/v1/runs/:runId/retry
 export const postRetry = mutation(async (s, workspaceId, runId) =>
-  retryRun(s.handle, await s.boss(), workspaceId, runId),
+  retryRun(s.handle, await s.boss(), workspaceId, runId, s.admission),
 );
 
 // GET /api/v1/runs/:runId/events — SSE with Last-Event-ID resume (API_CONTRACTS §10).
@@ -585,7 +596,10 @@ export const postBranch = handle(
     checkCsrf(req);
     const workspace = await requireWorkspace(s, req);
     s.limiter.check(`start:ws:${workspace.id}`, 6);
-    s.limiter.check(`start:ip:${clientIpHash(req, s.pepper)}`, 20);
+    s.limiter.check(
+      `start:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+      20,
+    );
     const body = await readJson(req, BranchRequest);
     const experimentId = Uuid.parse(params.experimentId);
     const { config } = await liveWorker(s);
@@ -615,6 +629,7 @@ export const postBranch = handle(
       mode: body.mode,
       label: body.label ?? null,
       runConfig: config,
+      admission: s.admission,
     });
     return json(result, 202);
   },
@@ -750,3 +765,41 @@ export const getInvocationTrace = handle(
     return json(trace);
   },
 );
+
+// --- M10-A demo access (paid AI runs need a grant when RUN_ACCESS=invite) ---
+
+const RedeemRequest = z.object({ code: z.string().trim().min(16).max(128) });
+
+// GET /api/v1/workspace/access — whether this workspace may start AI runs, and why not.
+export const getRunAccess = handle(async (s: Services, req: Request) => {
+  const workspace = await requireWorkspace(s, req);
+  return json(
+    await workspaceRunAccess(s.handle.db, workspace.id, s.admission.access),
+  );
+});
+
+// POST /api/v1/workspace/access { code } — redeem a demo access code. Brute force is limited
+// per IP and per workspace; unknown, revoked, and expired codes get the same answer.
+export const postRunAccess = handle(async (s: Services, req: Request) => {
+  checkCsrf(req);
+  const workspace = await requireWorkspace(s, req);
+  s.limiter.check(
+    `access:ip:${clientIpHash(req, s.pepper, s.trustedProxyHops)}`,
+    10,
+  );
+  s.limiter.check(`access:ws:${workspace.id}`, 10);
+  const { code } = await readJson(req, RedeemRequest);
+  const ok = await redeemDemoGrant(
+    s.handle.db,
+    workspace.id,
+    hashDemoCode(code, s.pepper),
+  );
+  if (!ok)
+    throw new HttpError(
+      "VALIDATION_FAILED",
+      "This access code is not valid or no longer active.",
+    );
+  return json(
+    await workspaceRunAccess(s.handle.db, workspace.id, s.admission.access),
+  );
+});

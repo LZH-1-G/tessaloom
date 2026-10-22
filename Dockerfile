@@ -24,8 +24,11 @@ COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/worker/dist/main.js apps/worker/dist/main.js
 # Release / pre-deploy step: node packages/db/dist/migrate.mjs (DATABASE_URL_MIGRATOR).
 COPY --from=build /app/packages/db/dist/migrate.mjs packages/db/dist/migrate.mjs
+# Operator CLI (demo access grants, samples, spend): node packages/db/dist/admin.mjs
+COPY --from=build /app/packages/db/dist/admin.mjs packages/db/dist/admin.mjs
 COPY --from=build /app/packages/db/migrations packages/db/migrations
 COPY scripts/start.mjs scripts/start.mjs
+COPY scripts/redact.mjs scripts/redact.mjs
 ENV NODE_ENV=production APP_ENV=production TL_ROLE=all PORT=3000 HOSTNAME=0.0.0.0 \
     QLOO_HOME=/home/tl-worker/.qloo TL_WEB_UID=10001 TL_WORKER_UID=10002 \
     QLOO_BASE_URL=https://hackathon.api.qloo.com QLOO_TRUSTED_BASE_URL=https://hackathon.api.qloo.com \

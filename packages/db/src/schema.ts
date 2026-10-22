@@ -135,8 +135,33 @@ export const workspaces = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // M10-A: a redeemed demo access grant (paid runs need one when RUN_ACCESS=invite).
+    demoGrantId: uuid("demo_grant_id").references(() => demoAccessGrants.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [index("workspaces_last_seen_idx").on(t.lastSeenAt)],
+);
+
+// M10-A: revocable demo access for authorized testers and judges. Only a peppered hash of the
+// access code is stored (like share tokens); spend and run caps are enforced by the ledger.
+export const demoAccessGrants = pgTable(
+  "demo_access_grants",
+  {
+    id: uuid("id").primaryKey(),
+    label: text("label").notNull(),
+    codeHash: hash64("code_hash").notNull().unique(),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    maxRuns: integer("max_runs").notNull(),
+    maxLlmUsdMicros: bigint("max_llm_usd_micros", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    check("demo_access_grants_max_runs", sql`${t.maxRuns} >= 0`),
+    check("demo_access_grants_max_usd", sql`${t.maxLlmUsdMicros} >= 0`),
+    check("demo_access_grants_label", sql`length(${t.label}) BETWEEN 1 AND 80`),
+  ],
 );
 
 // 4.2 (current_brief_version_id FK is added as DEFERRABLE in the custom migration)
@@ -953,6 +978,8 @@ export const shareLinks = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     viewCount: integer("view_count").notNull().default(0),
+    // M10-A: a featured project link is listed publicly as a read-only demo sample.
+    featured: boolean("featured").notNull().default(false),
   },
   (t) => [index("share_links_project_idx").on(t.projectId)],
 );
@@ -969,8 +996,50 @@ export const usageCounters = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.scope, t.scopeId, t.metric, t.day] }),
-    check("usage_counters_scope", sql`${t.scope} IN ('global','workspace')`),
-    check("usage_counters_day", sql`${t.day} ~ '^\\d{4}-\\d{2}-\\d{2}$'`),
+    check(
+      "usage_counters_scope",
+      sql`${t.scope} IN ('global','workspace','experiment','run','grant')`,
+    ),
+    // YYYY-MM-DD for daily counters; 'total' for lifetime caps (experiment, run, grant).
+    check(
+      "usage_counters_day",
+      sql`${t.day} ~ '^\\d{4}-\\d{2}-\\d{2}$' OR ${t.day} = 'total'`,
+    ),
+  ],
+);
+
+// M10-A: every paid LLM attempt reserves its upper-bound cost here *before* the provider call,
+// in the same transaction as the cap checks. Settlement replaces the reservation with the
+// actual cost; an unknown outcome keeps the full reservation (fail-closed). Crashes, retries,
+// cancellation, and recovery therefore cannot spend outside the ledger.
+export const llmSpendReservations = pgTable(
+  "llm_spend_reservations",
+  {
+    id: uuid("id").primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").notNull(),
+    experimentId: uuid("experiment_id").notNull(),
+    grantId: uuid("grant_id"),
+    model: text("model").notNull(),
+    day: text("day").notNull(),
+    reservedMicros: bigint("reserved_micros", { mode: "number" }).notNull(),
+    actualMicros: bigint("actual_micros", { mode: "number" }),
+    status: text("status").notNull().default("RESERVED"),
+    createdAt: createdAt(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("llm_spend_reservations_run_idx").on(t.runId),
+    check(
+      "llm_spend_reservations_status",
+      sql`${t.status} IN ('RESERVED','SETTLED','UNKNOWN')`,
+    ),
+    check(
+      "llm_spend_reservations_amounts",
+      sql`${t.reservedMicros} >= 0 AND (${t.actualMicros} IS NULL OR ${t.actualMicros} >= 0)`,
+    ),
   ],
 );
 

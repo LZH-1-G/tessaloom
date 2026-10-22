@@ -20,7 +20,8 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "check": "drizzle-kit check",
-    "build": "esbuild src/migrate-cli.ts --bundle --platform=node --target=node22 --format=esm --external:pg-native --outfile=dist/migrate.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "migrate": "node dist/migrate.mjs"
+    "build": "esbuild src/migrate-cli.ts --bundle --platform=node --target=node22 --format=esm --external:pg-native --outfile=dist/migrate.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/admin-cli.ts --bundle --platform=node --target=node22 --format=esm --external:pg-native --outfile=dist/admin.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "migrate": "node dist/migrate.mjs",
+    "admin": "node dist/admin.mjs"
   }
 }

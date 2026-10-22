@@ -1,10 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 import {
   expectAccessible,
   expectFixtureBanner,
   runToSelection,
   snap,
+  watchCsp,
+  expect,
+  test,
 } from "./helpers";
 
 /** Gate H3 → select the top card → "Compose blueprint" records the selection and composes. */
@@ -176,6 +179,7 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   // A visitor with no workspace sees the blueprint and nothing that changes it.
   const visitor = await browser.newContext();
   const shared = await visitor.newPage();
+  watchCsp(shared);
   const res = await shared.goto(url);
   expect(res?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
   expect(res?.headers()["referrer-policy"]).toBe("no-referrer");

@@ -1,3 +1,4 @@
+import type { RunAdmission } from "./cost";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   ClaimParams,
@@ -146,6 +147,7 @@ export async function createCounterfactualBranch(
     mode: "hold_hypotheses" | "regenerate";
     label?: string | null;
     runConfig: RunConfig;
+    admission?: RunAdmission;
   },
 ) {
   if (input.mode !== "hold_hypotheses")
@@ -214,6 +216,7 @@ export async function createCounterfactualBranch(
       kind: "COUNTERFACTUAL",
       budget: DEFAULT_BUDGETS.COUNTERFACTUAL,
       config,
+      admission: input.admission,
     });
     await materializeBranch(tx, {
       parentExperimentId: src.view.experiment.id,

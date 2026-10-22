@@ -410,9 +410,13 @@ export function ActivityDock({
               }
             />
           </div>
+          {/* Focusable so keyboard users can scroll a long timeline (axe scrollable-region-focusable). */}
           <ol
             ref={listRef}
-            className="min-h-24 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm"
+            // A scrollable region must be keyboard-reachable (WCAG 2.1.1).
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
+            className="min-h-24 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
             aria-label="Run timeline"
           >
             {groups.map((g, gi) => (

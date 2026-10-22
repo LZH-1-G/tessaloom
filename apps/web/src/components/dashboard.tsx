@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { api, ApiRequestError } from "@/lib/api";
 import type { RunView, SystemStatus } from "@/lib/types";
 import { ModeBanner, TopBar } from "./app-shell";
+import { DemoSamples, RunAccessNotice } from "./run-access";
 import { Button, Card, EmptyState, Field, inputClass, Skeleton } from "./ui";
 
 interface ProjectSummary {
@@ -108,70 +109,76 @@ export function Dashboard() {
           </ol>
         </section>
 
+        <div className="mt-6">
+          <RunAccessNotice />
+        </div>
         <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section aria-labelledby="projects-heading">
-            <h2 id="projects-heading" className="mb-4 font-serif text-2xl">
-              Your projects
-            </h2>
-            {projects === null ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Skeleton className="h-32" />
-                <Skeleton className="h-32" />
-              </div>
-            ) : projects.length === 0 ? (
-              <EmptyState title="An empty loom.">
-                Your experiments will appear here. Start a project to weave your
-                first brief.
-              </EmptyState>
-            ) : (
-              <ul className="grid gap-4 sm:grid-cols-2">
-                {projects.map((p) => {
-                  const run = p.latestExperiment?.latestRun;
-                  const needsInput = run?.state.startsWith("AWAITING_");
-                  return (
-                    <li key={p.id}>
-                      <Link
-                        href={`/projects/${p.id}/brief`}
-                        className="group block h-full rounded-lg border border-border bg-card p-5 transition-colors hover:border-warp"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-serif text-xl">{p.name}</p>
-                          <ArrowRight
-                            aria-hidden
-                            className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                          />
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {USE_CASES.find(([v]) => v === p.useCase)?.[1]} ·{" "}
-                          {p.briefCount} brief version
-                          {p.briefCount === 1 ? "" : "s"}
-                        </p>
-                        <p className="mt-3 text-xs">
-                          {run ? (
-                            <span
-                              className={
-                                needsInput
-                                  ? "rounded bg-saffron-tint px-1.5 py-0.5 font-semibold"
-                                  : "font-mono uppercase text-muted-foreground"
-                              }
-                            >
-                              {needsInput
-                                ? "Needs your input"
-                                : run.state.replace(/_/g, " ").toLowerCase()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              No experiment yet
-                            </span>
-                          )}
-                        </p>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <div className="min-w-0 space-y-10">
+            <DemoSamples />
+            <section aria-labelledby="projects-heading">
+              <h2 id="projects-heading" className="mb-4 font-serif text-2xl">
+                Your projects
+              </h2>
+              {projects === null ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                </div>
+              ) : projects.length === 0 ? (
+                <EmptyState title="An empty loom.">
+                  Your experiments will appear here. Start a project to weave
+                  your first brief.
+                </EmptyState>
+              ) : (
+                <ul className="grid gap-4 sm:grid-cols-2">
+                  {projects.map((p) => {
+                    const run = p.latestExperiment?.latestRun;
+                    const needsInput = run?.state.startsWith("AWAITING_");
+                    return (
+                      <li key={p.id}>
+                        <Link
+                          href={`/projects/${p.id}/brief`}
+                          className="group block h-full rounded-lg border border-border bg-card p-5 transition-colors hover:border-warp"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-serif text-xl">{p.name}</p>
+                            <ArrowRight
+                              aria-hidden
+                              className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                            />
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {USE_CASES.find(([v]) => v === p.useCase)?.[1]} ·{" "}
+                            {p.briefCount} brief version
+                            {p.briefCount === 1 ? "" : "s"}
+                          </p>
+                          <p className="mt-3 text-xs">
+                            {run ? (
+                              <span
+                                className={
+                                  needsInput
+                                    ? "rounded bg-saffron-tint px-1.5 py-0.5 font-semibold"
+                                    : "font-mono uppercase text-muted-foreground"
+                                }
+                              >
+                                {needsInput
+                                  ? "Needs your input"
+                                  : run.state.replace(/_/g, " ").toLowerCase()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                No experiment yet
+                              </span>
+                            )}
+                          </p>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
 
           <Card className="h-fit p-5">
             <h2 className="font-serif text-xl">Start a new project</h2>

@@ -86,6 +86,9 @@ jobs:
       - run: pnpm build
       - run: pnpm test:runtime
       - run: pnpm test:e2e
+      - run: pnpm test:e2e
+        env:
+          INVITE_E2E: "1"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

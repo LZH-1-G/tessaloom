@@ -40,7 +40,7 @@ const inspectScript = `
     try {
       const args = fs.readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\\0");
       const command = args.join(" ");
-      if (args[0]?.startsWith("next-server") || (args[0]?.includes("node") && args[1]?.endsWith("apps/worker/dist/main.js"))) {
+      if (args[0]?.startsWith("next-server") || (args[0]?.includes("node") && args.some(arg => arg.endsWith("apps/worker/dist/main.js")))) {
         const status = fs.readFileSync("/proc/" + pid + "/status", "utf8");
         const uid = Number(status.match(/^Uid:\\s+(\\d+)/m)[1]);
         if (uid !== process.getuid()) continue;
@@ -114,6 +114,8 @@ try {
     "--rm",
     "--network",
     network,
+    "-e",
+    "APP_ENV=test",
     "-e",
     `DATABASE_URL_MIGRATOR=postgresql://tessaloom:local-development-only@${db}:5432/tessaloom`,
     image,
@@ -336,6 +338,91 @@ try {
   );
   assert.equal(mode, "fixture");
   log("run_queue_roundtrip_passed", { runId, state: finalRun.state });
+  // Restore drill stays inside this run's disposable database container.
+  docker(
+    "exec",
+    db,
+    "pg_dump",
+    "-U",
+    "tessaloom",
+    "-d",
+    "tessaloom",
+    "-Fc",
+    "-f",
+    "/tmp/m10-backup.dump",
+  );
+  docker("exec", db, "createdb", "-U", "tessaloom", "tessaloom_restore");
+  docker(
+    "exec",
+    db,
+    "pg_restore",
+    "-U",
+    "tessaloom",
+    "--exit-on-error",
+    "--no-owner",
+    "-d",
+    "tessaloom_restore",
+    "/tmp/m10-backup.dump",
+  );
+  const restored = docker(
+    "exec",
+    db,
+    "psql",
+    "-U",
+    "tessaloom",
+    "-d",
+    "tessaloom_restore",
+    "-tAc",
+    `SELECT state FROM agent_runs WHERE id = '${runId}'`,
+  );
+  assert.equal(restored, finalRun.state);
+  assert.equal(
+    docker(
+      "exec",
+      db,
+      "psql",
+      "-U",
+      "tessaloom",
+      "-d",
+      "tessaloom_restore",
+      "-tAc",
+      "SELECT count(*) FROM drizzle.__drizzle_migrations",
+    ),
+    "8",
+  );
+  log("local_backup_restore_passed");
+  // Exercise the packaged supervisor with a real OS child (same UID/env/pipe controls).
+  // Node's child stdio uses sockets; reopening /proc/<pid>/fd/1 cannot inject into them.
+  const redactionOutput = docker(
+    "exec",
+    app,
+    "node",
+    "--input-type=module",
+    "-e",
+    `
+    import { spawn } from 'node:child_process';
+    import { startSupervisor } from './scripts/start.mjs';
+    const script = "process.stdout.write(process.env.QLOO_API_KEY.slice(0, 8)); setTimeout(() => { process.stdout.write(process.env.QLOO_API_KEY.slice(8) + String.fromCharCode(10)); console.error('Bearer smoke-private-token'); }, 10); setInterval(() => {}, 1000);";
+    const seen = new Set();
+    const supervisor = startSupervisor({
+      env: { ...process.env, TL_ROLE: 'worker' },
+      spawnChild: (exe, args, options) => spawn(exe, [args[0], '-e', script], options),
+      log: entry => {
+        console.log(JSON.stringify(entry));
+        if (entry.event === 'child_log') seen.add(entry.stream);
+        if (seen.size === 2) queueMicrotask(() => supervisor.shutdown());
+      },
+    });
+    setTimeout(() => supervisor.shutdown('SIGTERM', 1), 5000).unref();
+  `,
+  );
+  assert(!redactionOutput.includes("m0-qloo-secret-sentinel"));
+  assert(!redactionOutput.includes("smoke-private-token"));
+  assert(
+    redactionOutput.includes("[REDACTED]"),
+    "Redaction path was not exercised",
+  );
+  log("supervised_log_redaction_passed");
   docker(
     "exec",
     "--user",
@@ -378,6 +465,16 @@ try {
   ]) {
     assert(!logs.includes(sentinel), "Secret value leaked to logs");
   }
+  docker("stop", "--time", "10", db);
+  await until(
+    async () => (await fetch(`${url}/api/health/ready`)).status === 503,
+  );
+  assert.equal((await fetch(`${url}/api/health`)).status, 200);
+  docker("start", db);
+  await until(
+    async () => (await fetch(`${url}/api/health/ready`)).status === 200,
+  );
+  log("readiness_outage_recovery_passed");
   docker("stop", "--time", "30", app);
   assert.equal(docker("inspect", "--format", "{{.State.ExitCode}}", app), "0");
   log("graceful_shutdown_passed");

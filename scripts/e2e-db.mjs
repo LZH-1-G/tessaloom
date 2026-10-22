@@ -8,6 +8,8 @@ import pg from "pg";
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
 const target = new URL(url);
+if (!["127.0.0.1", "localhost", "[::1]"].includes(target.hostname))
+  throw new Error("E2E setup is restricted to local PostgreSQL");
 const name = target.pathname.slice(1);
 if (!/^tessaloom_e2e[a-z0-9_]*$/.test(name))
   throw new Error(

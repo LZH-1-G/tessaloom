@@ -1,5 +1,27 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { createHash } from "node:crypto";
+import {
+  test as base,
+  expect,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
+
+/**
+ * Each test is one anonymous visitor. Behind the production proxy every visitor has its own
+ * client address (X-Forwarded-For); without this, all E2E browsers share one per-IP bucket and
+ * the API's abuse limits (20 workspace creations/min per IP, kept as-is) refuse the suite's own
+ * bursts. The address is a stable TEST-NET-3 value derived from the test id.
+ */
+export const test = base.extend({
+  // Playwright reads fixture dependencies from this destructuring pattern; `{}` = none.
+  // eslint-disable-next-line no-empty-pattern
+  extraHTTPHeaders: async ({}, use, info) => {
+    const n = createHash("sha256").update(info.testId).digest()[0]! % 250;
+    await use({ "x-forwarded-for": `203.0.113.${n + 1}` });
+  },
+});
+export { expect };
 
 /** TEST_PLAN §10: the FIXTURE banner must be visible in every E2E test. */
 export async function expectFixtureBanner(page: Page) {
@@ -8,8 +30,33 @@ export async function expectFixtureBanner(page: Page) {
   );
 }
 
-/** A11Y-01: zero serious or critical axe violations. */
+/**
+ * SECURITY §7: the CSP must not block anything the app needs. Browsers report violations
+ * on the console ("Refused to …" / "Content Security Policy"); any such report fails the
+ * test at its next accessibility check.
+ */
+const cspReports = new WeakMap<Page, string[]>();
+export function watchCsp(page: Page) {
+  if (cspReports.has(page)) return;
+  const reports: string[] = [];
+  cspReports.set(page, reports);
+  page.on("console", (message) => {
+    const text = message.text();
+    if (
+      /Content Security Policy|Refused to (execute|load|apply|connect|frame)/i.test(
+        text,
+      )
+    )
+      reports.push(text);
+  });
+}
+export function expectNoCspViolations(page: Page) {
+  expect(cspReports.get(page) ?? []).toEqual([]);
+}
+
+/** A11Y-01: zero serious or critical axe violations (and no CSP violations so far). */
 export async function expectAccessible(page: Page, include?: string) {
+  expectNoCspViolations(page);
   // Let colour transitions (150 ms) settle so contrast is measured on final colours.
   await page.waitForTimeout(400);
   let builder = new AxeBuilder({ page }).exclude(".react-flow__minimap");
@@ -34,6 +81,7 @@ export async function snap(page: Page, info: TestInfo, name: string) {
 }
 
 export async function createProject(page: Page, name: string) {
+  watchCsp(page);
   await page.goto("/");
   await expectFixtureBanner(page);
   await page.getByLabel("Project name").fill(name);
