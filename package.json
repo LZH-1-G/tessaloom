@@ -23,7 +23,8 @@
     "check:bundle": "node scripts/check-bundle.mjs",
     "db:generate": "pnpm --filter @tessaloom/db generate",
     "db:check": "pnpm --filter @tessaloom/db check",
-    "db:migrate": "pnpm --filter @tessaloom/db build && pnpm --filter @tessaloom/db migrate"
+    "db:migrate": "pnpm --filter @tessaloom/db build && pnpm --filter @tessaloom/db migrate",
+    "test:deployment": "node deploy/smoke.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.131.0",

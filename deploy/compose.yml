@@ -1,0 +1,177 @@
+# Preparation defaults bind only to loopback. Public exposure requires owner approval.
+name: tessaloom
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+x-app: &app
+  image: ${APP_IMAGE:?Set APP_IMAGE to a verified local image or immutable digest}
+  init: false # The image already uses tini.
+  restart: unless-stopped
+  stop_grace_period: 35s
+  mem_limit: 2g
+  memswap_limit: 2g
+  pids_limit: 256
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+  networks: [backend, outbound]
+  configs:
+    - source: db_ca
+      target: /run/tessaloom/db-ca.crt
+services:
+  postgres:
+    image: postgres:16-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
+    restart: unless-stopped
+    stop_grace_period: 60s
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 128
+    shm_size: 128m
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    networks: [backend]
+    environment:
+      POSTGRES_DB: tessaloom
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    entrypoint: [bash, /etc/tessaloom/postgres-entrypoint.sh]
+    secrets: [postgres_password, app_password, migrator_password, db_key]
+    configs:
+      - source: db_cert
+        target: /etc/tessaloom/db.crt
+      - source: pg_entrypoint
+        target: /etc/tessaloom/postgres-entrypoint.sh
+      - source: pg_init
+        target: /etc/tessaloom/postgres-init.sh
+      - source: pg_hba
+        target: /etc/tessaloom/pg_hba.conf
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    tmpfs: [/run/postgresql, /docker-entrypoint-initdb.d]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test "$$(psql -U postgres -d tessaloom -Atc "SELECT shobj_description(oid, 'pg_database') = 'tessaloom-bootstrap-v1-complete' FROM pg_database WHERE datname='tessaloom'")" = t
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+  migrate:
+    <<: *app
+    profiles: [release]
+    restart: "no"
+    mem_limit: 384m
+    memswap_limit: 384m
+    networks: [backend]
+    command: [node, deploy/app-entrypoint.mjs, migrate]
+    environment:
+      APP_ENV: production
+    secrets: [migrator_password]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  app:
+    <<: *app
+    command: [node, deploy/app-entrypoint.mjs]
+    environment:
+      APP_ENV: production
+      NODE_ENV: production
+      TL_ROLE: all
+      RUN_ACCESS: ${RUN_ACCESS:-off}
+      TRUSTED_PROXY_HOPS: "1"
+      GLOBAL_DAILY_LLM_USD: ${GLOBAL_DAILY_LLM_USD:-0}
+      GLOBAL_DAILY_QLOO_CALLS: ${GLOBAL_DAILY_QLOO_CALLS:-0}
+      MAX_WORKING_RUNS: "2"
+      TL_WEB_MAX_OLD_SPACE_MB: "512"
+      TL_WORKER_MAX_OLD_SPACE_MB: "768"
+      QLOO_MODE: live
+      LLM_PROVIDER: anthropic
+      QLOO_RAW_RETENTION: "off"
+      LOG_LEVEL: info
+    secrets:
+      [
+        app_password,
+        session_secret,
+        share_token_pepper,
+        qloo_key,
+        anthropic_key,
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://127.0.0.1:3000/api/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+  proxy:
+    image: caddy:2.11.7-alpine@sha256:24ec7b05bc532c7bb57f727030c5056e257ff7138b4b50460306819ff79362bd
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    networks: [backend, outbound]
+    environment:
+      TLS_DOMAIN: ${TLS_DOMAIN:?Set the reviewed DNS hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set the certificate contact email}
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+      - "${BIND_IP:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    configs:
+      - source: caddy
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+networks:
+  backend:
+    internal: true
+  outbound: {}
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+configs:
+  caddy:
+    file: ./Caddyfile
+  db_ca:
+    file: ${PRIVATE_DIR:?Set an absolute private configuration directory}/db-ca.crt
+  db_cert:
+    file: ${PRIVATE_DIR}/db.crt
+  pg_entrypoint:
+    file: ./postgres-entrypoint.sh
+  pg_init:
+    file: ./postgres-init.sh
+  pg_hba:
+    file: ./pg_hba.conf
+secrets:
+  postgres_password:
+    file: ${PRIVATE_DIR}/postgres_password
+  app_password:
+    file: ${PRIVATE_DIR}/app_password
+  migrator_password:
+    file: ${PRIVATE_DIR}/migrator_password
+  db_key:
+    file: ${PRIVATE_DIR}/db.key
+  session_secret:
+    file: ${PRIVATE_DIR}/session_secret
+  share_token_pepper:
+    file: ${PRIVATE_DIR}/share_token_pepper
+  qloo_key:
+    file: ${PRIVATE_DIR}/qloo_key
+  anthropic_key:
+    file: ${PRIVATE_DIR}/anthropic_key

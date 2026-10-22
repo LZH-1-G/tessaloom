@@ -154,3 +154,7 @@ vite.config.ts.timestamp-*
 # Browser test artifacts
 test-results/
 playwright-report/
+
+# M10-B private deployment material (prefer an absolute directory outside the repo)
+deploy/private/
+*.dump

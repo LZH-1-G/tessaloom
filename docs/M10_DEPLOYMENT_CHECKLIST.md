@@ -4,6 +4,10 @@
 
 References: ARCHITECTURE §11 (deployment), ADR-017 (single service), ADR-018 (LLM credentials), SECURITY (all), TEST_PLAN §9 and §13, IMPLEMENTATION_PLAN M10.
 
+## M10-B zero-cost option
+
+The owner selected a single-VM, local persistent PostgreSQL option for preparation. See [M10B_DEPLOYMENT.md](M10B_DEPLOYMENT.md) and `deploy/compose.yml`. This option replaces the managed-Postgres/platform-TLS/PITR assumptions below with verified database TLS, Caddy, and operator-managed off-host backups. It requires explicit acceptance of the single-VM recovery tradeoff before public launch. All hosted checklist items remain unchecked.
+
 ## 1. Topology (ADR-017)
 
 - [ ] **One** always-on service from the repository `Dockerfile`:

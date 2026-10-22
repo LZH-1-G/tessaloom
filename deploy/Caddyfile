@@ -1,0 +1,26 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+			}
+		}
+	}
+}
+{$TLS_DOMAIN} {
+	request_body {
+		max_size 65536
+	}
+	reverse_proxy app:3000 {
+		# Exactly one trusted hop; ignore all visitor-supplied address assertions.
+		header_up X-Forwarded-For {remote_host}
+		header_up -Forwarded
+		header_up -X-Real-IP
+		flush_interval -1
+	}
+	# No access log: URLs can contain share tokens and query strings.
+}

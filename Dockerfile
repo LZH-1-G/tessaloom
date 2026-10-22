@@ -27,6 +27,7 @@ COPY --from=build /app/packages/db/dist/migrate.mjs packages/db/dist/migrate.mjs
 # Operator CLI (demo access grants, samples, spend): node packages/db/dist/admin.mjs
 COPY --from=build /app/packages/db/dist/admin.mjs packages/db/dist/admin.mjs
 COPY --from=build /app/packages/db/migrations packages/db/migrations
+COPY deploy/app-entrypoint.mjs deploy/app-entrypoint.mjs
 COPY scripts/start.mjs scripts/start.mjs
 COPY scripts/redact.mjs scripts/redact.mjs
 ENV NODE_ENV=production APP_ENV=production TL_ROLE=all PORT=3000 HOSTNAME=0.0.0.0 \
