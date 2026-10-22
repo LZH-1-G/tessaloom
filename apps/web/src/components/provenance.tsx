@@ -48,6 +48,10 @@ const PROVENANCE: Record<
   },
 };
 
+export const PROVENANCE_LABEL = Object.fromEntries(
+  Object.entries(PROVENANCE).map(([k, v]) => [k, v.label]),
+) as Record<Provenance, string>;
+
 export function ProvenanceChip({
   provenance,
   origin,

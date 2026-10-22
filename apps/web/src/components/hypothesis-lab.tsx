@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { groupHypotheses, iterationTimeline } from "@/lib/hypothesis-view";
 import type { EvidenceView } from "@/lib/types";
 import { EvidenceDrawer } from "./evidence-drawer";
+import { EvidenceGraphView } from "./evidence-graph";
 import { HypothesisCard } from "./hypothesis-card";
 import { useProject } from "./project-context";
 import { StatusPill } from "./provenance";
@@ -28,6 +29,7 @@ export function HypothesisLab() {
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"board" | "graph">("board");
   const hyps = useMemo(() => view?.hypotheses ?? [], [view]);
   const groups = useMemo(() => groupHypotheses(hyps), [hyps]);
   const timeline = useMemo(() => iterationTimeline(hyps), [hyps]);
@@ -69,7 +71,48 @@ export function HypothesisLab() {
 
   return (
     <div className={gateOpen ? "pb-28" : undefined}>
-      <SectionTitle eyebrow="Step 3" title="Hypothesis lab" />
+      <SectionTitle eyebrow="Step 3" title="Hypothesis lab">
+        {hyps.length ? (
+          <div
+            role="tablist"
+            aria-label="Hypothesis lab views"
+            className="flex rounded-md border border-border p-0.5"
+          >
+            {(["board", "graph"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                id={`tab-${t}`}
+                aria-selected={tab === t}
+                aria-controls="lab-panel"
+                onClick={() => setTab(t)}
+                className={
+                  tab === t
+                    ? "rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
+                    : "rounded px-3 py-1 text-sm hover:bg-surface-2"
+                }
+              >
+                {t === "board" ? "Board" : "Evidence graph"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </SectionTitle>
+
+      {run &&
+      ["CANCELLED", "COMPLETED_WITH_LIMITS"].includes(run.state) &&
+      hyps.length ? (
+        <p
+          role="status"
+          data-testid="partial-ribbon"
+          className="mb-5 rounded-lg border-2 border-dashed border-saffron bg-saffron-tint px-4 py-2 text-sm"
+        >
+          {run.state === "CANCELLED"
+            ? "Run cancelled — evidence incomplete. Results so far are shown; untested claims are marked."
+            : `Stopped at a budget limit (${run.terminalReason?.replace("BUDGET:", "")}). Results so far are shown; untested claims are marked.`}
+        </p>
+      ) : null}
 
       {timeline.length ? (
         <nav aria-label="Iterations" className="mb-5">
@@ -125,8 +168,21 @@ export function HypothesisLab() {
           Confirm the collision pool on the Discovery page to start the
           hypothesis loop.
         </EmptyState>
+      ) : tab === "graph" && view ? (
+        <div role="tabpanel" id="lab-panel" aria-labelledby="tab-graph">
+          <EvidenceGraphView
+            experimentId={view.experiment.id}
+            version={`${run?.stateVersion ?? 0}:${hyps.length}`}
+            onOpenEvidence={setDrawer}
+          />
+        </div>
       ) : (
-        <div className="space-y-8">
+        <div
+          className="space-y-8"
+          role="tabpanel"
+          id="lab-panel"
+          aria-labelledby="tab-board"
+        >
           {groups.active.map((g) => (
             <section key={g.status} aria-labelledby={`group-${g.status}`}>
               <h2

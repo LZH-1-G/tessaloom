@@ -236,6 +236,13 @@ gantt
 
 ### M7 — Evidence Graph and Activity Monitor (D6)
 
+> **Status: COMPLETED 2026-10-22** with synthetic fixtures and scripted AI only (no live Qloo calls, no paid LLM calls). Decisions: ADR-026. **Deviations from the plan below:**
+> - The graph projection lives in `core/graph.ts`, so the API, the browser, and the tests share one definition. The graph is a tab of the Hypothesis Lab, scoped to hypotheses; discovery threads are an opt-in filter.
+> - Charts are accessible inline SVG with a "View as table" toggle, not Recharts. This avoids a new dependency for three small charts.
+> - The full activity view is a dialog opened from the dock, not a `?activity=full` route.
+> - The timeline uses `content-visibility: auto` instead of a virtualization library.
+> - EG-A2 was measured locally on a generated 300-node / 600-edge graph served through Playwright route interception: render 100 ms (Chromium) / 263 ms (WebKit), pan about 61–63 fps. It was not measured on CI hardware.
+
 - **Objective:** a full graph experience and the activity dock.
 - **Inputs:** UI_UX_SPEC §4.3, §4.4 (graph tab), §5, §8; PRD §6.4, §6.7.
 - **Scope:** the graph projection (`core/graph`) and the `/experiments/:id/graph` endpoint; React Flow custom node and edge types per provenance; filters; keyboard navigation; the list view; the layout save. The activity dock: run header, gate card, budget meters (Recharts or plain bars), the virtualized timeline, tool and validation detail expansions, the full view with a state-duration chart.

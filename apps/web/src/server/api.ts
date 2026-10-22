@@ -3,6 +3,7 @@ import {
   CreateBriefRequest,
   CreateProjectRequest,
   RunConfig,
+  buildEvidenceGraph,
   StartExperimentRequest,
   canonicalHash,
   isPaused,
@@ -18,7 +19,9 @@ import {
   createWorkspace,
   evidenceTrace,
   experimentView,
+  getGraphLayout,
   invocationTrace,
+  saveGraphLayout,
   getBriefVersion,
   getProject,
   listProjects,
@@ -464,6 +467,55 @@ export const getExperiment = handle(
     );
     assertNoFixtures(s, view);
     return json({ ...view, runs: view.runs.map(runView) });
+  },
+);
+
+// GET /api/v1/experiments/:experimentId/graph?include=threads,retired
+export const getExperimentGraph = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    const workspace = await requireWorkspace(s, req);
+    const id = Uuid.parse(params.experimentId);
+    const view = await experimentView(s.handle.db, workspace.id, id);
+    assertNoFixtures(s, view);
+    const include = new Set(
+      (new URL(req.url).searchParams.get("include") ?? "").split(","),
+    );
+    const graph = buildEvidenceGraph(view, {
+      includeThreads: include.has("threads"),
+      includeRetired: include.has("retired"),
+    });
+    return json({ ...graph, layout: await getGraphLayout(s.handle.db, id) });
+  },
+);
+
+const GraphLayoutRequest = z.object({
+  positions: z
+    .array(
+      z.object({
+        nodeId: z.uuid(),
+        x: z.number().finite().min(-1e5).max(1e5),
+        y: z.number().finite().min(-1e5).max(1e5),
+      }),
+    )
+    .max(2000),
+});
+
+// PUT /api/v1/experiments/:experimentId/graph-layout
+export const putGraphLayout = handle(
+  async (s: Services, req: Request, params: { experimentId: string }) => {
+    checkCsrf(req);
+    const workspace = await requireWorkspace(s, req);
+    s.limiter.check(`mutate:ws:${workspace.id}`, 60);
+    const id = Uuid.parse(params.experimentId);
+    // Ownership check: throws 404 for another workspace's experiment.
+    await experimentView(s.handle.db, workspace.id, id);
+    const { positions } = await readJson(req, GraphLayoutRequest);
+    await saveGraphLayout(
+      s.handle.db,
+      id,
+      Object.fromEntries(positions.map((p) => [p.nodeId, { x: p.x, y: p.y }])),
+    );
+    return new Response(null, { status: 204 });
   },
 );
 

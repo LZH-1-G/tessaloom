@@ -86,4 +86,5 @@ export const api = {
     body: unknown = {},
     headers?: Record<string, string>,
   ) => request<T>("POST", path, body, headers),
+  put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
 };

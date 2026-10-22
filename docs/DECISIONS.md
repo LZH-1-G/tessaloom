@@ -34,6 +34,7 @@
 | ADR-023 | M4 orchestrator decisions: machine in core, pure step handlers with commit plans, pg-boss topology, grading at collection, worker-published run config, retry and budget termination | **Accepted** | 2026-10-21 (M4) |
 | ADR-024 | M5 discovery decisions: V1-based resolution strategy, tag enrichment budget, synthetic fixtures and scripted AI for development/E2E, fixture firewall through the cache, collision engine in core | **Accepted** | 2026-10-21 (M5) |
 | ADR-025 | M6 hypothesis-loop decisions: pool gate H2b, evaluation ruleset `ruleset-2026.10-m6` (rank/structure-based, honest INSUFFICIENT where calibration is pending), rule-based feasibility, salvage after a failed repair, tag signals in the planner, evidence rationale | **Accepted** | 2026-10-21 (M6) |
+| ADR-026 | M7 graph and monitor decisions: graph projection in core, citation links on demand, SVG charts with table views, monitor full view as a dialog | **Accepted** | 2026-10-22 (M7) |
 
 ---
 
@@ -462,6 +463,24 @@
   - Without live calibration, many claims grade INSUFFICIENT or NEUTRAL, and hypotheses often settle as `PARTIALLY_SUPPORTED`. This is honest, but less conclusive in demos.
   - Live calibration (LC runs with owner authorization) must set the subtype-overlap ω, the location α/r, and the momentum φ, then bump the ruleset version. Stored evidence keeps the version that graded it.
 
+### ADR-026: M7 evidence graph and activity monitor
+
+- **Date:** 2026-10-22 (M7).
+- **Decisions:**
+  1. **One projection.** `core/graph.ts` turns the experiment read model into nodes and edges. The API serves it, the canvas and the List view render the same output (EG-A4), and unit tests pin it. Nodes exist only for stored records. Hypotheses are `CREATIVE_SPECULATION`, claims are `MODEL_INTERPRETATION`, and evidence and entities keep the provenance stored with them (`DEVELOPMENT_FIXTURE` for synthetic data). Data-backed nodes carry the tool invocation id for Trace (EG-A3).
+  2. **Readable by default.** Evidence → entity "cites" links cross the whole canvas, so they are off by default and always shown for the selected node. The List view uses the same filters, so the two views stay equivalent. The layout is deterministic and layered (entities → hypotheses → claims → evidence). Dragged positions are saved per experiment in `graph_layouts`.
+  3. **Encoding beyond color (EG-A1).** Node shape encodes the type. The existing provenance border styles plus a text label encode the origin. Edges use stroke patterns per provenance.
+  4. **Keyboard.** Every node is focusable. The arrow keys follow connections (left and right) or move within a column (up and down), Enter or Space opens the inspector, and a polite live region announces each move.
+  5. **Monitor.** The dock gains a full view (dialog) with:
+     - a state-duration chart, where gates are shown as waiting time;
+     - Qloo calls by workflow, with data origin;
+     - AI steps with model, attempts, and cost;
+     - the complete, filterable timeline.
+
+     Charts are inline SVG with a "View as table" toggle (no Recharts dependency). The SSE client shows "Reconnecting…" and relies on EventSource's `Last-Event-ID` resume. AM-A2 is verified after a forced offline period in E2E.
+  6. **No reasoning anywhere (AM-A3).** The provider keeps only text blocks. Unit tests check that no `llm_invocations` or `run_events` column names reasoning or thinking. An integration test walks every stored event payload for such keys.
+- **Consequences:** EG-A2 is measured on local hardware only. CI runners may be slower; the test reports the numbers and does not fail on them.
+
 ---
 
 ## 3. Key trade-offs
@@ -536,6 +555,7 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-22 | M7 implemented: evidence graph (core projection, API, layout persistence, React Flow canvas with provenance encoding, filters, keyboard navigation, inspector with trace, equivalent List view) and the Activity Monitor full view (state durations, tool and LLM cost tables, complete timeline, reconnect indicator), cancelled/limited ribbon; ADR-026 recorded | IMPLEMENTATION_PLAN M7 |
 | 2026-10-21 | M6 implemented: pool gate H2b with a client-side tension preview, evaluation ruleset `ruleset-2026.10-m6`, rule-based feasibility, salvage after a failed repair, planner tag signals, evidence rationale, Hypothesis Lab (cards, status groups, retired group, evidence drawer, trace, score breakdown, iteration timeline, gate H3); ADR-025 recorded | IMPLEMENTATION_PLAN M6 |
 | 2026-10-21 | M5 implemented: Creative Brief (form, preview, H1 chips, versions), V1-based resolution with tags and locality (H2), budgeted tag enrichment, Discovery Canvas (lanes, list, inspector, trace), synthetic fixtures and scripted AI for development and E2E, fixture-firewall-through-cache fix; ADR-024 recorded | IMPLEMENTATION_PLAN M5 |
 | 2026-10-21 | M4 implemented: state machine (core), pure step handlers, pg-boss worker with idempotent commits, budgets, cancellation, gates, expiry, recovery, retry, SSE, run API, heartbeat readiness; full scripted EXPLORATION passes; ADR-023 recorded | IMPLEMENTATION_PLAN M4 |

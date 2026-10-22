@@ -1,11 +1,19 @@
 "use client";
 
-import { Activity, ChevronDown, CircleAlert, Radio, X } from "lucide-react";
+import {
+  Activity,
+  ChevronDown,
+  CircleAlert,
+  Maximize2,
+  Radio,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { RunEventView, RunView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ActivityFull } from "./activity-full";
 import { Button } from "./ui";
 
 const PAUSED = (state: string) => state.startsWith("AWAITING_");
@@ -35,6 +43,7 @@ export function useRunEvents(run: RunView | null, onChange: () => void) {
     events: RunEventView[];
   }>({ runId: null, events: [] });
   const [live, setLive] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const lastSeq = useRef<{ runId: string | null; seq: number }>({
     runId: null,
     seq: 0,
@@ -56,7 +65,10 @@ export function useRunEvents(run: RunView | null, onChange: () => void) {
     const source = new EventSource(
       `/api/v1/runs/${runId}/events?after=${lastSeq.current.seq}`,
     );
-    source.onopen = () => setLive(true);
+    source.onopen = () => {
+      setLive(true);
+      setReconnecting(false);
+    };
     source.addEventListener("run-event", (message) => {
       const event = JSON.parse(
         (message as MessageEvent<string>).data,
@@ -83,14 +95,19 @@ export function useRunEvents(run: RunView | null, onChange: () => void) {
     source.addEventListener("run-terminal", () => {
       source.close();
       setLive(false);
+      setReconnecting(false);
       changeRef.current();
     });
-    source.onerror = () => setLive(false);
+    // EventSource retries on its own and resumes with Last-Event-ID (no gaps, no duplicates).
+    source.onerror = () => {
+      setLive(false);
+      setReconnecting(source.readyState === EventSource.CONNECTING);
+    };
     return () => source.close();
   }, [runId, phase]);
 
   const events = store.runId === runId ? store.events : [];
-  return { events, live };
+  return { events, live, reconnecting };
 }
 
 /** Wall clock that ticks once per second while mounted (keeps renders pure). */
@@ -171,7 +188,8 @@ export function ActivityDock({
   projectId: string;
   onChange: () => void;
 }) {
-  const { events, live } = useRunEvents(run, onChange);
+  const { events, live, reconnecting } = useRunEvents(run, onChange);
+  const [full, setFull] = useState(false);
   const now = useNow();
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -246,6 +264,13 @@ export function ActivityDock({
                 />{" "}
                 Live
               </span>
+            ) : reconnecting ? (
+              <span
+                role="status"
+                className="rounded-full bg-saffron-tint px-1.5 text-[10px] font-semibold uppercase"
+              >
+                Reconnecting…
+              </span>
             ) : null}
           </p>
           <p
@@ -271,6 +296,14 @@ export function ActivityDock({
               {run.cancelRequested ? "Cancelling" : "Cancel"}
             </Button>
           ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Open the full activity view"
+            onClick={() => setFull(true)}
+          >
+            <Maximize2 aria-hidden className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -424,6 +457,14 @@ export function ActivityDock({
             ))}
           </ol>
         </>
+      ) : null}
+      {full ? (
+        <ActivityFull
+          run={run}
+          events={events}
+          now={now}
+          onClose={() => setFull(false)}
+        />
       ) : null}
     </aside>
   );

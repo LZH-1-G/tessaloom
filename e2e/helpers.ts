@@ -64,3 +64,39 @@ export async function fillBrief(
     await page.getByLabel("Locality (optional)").fill(brief.locality);
   if (brief.capacity) await page.getByLabel("Capacity").fill(brief.capacity);
 }
+
+/** Typed multi-word titles resolve exactly on the synthetic transport (no H2 choice). */
+export const TYPED_BRIEF = {
+  title: "Harbor Lights supper club",
+  challenge:
+    "A 40-seat supper club wants a monthly night that pulls game, book and film fans together.",
+  interests: [
+    ["Stardew Harvest Tales", "videogame"],
+    ["Paper Atlas Stories", "book"],
+    ["Neon Harbor Nights", "movie"],
+  ] as [string, string?][],
+  capacity: "40",
+};
+
+/** New project → H1 → discovery → pool committed → Hypothesis Lab paused at gate H3. */
+export async function runToSelection(page: Page, name: string) {
+  await createProject(page, name);
+  await fillBrief(page, TYPED_BRIEF);
+  await page.getByRole("button", { name: "Interpret brief" }).click();
+  await page.getByRole("button", { name: "Confirm & discover" }).click();
+  await page.getByRole("link", { name: "Open the Discovery canvas" }).click();
+  await expect(page.getByText("Review the collision pool")).toBeVisible({
+    timeout: 60_000,
+  });
+  const pool = page.getByRole("region", { name: "Collision pool" });
+  await pool
+    .getByRole("button", { name: "Generate hypotheses with this pool" })
+    .click();
+  // Navigating before the confirmation lands would abort the request.
+  await expect(pool.getByText("The pool was committed")).toBeVisible();
+  await page.goto(page.url().replace(/\/discovery$/, "/hypotheses"));
+  await expect(
+    page.getByRole("region", { name: "Select hypotheses" }),
+  ).toBeVisible({ timeout: 90_000 });
+  return page.url().replace(/\/hypotheses$/, "");
+}

@@ -631,6 +631,11 @@ Every read is workspace-scoped, and a production build refuses to serialize `DEV
 - **Hypothesis selection.** `{ kind: "HYPOTHESIS_SELECTION", selectedHypothesisIds }` (0–3, active hypotheses only) sets `user_pinned` and completes the EXPLORATION run.
 - **Experiment read model.** Evidence now carries `rationale` (the evaluator's plain-language rule). `scoreBreakdown` carries `feasibility { version, rules[] }`, `noveltyInputs`, and the critic's `critique`, labeled as interpretation.
 
+### 6.11 M7 API status (2026-10-22)
+
+- `GET /api/v1/experiments/:experimentId/graph?include=threads,retired` returns `EvidenceGraph { version, nodes[], edges[], layout }` from `core/graph.ts`. Nodes are `entity | hypothesis | claim | evidence`. Edges are `THREAD | ELEMENT_OF | HAS_CLAIM | TESTED_BY | CITES | REVISION_OF`. Each node and edge carries a provenance class, and data-backed nodes carry the `invocationId` for Trace. Fixture records are refused in production, as for every read.
+- `PUT /api/v1/experiments/:experimentId/graph-layout` takes `{ positions: { nodeId, x, y }[] }` (at most 2000) and returns `204`. It is CSRF-checked, rate-limited, and workspace-scoped (404 otherwise).
+
 ## 7. LLM gateway contract (`packages/llm-gateway`)
 
 ```ts
