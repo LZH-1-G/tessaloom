@@ -2,6 +2,7 @@ import type { CommitPlan, EntityRef } from "@tessaloom/agent";
 import {
   createResolution,
   insertCollisionCandidates,
+  commitBlueprint,
   insertEvidence,
   saveComparison,
   insertExperimentSeeds,
@@ -23,6 +24,8 @@ export interface CommitScope {
   workspaceId: string;
   runId: string;
   briefVersionId: string;
+  /** COMPOSITION runs only. */
+  blueprintId?: string | null;
 }
 
 /**
@@ -174,6 +177,13 @@ export async function applyCommit(
       ...e,
       experimentId: scope.experimentId,
       runId: scope.runId,
+    });
+
+  if (plan.blueprint && scope.blueprintId)
+    await commitBlueprint(tx, {
+      blueprintId: scope.blueprintId,
+      runId: scope.runId,
+      ...plan.blueprint,
     });
 
   if (plan.comparison)

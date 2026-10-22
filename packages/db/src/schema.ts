@@ -876,6 +876,10 @@ export const experienceBlueprints = pgTable(
     format: blueprintFormat("format").notNull(),
     status: blueprintStatus("status").notNull().default("DRAFT"),
     currentRevisionId: uuid("current_revision_id"),
+    // In-progress composition between COMPOSING and VALIDATING (never shown as a revision).
+    draftContent: jsonb("draft_content"),
+    // { repairAttempts, issues, recompose: { section, instruction } | null }
+    draftMeta: jsonb("draft_meta"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

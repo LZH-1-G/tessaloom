@@ -217,12 +217,16 @@ export const BlueprintBlock = z.object({
   text: z.string().min(1).max(2000),
   provenance: ProvenanceClass,
   evidenceIds: z.array(Uuid),
+  /** Set when a person changed an agent-written block ("edited by you"; UI_UX_SPEC §4.6). */
+  edited: z.boolean().optional(),
 });
 
 export const BlueprintContent = z.object({
   title: z.string().min(1).max(120),
   format: BlueprintFormat,
   concept: z.string().min(1).max(2000),
+  /** The concept is creative speculation unless a person rewrote it. */
+  conceptProvenance: ProvenanceClass.optional(),
   sections: z.array(
     z.object({ kind: BlueprintSectionKind, blocks: z.array(BlueprintBlock) }),
   ),
@@ -231,8 +235,45 @@ export const BlueprintContent = z.object({
       constraint: z.string().min(1),
       severity: z.enum(["info", "caution", "blocking"]),
       evidenceIds: z.array(Uuid),
+      /** Stable key (e.g. "capacity", "feasibility:BUDGET") the model's mitigation refers to. */
+      key: z.string().max(80).optional(),
+      /** Where the constraint comes from: the brief, a feasibility rule, or evidence. */
+      source: z.enum(["brief", "feasibility", "evidence"]).optional(),
+      /** Suggested mitigation — AI interpretation, never a fact. */
+      mitigation: z.string().max(400).optional(),
     }),
   ),
   openQuestions: z.array(z.string()),
 });
+
+/**
+ * R6 output (AGENT_WORKFLOW §2): only interpretation and speculation. Evidence-backed blocks
+ * and constraints are written by the application from stored evidence (ADR-028).
+ */
+export const BlueprintDraft = z.object({
+  title: z.string().min(1).max(120),
+  concept: z.string().min(1).max(1200),
+  blocks: z
+    .array(
+      z.object({
+        section: BlueprintSectionKind,
+        text: z.string().min(1).max(600),
+        provenance: z.enum(["MODEL_INTERPRETATION", "CREATIVE_SPECULATION"]),
+        evidenceIds: z.array(Uuid).max(5),
+      }),
+    )
+    .min(1)
+    .max(30),
+  mitigations: z
+    .array(
+      z.object({
+        constraintKey: z.string().min(1).max(80),
+        text: z.string().min(1).max(400),
+      }),
+    )
+    .max(12),
+  openQuestions: z.array(z.string().min(1).max(300)).max(8),
+  decisionSummary: DecisionSummary,
+});
+export type BlueprintDraft = z.infer<typeof BlueprintDraft>;
 export type BlueprintContent = z.infer<typeof BlueprintContent>;

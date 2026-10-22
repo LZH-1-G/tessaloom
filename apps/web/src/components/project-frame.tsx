@@ -37,7 +37,10 @@ export function ProjectFrame({ children }: { children: React.ReactNode }) {
           </>
         ) : null}
       </TopBar>
-      <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)_340px]">
+      <div
+        data-print-frame
+        className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)_340px]"
+      >
         <ProjectRail
           projectId={projectId}
           reachable={{
@@ -45,6 +48,9 @@ export function ProjectFrame({ children }: { children: React.ReactNode }) {
             hypotheses: hasHypotheses
               ? null
               : "Generate hypotheses from the collision pool first",
+            blueprint: hasHypotheses
+              ? null
+              : "Compose once the experiment has hypotheses",
             "what-if": hasHypotheses
               ? null
               : "Branch once the experiment has hypotheses",

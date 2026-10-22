@@ -19,7 +19,13 @@ export const INSIGHT = new Set([
 /** Accepted by name-resolving tools only (V1). Labeled as legacy types. */
 export const LEGACY = new Set(["actor", "album", "author", "director"]);
 
-export const MAX_OUTPUT = { R1: 4000, R3: 12000, R4: 6000, R5: 2000 } as const;
+export const MAX_OUTPUT = {
+  R1: 4000,
+  R3: 12000,
+  R4: 6000,
+  R5: 2000,
+  R6: 8000,
+} as const;
 
 export const truncate = (s: string, n = 280) =>
   s.length <= n ? s : `${s.slice(0, n - 1)}…`;

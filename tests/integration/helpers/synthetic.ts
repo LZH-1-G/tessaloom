@@ -106,6 +106,8 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
       tension: number;
       select: boolean;
       counterfactual?: "run" | "cancel";
+      /** Stop (without answering) when this gate opens. */
+      stopAt?: string;
     },
   ) {
     for (let guard = 0; guard < 12; guard++) {
@@ -113,7 +115,7 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
       const run = await getRun(handle.db, ids.runId);
       const pending = run.pendingConfirmation as
         ({ kind: string } & Record<string, unknown>) | null;
-      if (!pending) return run;
+      if (!pending || pending.kind === answers.stopAt) return run;
       let body: unknown;
       if (pending.kind === "BRIEF")
         body = {

@@ -16,6 +16,7 @@ import {
   appendRunEvents,
   enqueueRunStep,
   getRun,
+  blueprintForRun,
   loadRunSnapshot,
   lockRunAtVersion,
   setExperimentStatus,
@@ -92,6 +93,8 @@ export async function runStep(
   const controller = new AbortController();
   const ctx = buildStepContext(snap, now(), controller.signal);
   await enrichCounterfactualContext(db, ctx);
+  if (ctx.run.kind === "COMPOSITION" && snap.run.blueprintId)
+    ctx.blueprint = await blueprintForRun(db, snap.run.blueprintId);
 
   let result: StepResult;
   if (run.cancelRequestedAt) {
@@ -248,6 +251,7 @@ export async function runStep(
         workspaceId: snap.workspaceId,
         runId: run.id,
         briefVersionId: snap.experiment.briefVersionId,
+        blueprintId: snap.run.blueprintId,
       },
       result.commit,
     );

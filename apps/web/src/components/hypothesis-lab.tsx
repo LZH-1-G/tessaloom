@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { groupHypotheses, iterationTimeline } from "@/lib/hypothesis-view";
 import type { EvidenceView } from "@/lib/types";
+import { ComposeDialog } from "./blueprint/compose-dialog";
 import { EvidenceDrawer } from "./evidence-drawer";
 import { EvidenceGraphView } from "./evidence-graph";
 import { HypothesisCard } from "./hypothesis-card";
@@ -23,13 +24,14 @@ const WORKING = [
 
 /** Hypothesis Lab (UI_UX_SPEC §4.4): the evidence-graded board, drawer, timeline and gate H3. */
 export function HypothesisLab() {
-  const { view, run, refresh, loading } = useProject();
+  const { view, explorationRun: run, refresh, loading } = useProject();
   const [drawer, setDrawer] = useState<string | null>(null);
   const [trace, setTrace] = useState<EvidenceView | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"board" | "graph">("board");
+  const [compose, setCompose] = useState<"gate" | "done" | null>(null);
   const hyps = useMemo(() => view?.hypotheses ?? [], [view]);
   const groups = useMemo(() => groupHypotheses(hyps), [hyps]);
   const timeline = useMemo(() => iterationTimeline(hyps), [hyps]);
@@ -99,6 +101,22 @@ export function HypothesisLab() {
           </div>
         ) : null}
       </SectionTitle>
+
+      {run &&
+      ["COMPLETED", "COMPLETED_WITH_LIMITS"].includes(run.state) &&
+      hyps.some((h) => !h.retired) ? (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span className="flex-1">
+            {hyps.some((h) => h.userPinned)
+              ? "Your selection is saved."
+              : "The hypothesis loop has finished."}{" "}
+            Turn 1–3 hypotheses into an actionable, traceable plan.
+          </span>
+          <Button variant="weft" size="sm" onClick={() => setCompose("done")}>
+            Compose a blueprint
+          </Button>
+        </div>
+      ) : null}
 
       {run &&
       ["CANCELLED", "COMPLETED_WITH_LIMITS"].includes(run.state) &&
@@ -268,30 +286,54 @@ export function HypothesisLab() {
               </Button>
               <Button
                 variant="secondary"
-                disabled
-                aria-describedby="compose-note"
-              >
-                Compose blueprint
-              </Button>
-              <Button
-                variant="weft"
                 onClick={() => finish(picked)}
                 disabled={busy || picked.length === 0}
               >
                 Save selection and finish
+              </Button>
+              <Button
+                variant="weft"
+                disabled={busy || picked.length === 0}
+                aria-describedby="compose-note"
+                onClick={() => setCompose("gate")}
+              >
+                Compose blueprint
               </Button>
             </div>
             <p
               id="compose-note"
               className="w-full text-right text-[11px] text-muted-foreground"
             >
-              Blueprint composition arrives in M9; your selection is saved for
-              it.
+              Composing records your selection, finishes the loop, and drafts a
+              traceable plan.
             </p>
           </div>
         </div>
       ) : null}
 
+      {compose && view ? (
+        <ComposeDialog
+          projectId={view.experiment.projectId}
+          experimentId={view.experiment.id}
+          choices={hyps
+            .filter((h) => !h.retired)
+            .sort((a, b) => (b.compositeScore ?? 0) - (a.compositeScore ?? 0))
+            .map((h) => ({
+              id: h.id,
+              title: h.title,
+              status: h.status,
+              compositeScore: h.compositeScore,
+            }))}
+          preselected={
+            compose === "gate"
+              ? picked
+              : hyps.filter((h) => h.userPinned).map((h) => h.id)
+          }
+          selectionRunId={compose === "gate" ? (run?.id ?? null) : null}
+          source="From the Hypothesis lab"
+          onClose={() => setCompose(null)}
+        />
+      ) : null}
       {open ? (
         <EvidenceDrawer
           hypothesis={open}

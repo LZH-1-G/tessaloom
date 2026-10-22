@@ -461,6 +461,126 @@ function compareNarrative(input: Record<string, unknown>): ScriptedStep {
   };
 }
 
+/** R6: a grounded plan around the application's facts (no invented numbers or promises). */
+function composeBlueprint(input: Record<string, unknown>): ScriptedStep {
+  const brief = input.brief as {
+    title: string;
+    venue: { type: string; capacity?: number };
+    constraints: { budgetBand?: string; durationMinutes?: number };
+  };
+  const hyps =
+    (input.hypotheses as {
+      title: string;
+      premise: string;
+      claims: { stance: string | null; evidenceId: string | null }[];
+    }[]) ?? [];
+  const constraints =
+    (input.constraints as { constraintKey: string }[] | undefined) ?? [];
+  const only = (input.onlySection as string | undefined) ?? null;
+  const instruction = ((input.instruction as string | null) ?? "")
+    .replace(/\d/g, "")
+    .slice(0, 160);
+  const supported = hyps
+    .flatMap((h) => h.claims)
+    .filter((c) => c.stance === "SUPPORTS" && c.evidenceId)
+    .map((c) => c.evidenceId!);
+  const lead = hyps[0];
+  const venue = brief.venue.type.replace("_", " ");
+  const capacity = brief.venue.capacity
+    ? ` for up to ${brief.venue.capacity} guests`
+    : "";
+  const low = brief.constraints.budgetBand === "low";
+  const all = [
+    {
+      section: "programming",
+      text: `Open with a short host introduction that connects ${hyps.map((h) => h.title).join(" and ")}, then move into a hands-on segment and a social close${capacity}.`,
+      provenance: "MODEL_INTERPRETATION",
+      evidenceIds: supported.slice(0, 2),
+    },
+    {
+      section: "programming",
+      text: `Invite guests to bring one favorite from each world to swap and discuss at shared tables.`,
+      provenance: "CREATIVE_SPECULATION",
+      evidenceIds: [],
+    },
+    {
+      section: "atmosphere",
+      text: `Low lighting and a curated playlist set the tone; small printed cards explain why these worlds were paired.`,
+      provenance: "CREATIVE_SPECULATION",
+      evidenceIds: [],
+    },
+    {
+      section: "partners",
+      text: `Approach a local community group already active in one of the paired worlds to co-host${low ? " in exchange for promotion rather than a fee" : ""}.`,
+      provenance: "CREATIVE_SPECULATION",
+      evidenceIds: [],
+    },
+    {
+      section: "promotion",
+      text: `Lead promotion with the overlap the evidence points to, and say plainly that it is a shared-taste signal, not a promise of a crowd.`,
+      provenance: "MODEL_INTERPRETATION",
+      evidenceIds: supported.slice(0, 1),
+    },
+    {
+      section: "logistics",
+      text: `Use the ${venue}'s existing furniture and equipment; confirm seating, sound, and accessibility before announcing a date.`,
+      provenance: "MODEL_INTERPRETATION",
+      evidenceIds: [],
+    },
+    {
+      section: "measurement",
+      text: `Track sign-ups, attendance, and a one-question exit survey about which pairing guests enjoyed, then compare with the evidence above.`,
+      provenance: "CREATIVE_SPECULATION",
+      evidenceIds: [],
+    },
+  ]
+    .filter((b) => !only || b.section === only)
+    .map((b) =>
+      only && instruction
+        ? {
+            ...b,
+            text: clip(`${b.text} Adjusted to your note: ${instruction}.`, 600),
+          }
+        : b,
+    );
+  const blocks = all.length
+    ? all
+    : [
+        {
+          section: only ?? "programming",
+          text: clip(
+            `A revised ${only ?? "programming"} plan${instruction ? ` following your note: ${instruction}` : ""}.`,
+            600,
+          ),
+          provenance: "CREATIVE_SPECULATION",
+          evidenceIds: [],
+        },
+      ];
+  return {
+    output: {
+      title: clip(lead ? `${lead.title}: an evening` : brief.title, 120),
+      concept: clip(
+        `${lead?.premise ?? brief.title} The plan below keeps the evidence and the ideas apart so you can see what is supported and what is still a bet.`,
+        1200,
+      ),
+      blocks,
+      mitigations: constraints.map((c) => ({
+        constraintKey: c.constraintKey,
+        text: c.constraintKey.startsWith("feasibility")
+          ? "Scale the format down to the room and the budget, or drop the element that triggers this rule."
+          : c.constraintKey === "budget"
+            ? "Borrow equipment and trade promotion for partner support instead of paying fees."
+            : "Plan the run of show around this limit and confirm it with the venue.",
+      })),
+      openQuestions: [
+        "Which night of the week suits the regulars you want to keep?",
+      ],
+      decisionSummary:
+        "Composed a plan around the evidence-backed facts and constraints.",
+    },
+  };
+}
+
 const RESPONDERS: Record<
   string,
   (input: Record<string, unknown>) => ScriptedStep
@@ -470,6 +590,7 @@ const RESPONDERS: Record<
   "r4.critique": critique,
   "r3.revise": revise,
   "r5.compare": compareNarrative,
+  "r6.compose": composeBlueprint,
 };
 
 /** A scripted provider that answers every prompt deterministically (and never runs out). */

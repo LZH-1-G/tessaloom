@@ -87,4 +87,5 @@ export const api = {
     headers?: Record<string, string>,
   ) => request<T>("POST", path, body, headers),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
+  delete: <T>(path: string) => request<T>("DELETE", path),
 };

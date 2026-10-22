@@ -36,6 +36,7 @@
 | ADR-025 | M6 hypothesis-loop decisions: pool gate H2b, evaluation ruleset `ruleset-2026.10-m6` (rank/structure-based, honest INSUFFICIENT where calibration is pending), rule-based feasibility, salvage after a failed repair, tag signals in the planner, evidence rationale | **Accepted** | 2026-10-21 (M6) |
 | ADR-026 | M7 graph and monitor decisions: graph projection in core, citation links on demand, SVG charts with table views, monitor full view as a dialog | **Accepted** | 2026-10-22 (M7) |
 | ADR-027 | M8 counterfactual engine: pure dependency planner in core, branch materialized at creation, CACHE-labeled reuse, stored top-K result ids, deterministic comparison metrics with placeholder-only narratives, fixtures exempt from the live quota | **Accepted** | 2026-10-22 (M8) |
+| ADR-028 | M9 blueprint composer: facts and constraints written by the app from stored evidence, R6 limited to interpretation and speculation, layered traceability validation, server-decided provenance on user revisions, append-only revisions with restore, hashed share tokens with scoped payloads | **Accepted** | 2026-10-22 (M9) |
 
 ---
 
@@ -511,6 +512,57 @@
 
 ---
 
+### ADR-028: M9 Experience Blueprint Composer and sharing
+
+- **Date:** 2026-10-22 (M9).
+- **Decisions:**
+  1. **The app writes the facts; the model writes the ideas.**
+     - `core/blueprint.ts` turns the selected hypotheses' latest graded evidence into blocks deterministically: `APP_DERIVED`, or `DEVELOPMENT_FIXTURE` for synthetic evidence. Each block cites exactly its evidence record. The stance picks the section: SUPPORTS → audience, CONTRADICTS → risks, other stances → measurement.
+     - Constraints come from the brief (capacity, budget band, duration, venue), from the feasibility rules, and from contradicting evidence (`deriveConstraints`).
+     - R6 (`r6.compose`, `BlueprintDraft` schema) may only add `MODEL_INTERPRETATION` or `CREATIVE_SPECULATION` blocks, mitigations for known constraint keys (shown as AI interpretation), open questions, and a title/concept. It cannot emit a fact, a Qloo value, or a user block. The separation of supported facts, AI interpretations, and unverified assumptions is therefore structural, not a prompt instruction.
+  2. **Layered traceability validation.**
+     - At composition, `blueprintDraftValidator` checks that:
+       - citations are a subset of the selected hypotheses' evidence;
+       - numbers are a subset of the numbers in the brief, facts, and hypotheses;
+       - no outcome claims are made (`OUTCOME_CLAIM`: attendance, sales, revenue or success promises);
+       - mitigations reference only known constraint keys.
+     - Failed blocks are salvaged individually after one repair.
+     - The VALIDATING_BLUEPRINT step re-runs `traceabilityIssues` against all of the experiment's evidence: one repair, then offending blocks are dropped and logged.
+     - Only a fully traceable revision is committed. The draft lives in `experience_blueprints.draft_content` / `draft_meta` (migration 0006) between the two steps.
+  3. **Provenance on user revisions is decided by the server.** `normalizeUserRevision` treats each kind of change as follows:
+     - Unchanged blocks keep their provenance.
+     - An edited block that keeps its citations keeps its provenance with `edited: true` (shown "Edited by you").
+     - A new block, or an edited block whose citations changed, becomes `USER_PROVIDED`; citations must still resolve.
+     - Constraints are immutable from the client.
+     - An edited concept becomes `USER_PROVIDED`.
+  4. **Append-only revisions.** Every edit, section recompose, and restore creates revision n+1. Restore copies the stored old revision verbatim on the server and ignores the client's copy, so a restore cannot carry forged provenance. Past revisions are viewable read-only. Accepting a blueprint changes its status, never its content.
+  5. **Composition sources and gating.**
+     - A blueprint is composed from 1–3 hypotheses of a COMPLETED or COMPLETED_WITH_LIMITS EXPLORATION run, or of a COUNTERFACTUAL run (What-if branch).
+     - Composition is refused while any run on that experiment is non-terminal; at gate H3 the dialog records the selection first.
+     - Branch blueprints cite the branch's CACHE-reused evidence, which resolves like any other evidence.
+     - The project context exposes `explorationRun` separately from the latest run, so a COMPOSITION run never changes the Hypothesis Lab's gates. The blueprint page focuses its own experiment so the dock streams the composition and the page updates live.
+  6. **Share links (SECURITY §4.3).**
+     - The token is 32 random bytes, base64url, shown once; the database stores `sha256(token ‖ pepper)` only.
+     - Payloads are built per scope (blueprint, experiment, project) and contain no workspace, project, experiment, run, or invocation ids.
+     - Responses carry `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`, and `X-Robots-Tag: noindex, nofollow`, through both the API and `next.config` `headers()` for `/share/*`.
+     - Lookups are limited to 30/min per IP hash.
+     - An unknown, revoked, or expired token gets the same 404 "This link is no longer active.".
+     - The share page fetches with `credentials: "omit"`, so a viewer's own workspace cookie is never used.
+  7. **Exports.** The Markdown export (`blueprintMarkdown`) contains:
+     - a fixture banner when any evidence is synthetic, and the provenance legend;
+     - every section, with each block's provenance label and `[E-n]` citations, plus the constraints table;
+     - open questions, and an evidence appendix with stance, rule, origin, and retrieval date;
+     - the disclaimer that Qloo values are aggregate affinity, not attendance, sales, or commercial success.
+
+     The JSON export carries the same content plus the traceability report. Print uses a print stylesheet; there is no server-side PDF.
+- **Not implemented (moved to M10 or later):** optional gap-fill queries during composition (≤ 4 Qloo calls). Blueprints use only already-collected evidence. Global CSP/HSTS headers are M10 hardening.
+- **Consequences:**
+  - The evidence share of a blueprint is bounded by what the hypotheses already tested. Thin evidence yields a speculation-heavy meter, and that is reported honestly.
+  - Fact blocks restate the deterministic evaluator's rationale, so their wording is formulaic by design.
+  - The live R6 output quality (Anthropic) is unverified. All M9 tests use the scripted provider.
+
+---
+
 ## 3. Key trade-offs
 
 | Trade-off | Chosen side | Cost accepted |
@@ -583,6 +635,7 @@ Likelihood and impact use H/M/L.
 | 2026-10-20 | Review: model IDs verified against the official docs; fallback model, cost model, and credential requirements added; EXPLORATION and COMPOSITION cost caps raised to 2.00 / 0.70 | ADR-018, AGENT_WORKFLOW §7 |
 | 2026-10-20 | Review: the Qloo access architecture re-verified (kit commit `80a82b2` unchanged; harness `0.1.26` latest) | API_CONTRACTS §5.0 |
 | 2026-10-20 | Review: `.DS_Store` added to `.gitignore`; cross-document consistency fixes | IMPLEMENTATION_PLAN, DATABASE_SCHEMA, UI_UX_SPEC, TEST_PLAN |
+| 2026-10-22 | M9 implemented: R6 blueprint composition with deterministic fact and constraint blocks, layered traceability validation (compose validator, VALIDATING_BLUEPRINT re-check), blueprint page (traceability meter, provenance chips, citations to evidence trace, constraints, appendix, in-place editing, section recompose, revision history with restore, accept), Markdown/JSON export, print stylesheet, hashed read-only share links (blueprint/experiment/project) with revoke, What-if branch composition; ADR-028 recorded | IMPLEMENTATION_PLAN M9 |
 | 2026-10-22 | M8 implemented: counterfactual planner and comparison metrics in core, branch materialization with CACHE-labeled reuse, COUNTERFACTUAL run (gate H4, deterministic re-grading, R5 narrative with placeholder validation), What-if Lab (branch tree, variable editor with live preview, comparison view with charts and per-query diffs), Adjust weights → rescore-only branch, fixture traffic exempted from the live quota; ADR-027 recorded | IMPLEMENTATION_PLAN M8 |
 | 2026-10-22 | M7 implemented: evidence graph (core projection, API, layout persistence, React Flow canvas with provenance encoding, filters, keyboard navigation, inspector with trace, equivalent List view) and the Activity Monitor full view (state durations, tool and LLM cost tables, complete timeline, reconnect indicator), cancelled/limited ribbon; ADR-026 recorded | IMPLEMENTATION_PLAN M7 |
 | 2026-10-21 | M6 implemented: pool gate H2b with a client-side tension preview, evaluation ruleset `ruleset-2026.10-m6`, rule-based feasibility, salvage after a failed repair, planner tag signals, evidence rationale, Hypothesis Lab (cards, status groups, retired group, evidence drawer, trace, score breakdown, iteration timeline, gate H3); ADR-025 recorded | IMPLEMENTATION_PLAN M6 |
