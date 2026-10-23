@@ -99,6 +99,14 @@ export function buildStepContext(
     })),
   }));
   return {
+    inputOrigin:
+      snap.experiment.mode === "fixture" &&
+      snap.entities.every((e) => e.provenanceClass === "DEVELOPMENT_FIXTURE") &&
+      snap.hypotheses.every((h) =>
+        h.evidence.every((e) => e.provenanceClass === "DEVELOPMENT_FIXTURE"),
+      )
+        ? "synthetic"
+        : "unknown",
     run: {
       id: snap.run.id,
       kind: snap.run.kind,
@@ -172,6 +180,8 @@ export async function enrichCounterfactualContext(
 ): Promise<void> {
   const parentId = ctx.experiment.parentExperimentId;
   if (ctx.run.kind !== "COUNTERFACTUAL" || !parentId) return;
+  // Until cross-experiment transfer rights are approved, do not attest a parent context.
+  ctx.inputOrigin = "unknown";
   const branch = await branchRecord(db, ctx.experiment.id);
   ctx.branch = branch
     ? {

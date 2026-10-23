@@ -290,6 +290,14 @@ describe("activity monitor statistics", () => {
     expect(sequenceGaps(events)).toEqual([6]);
     expect(sequenceGaps(events.slice(0, 5))).toEqual([]);
   });
+  it("preserves unavailable provider telemetry instead of presenting zero as measured usage", () => {
+    const event = events.find((e) => e.type === "LLM_CALL_FINISHED")!;
+    expect(
+      llmStats([
+        { ...event, payload: { ...event.payload, usageComplete: false } },
+      ])[0],
+    ).toMatchObject({ usageComplete: false });
+  });
 });
 
 describe("AM-A3: no chain-of-thought is stored or shown", () => {

@@ -5,10 +5,33 @@ import type { ProviderUsage } from "./types";
  * Re-verify before judging; update the source date when values change.
  */
 export const PRICE_SOURCE_DATE = "2026-10-20";
-export const PRICES: Record<
-  string,
-  { input: number; cacheWrite: number; cacheRead: number; output: number }
-> = {
+export type PriceTable = Readonly<
+  Record<
+    string,
+    { input: number; cacheWrite: number; cacheRead: number; output: number }
+  >
+>;
+export const PRICES: PriceTable = {
+  // Google standard text rates checked 2026-10-23. Used for conservative reservations
+  // even on an owner-confirmed Free project; never a reason to enable paid API access.
+  "gemini-3.5-flash-lite": {
+    input: 0.3,
+    cacheWrite: 0.3,
+    cacheRead: 0.03,
+    output: 2.5,
+  },
+  "gemini-2.5-flash-lite": {
+    input: 0.1,
+    cacheWrite: 0.1,
+    cacheRead: 0.01,
+    output: 0.4,
+  },
+  "gemini-2.5-flash": {
+    input: 0.3,
+    cacheWrite: 0.3,
+    cacheRead: 0.03,
+    output: 2.5,
+  },
   "claude-opus-5-5": { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 },
   "claude-sonnet-5-5": {
     input: 2,
@@ -18,13 +41,17 @@ export const PRICES: Record<
   },
 };
 
-export function hasPrice(model: string): boolean {
-  return Object.hasOwn(PRICES, model);
+export function hasPrice(model: string, prices: PriceTable = PRICES): boolean {
+  return Object.hasOwn(prices, model);
 }
 
 /** Cost of a completed call. Adaptive-thinking tokens are billed as output tokens. */
-export function estimateCostUsd(model: string, usage: ProviderUsage): number {
-  const price = PRICES[model];
+export function estimateCostUsd(
+  model: string,
+  usage: ProviderUsage,
+  prices: PriceTable = PRICES,
+): number {
+  const price = prices[model];
   if (!price) return 0; // scripted/test models are free; unknown live models are rejected earlier
   return (
     (usage.inputTokens * price.input +
@@ -45,8 +72,9 @@ export function worstCaseCostUsd(
   model: string,
   promptChars: number,
   maxOutputTokens: number,
+  prices: PriceTable = PRICES,
 ): number {
-  const price = PRICES[model];
+  const price = prices[model];
   if (!price) return 0;
   return (
     (Math.ceil(promptChars / 3.5) * price.input +
@@ -64,8 +92,9 @@ export function upperBoundCostUsd(
   model: string,
   promptBytes: number,
   maxOutputTokens: number,
+  prices: PriceTable = PRICES,
 ): number {
-  const price = PRICES[model];
+  const price = prices[model];
   if (!price) return 0;
   return (
     ((promptBytes + 4096) *
@@ -88,5 +117,8 @@ export function addUsage(a: ProviderUsage, b: ProviderUsage): ProviderUsage {
     cachedInputTokens: a.cachedInputTokens + b.cachedInputTokens,
     cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
     outputTokens: a.outputTokens + b.outputTokens,
+    ...(a.reasoningTokens !== undefined || b.reasoningTokens !== undefined
+      ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) }
+      : {}),
   };
 }

@@ -150,6 +150,10 @@ try {
     "-e",
     "ANTHROPIC_API_KEY=m0-llm-secret-sentinel",
     "-e",
+    "GEMINI_API_KEY=live-gemini-secret-sentinel",
+    "-e",
+    "DEEPSEEK_API_KEY=live-deepseek-secret-sentinel",
+    "-e",
     "DATABASE_URL_MIGRATOR=m0-migrator-secret-sentinel",
     image,
   );
@@ -185,6 +189,8 @@ try {
   );
   assert(worker.envNames.includes("QLOO_API_KEY"));
   assert(worker.envNames.includes("ANTHROPIC_API_KEY"));
+  assert(worker.envNames.includes("GEMINI_API_KEY"));
+  assert(worker.envNames.includes("DEEPSEEK_API_KEY"));
   assert(
     !worker.envNames.some((name) =>
       [
@@ -461,6 +467,8 @@ try {
   for (const sentinel of [
     "m0-qloo-secret-sentinel",
     "m0-llm-secret-sentinel",
+    "live-gemini-secret-sentinel",
+    "live-deepseek-secret-sentinel",
     "m0-migrator-secret-sentinel",
   ]) {
     assert(!logs.includes(sentinel), "Secret value leaked to logs");

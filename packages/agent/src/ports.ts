@@ -181,6 +181,7 @@ export interface LlmUsage {
 }
 
 export type LlmResult<T> = {
+  usageComplete?: boolean;
   invocationIds: string[];
   modelId: string | null;
   fallbackUsed: boolean;
@@ -215,6 +216,7 @@ export interface LlmPort {
     maxOutputTokens: number;
     validate?: (value: z.output<S>) => ValidationIssue[];
     ctx: {
+      inputOrigin?: "synthetic" | "unknown";
       projectId: string;
       runId?: string | null;
       signal?: AbortSignal;

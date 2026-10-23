@@ -228,7 +228,17 @@ describe("LlmGateway — refusal, truncation, fallback, budget", () => {
     });
     expect(provider.requests.map((r) => r.model)).toEqual([PRIMARY, FALLBACK]);
     expect(provider.requests[1]!.messages).toHaveLength(1); // fresh conversation
-    expect(rows[0]).toMatchObject({ modelId: FALLBACK, fallbackUsed: true });
+    expect(rows[0]).toMatchObject({
+      modelId: PRIMARY,
+      stopReason: "provider_error",
+      validationStatus: "INVALID",
+    });
+    expect(rows[0]!.validationErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "USAGE_UNKNOWN" }),
+      ]),
+    );
+    expect(rows[1]).toMatchObject({ modelId: FALLBACK, fallbackUsed: true });
   });
 
   it("reports UNAVAILABLE when the fallback also fails, and CONFIGURATION on auth errors", async () => {

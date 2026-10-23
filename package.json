@@ -18,6 +18,7 @@
     "test:unit": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:runtime": "vitest run --config vitest.runtime.config.ts",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "test:e2e": "playwright test",
     "test:container": "node scripts/container-smoke.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",

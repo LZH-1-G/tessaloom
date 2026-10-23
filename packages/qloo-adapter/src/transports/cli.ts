@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { SearchEntitiesInput } from "../inputs";
+import { qlooChildEnv } from "./env";
 import {
   TransportError,
   WORKFLOWS,
@@ -59,7 +60,7 @@ export class CliTransport implements HarnessTransport {
         this.options.command ?? "qloo",
         argv,
         {
-          env: this.options.env ?? process.env,
+          env: qlooChildEnv(this.options.env ?? process.env),
           timeout: timeoutMs,
           killSignal: "SIGTERM",
           maxBuffer: this.options.maxBufferBytes ?? 8 * 1024 * 1024,

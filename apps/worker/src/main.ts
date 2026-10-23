@@ -18,6 +18,7 @@ import {
   createDbLlmRecorder,
   createLlmGateway,
   createSpendGuard,
+  spendLimitsForProvider,
   effectiveModels,
 } from "./llm";
 import {
@@ -61,12 +62,15 @@ const gateway = createLlmGateway(
   env,
   createDbLlmRecorder(handle.db),
   undefined,
-  createSpendGuard(handle, {
-    access: runAccessFor(env.APP_ENV, env.RUN_ACCESS),
-    globalDailyUsd: env.GLOBAL_DAILY_LLM_USD,
-    workspaceDailyUsd: env.WORKSPACE_DAILY_LLM_USD,
-    experimentUsd: env.EXPERIMENT_LLM_USD,
-  }),
+  createSpendGuard(
+    handle,
+    spendLimitsForProvider(env, {
+      access: runAccessFor(env.APP_ENV, env.RUN_ACCESS),
+      globalDailyUsd: env.GLOBAL_DAILY_LLM_USD,
+      workspaceDailyUsd: env.WORKSPACE_DAILY_LLM_USD,
+      experimentUsd: env.EXPERIMENT_LLM_USD,
+    }),
+  ),
 );
 const harnessVersion = () =>
   env.QLOO_MODE === "fixture" || env.QLOO_MODE === "synthetic"

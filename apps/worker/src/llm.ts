@@ -8,6 +8,13 @@ import {
 } from "@tessaloom/db";
 import {
   AnthropicProvider,
+  GeminiProvider,
+  GEMINI_MODELS,
+  DeepSeekProvider,
+  DEEPSEEK_MODELS,
+  DEEPSEEK_PRICE_REVIEW,
+  deepseekUsdPrices,
+  type PriceTable,
   LlmGateway,
   type LlmInvocationRecorder,
   type LlmProvider,
@@ -79,11 +86,23 @@ export function createDbLlmRecorder(db: Executor): LlmInvocationRecorder {
 }
 
 export interface LlmSettings {
-  LLM_PROVIDER: "anthropic" | "scripted";
+  LLM_PROVIDER: "anthropic" | "scripted" | "gemini" | "deepseek";
   LLM_MODEL: string;
   LLM_FALLBACK_MODEL: string;
   LLM_MODE: "standard" | "economy";
   ANTHROPIC_API_KEY?: string;
+  DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_LIVE_APPROVED?: "off" | "on";
+  DEEPSEEK_MAX_REQUESTS?: number;
+  DEEPSEEK_BUDGET_CNY?: number;
+  DEEPSEEK_USD_PER_CNY?: number;
+  DEEPSEEK_PRICING_VERIFIED_AT?: string;
+  QLOO_MODE?: "live" | "synthetic" | "fixture";
+  GEMINI_API_KEY?: string;
+  GEMINI_FREE_TIER_CONFIRMED?: "off" | "on";
+  GEMINI_DATA_SHARING_APPROVED?: "off" | "on";
+  GEMINI_MAX_REQUESTS?: number;
+  GEMINI_TIMEOUT_MS?: number;
 }
 
 /**
@@ -98,9 +117,20 @@ export const SCRIPTED_MODELS = {
 
 /** The models a deployment actually uses (scripted runs never borrow a real model name). */
 export function effectiveModels(settings: LlmSettings) {
+  if (settings.LLM_PROVIDER === "deepseek") {
+    const primary =
+      settings.LLM_MODE === "economy" ? "deepseek-flash" : "deepseek-v4-pro";
+    return { primary, fallback: primary }; // Alternative selected explicitly, never automatic fallback.
+  }
   return settings.LLM_PROVIDER === "scripted"
     ? { primary: SCRIPTED_MODELS.primary, fallback: SCRIPTED_MODELS.fallback }
-    : { primary: settings.LLM_MODEL, fallback: settings.LLM_FALLBACK_MODEL };
+    : {
+        primary: settings.LLM_MODEL,
+        fallback:
+          settings.LLM_PROVIDER === "gemini"
+            ? settings.LLM_MODEL
+            : settings.LLM_FALLBACK_MODEL,
+      };
 }
 
 export function createLlmGateway(
@@ -110,26 +140,131 @@ export function createLlmGateway(
   spendGuard?: SpendGuard,
 ): LlmGateway | null {
   let resolved = provider;
+  let prices: PriceTable | undefined;
+  let pricingContext: Record<string, unknown> | undefined;
   let models = {
     primary: settings.LLM_MODEL,
     fallback: settings.LLM_FALLBACK_MODEL,
   };
+  if (settings.LLM_PROVIDER === "deepseek") {
+    if (
+      !settings.DEEPSEEK_API_KEY ||
+      settings.DEEPSEEK_LIVE_APPROVED !== "on" ||
+      !settings.DEEPSEEK_MAX_REQUESTS ||
+      !settings.DEEPSEEK_BUDGET_CNY ||
+      !settings.DEEPSEEK_USD_PER_CNY ||
+      !settings.DEEPSEEK_PRICING_VERIFIED_AT ||
+      !["fixture", "synthetic"].includes(settings.QLOO_MODE ?? "")
+    )
+      return null;
+    const priceApproval = {
+      usdPerCny: settings.DEEPSEEK_USD_PER_CNY,
+      verifiedAt: settings.DEEPSEEK_PRICING_VERIFIED_AT,
+    };
+    try {
+      prices = deepseekUsdPrices(priceApproval);
+    } catch {
+      return null;
+    }
+    pricingContext = {
+      billingCurrency: "CNY",
+      ledgerCurrency: "USD",
+      usdPerCny: priceApproval.usdPerCny,
+      pricingVerifiedAt: priceApproval.verifiedAt,
+      tariffSourceDate: DEEPSEEK_PRICE_REVIEW,
+      tariff: "peak-conservative-estimate",
+    };
+    models = effectiveModels(settings);
+    if (!(DEEPSEEK_MODELS as readonly string[]).includes(models.primary))
+      return null;
+    resolved ??= new DeepSeekProvider({
+      apiKey: settings.DEEPSEEK_API_KEY,
+      liveApproved: true,
+      priceApproval,
+      maxRequests: settings.DEEPSEEK_MAX_REQUESTS,
+      budgetCny: settings.DEEPSEEK_BUDGET_CNY,
+    });
+  }
   if (!resolved) {
     models = effectiveModels(settings);
     // Scripted: deterministic stand-ins (development/CI only; rejected in production).
     if (settings.LLM_PROVIDER === "scripted")
       resolved = createScriptedDemoProvider();
-    else if (settings.ANTHROPIC_API_KEY)
+    else if (settings.LLM_PROVIDER === "gemini") {
+      if (
+        !settings.GEMINI_API_KEY ||
+        settings.GEMINI_FREE_TIER_CONFIRMED !== "on" ||
+        settings.GEMINI_DATA_SHARING_APPROVED !== "on" ||
+        !(GEMINI_MODELS as readonly string[]).includes(settings.LLM_MODEL) ||
+        !settings.GEMINI_MAX_REQUESTS
+      )
+        return null;
+      resolved = new GeminiProvider({
+        apiKey: settings.GEMINI_API_KEY,
+        model: settings.LLM_MODEL,
+        freeTierConfirmed: true,
+        dataSharingApproved: true,
+        maxRequests: settings.GEMINI_MAX_REQUESTS,
+        timeoutMs: settings.GEMINI_TIMEOUT_MS,
+      });
+    } else if (settings.ANTHROPIC_API_KEY)
       resolved = new AnthropicProvider({ apiKey: settings.ANTHROPIC_API_KEY });
     else return null;
   }
   return new LlmGateway({
     provider: resolved,
     primaryModel: models.primary,
-    fallbackModel: models.fallback,
+    fallbackModel: ["gemini", "deepseek"].includes(settings.LLM_PROVIDER)
+      ? null
+      : models.fallback,
+    prices,
+    pricingContext,
+    ...(settings.LLM_PROVIDER === "deepseek"
+      ? { maxRepairs: 0, retryTruncation: false, maxOutputTokensCeiling: 8192 }
+      : {}),
     mode: settings.LLM_MODE,
     recorder,
     allowUnpricedModels: resolved.name === "scripted",
     spendGuard,
   });
+}
+
+/** Native trial allowance also clamps persistent M10-A USD scopes; public open access
+ * is never sufficient for paid DeepSeek trials. An approved grant remains required. */
+export function spendLimitsForProvider(
+  settings: LlmSettings,
+  limits: LlmSpendLimits,
+): LlmSpendLimits {
+  if (settings.LLM_PROVIDER !== "deepseek") return limits;
+  let cap = 0;
+  try {
+    if (
+      settings.DEEPSEEK_LIVE_APPROVED !== "on" ||
+      !settings.DEEPSEEK_USD_PER_CNY ||
+      !settings.DEEPSEEK_PRICING_VERIFIED_AT ||
+      !settings.DEEPSEEK_BUDGET_CNY ||
+      settings.DEEPSEEK_BUDGET_CNY > 2
+    )
+      throw new Error();
+    deepseekUsdPrices({
+      usdPerCny: settings.DEEPSEEK_USD_PER_CNY,
+      verifiedAt: settings.DEEPSEEK_PRICING_VERIFIED_AT,
+    });
+    cap = settings.DEEPSEEK_BUDGET_CNY * settings.DEEPSEEK_USD_PER_CNY;
+    if (!Number.isFinite(cap) || cap <= 0) throw new Error();
+  } catch {
+    return {
+      ...limits,
+      access: "off",
+      globalDailyUsd: 0,
+      workspaceDailyUsd: 0,
+      experimentUsd: 0,
+    };
+  }
+  return {
+    access: limits.access === "off" ? "off" : "invite",
+    globalDailyUsd: Math.min(limits.globalDailyUsd, cap),
+    workspaceDailyUsd: Math.min(limits.workspaceDailyUsd, cap),
+    experimentUsd: Math.min(limits.experimentUsd, cap),
+  };
 }

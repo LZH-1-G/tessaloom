@@ -108,6 +108,7 @@ export interface PoolCandidateView {
 }
 
 export interface StepContext {
+  inputOrigin?: "synthetic" | "unknown";
   run: {
     id: string;
     kind: RunKind;
