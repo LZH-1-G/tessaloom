@@ -3,6 +3,7 @@ import {
   recordSnapshot,
   recordToolInvocation,
   withTx,
+  getToolInvocation,
   type Db,
   type RawRetention,
 } from "@tessaloom/db";
@@ -21,6 +22,14 @@ export function createDbRecorder(
     async record(input) {
       return withTx(db, async (tx) => {
         let snapshotId: string | null = null;
+        // Reuse structural provenance, never a raw response or a new retrieval timestamp.
+        const source =
+          input.dataOrigin === "CACHE" && input.cacheSourceInvocationId
+            ? await getToolInvocation(tx, input.cacheSourceInvocationId)
+            : null;
+        if (source && source.projectId !== input.ctx.projectId)
+          throw new Error("Cache source project mismatch");
+        if (source) snapshotId = source.snapshotId;
         if (input.parsed && input.dataOrigin !== "CACHE") {
           const snapshot = await recordSnapshot(tx, {
             requestHash: input.requestHash,
@@ -50,9 +59,15 @@ export function createDbRecorder(
           dataOrigin: input.dataOrigin,
           cacheSourceInvocationId: input.cacheSourceInvocationId ?? null,
           summary: input.envelope,
-          correlationId: input.parsed?.correlationId ?? null,
-          harnessEndpoint: input.parsed?.endpoint ?? null,
-          harnessRequests: input.parsed?.requests ?? [],
+          correlationId:
+            input.parsed?.correlationId ?? source?.correlationId ?? null,
+          harnessEndpoint:
+            input.parsed?.endpoint ?? source?.harnessEndpoint ?? null,
+          harnessRequests:
+            input.parsed?.requests ??
+            (Array.isArray(source?.harnessRequests)
+              ? source.harnessRequests
+              : []),
           attempt: input.attempt,
           latencyMs: input.latencyMs,
         });

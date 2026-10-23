@@ -1,3 +1,4 @@
+import { sourceRetrievedAt } from "./qloo";
 import type { RunAdmission } from "./cost";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
@@ -366,7 +367,7 @@ export async function evidenceAppendix(
       claim: hypothesisClaims.statement,
       hypothesisTitle: hypotheses.title,
       dataOrigin: toolInvocations.dataOrigin,
-      retrievedAt: toolInvocations.createdAt,
+      retrievedAt: sourceRetrievedAt,
     })
     .from(evidenceRecords)
     .innerJoin(
@@ -394,7 +395,7 @@ export async function evidenceAppendix(
         r.dataOrigin === "CACHE"
           ? sources.get(r.e.toolInvocationId!)
           : undefined;
-      const retrievedAt = source ? source.createdAt : r.retrievedAt;
+      const retrievedAt = r.retrievedAt;
       return {
         id,
         label: `E-${i + 1}`,

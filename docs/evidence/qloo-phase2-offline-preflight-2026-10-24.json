@@ -1,0 +1,53 @@
+{
+  "harnessVersion": "0.1.26",
+  "credentialConfigured": true,
+  "credentialSource": "config",
+  "configMode": "600",
+  "configOwnedByCurrentUser": true,
+  "shellEndpointConfigured": false,
+  "defaultResolvedEndpoint": "https://api.qloo.com/",
+  "explicitEventEndpoint": "https://hackathon.api.qloo.com",
+  "offlineDoctor": [
+    {
+      "id": "qloo-auth",
+      "status": "ok"
+    },
+    {
+      "id": "qloo-endpoint-trust",
+      "status": "ok"
+    }
+  ],
+  "dryRuns": [
+    {
+      "method": "GET",
+      "reportedUrl": "https://api.qloo.com/search",
+      "params": {
+        "query": "The Beatles",
+        "take": "2",
+        "types": "urn:entity:artist"
+      }
+    },
+    {
+      "method": "GET",
+      "reportedUrl": "https://api.qloo.com/search",
+      "params": {
+        "query": "Spirited Away",
+        "take": "2",
+        "types": "urn:entity:movie"
+      }
+    },
+    {
+      "method": "GET",
+      "reportedUrl": "https://api.qloo.com/v2/insights",
+      "params": {
+        "filter.type": "urn:entity:book",
+        "take": "1",
+        "signal.interests.entities": "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222"
+      }
+    }
+  ],
+  "insightsIdsAreSyntheticPlaceholders": true,
+  "dryRunUrlIsNotEndpointTrustEvidence": true,
+  "httpRequests": 0,
+  "credentialIssuerQuotaExpiryAndSharingVerified": false
+}

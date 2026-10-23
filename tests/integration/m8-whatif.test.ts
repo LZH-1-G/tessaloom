@@ -1,9 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import type { ComparisonMetrics } from "../../packages/core/src";
+import {
+  buildEvidenceGraph,
+  type ComparisonMetrics,
+} from "../../packages/core/src";
 import {
   QUEUES,
   createCounterfactualBranch,
   experimentView,
+  evidenceTrace,
+  invocationTrace,
   findComparison,
   getRun,
   previewCounterfactual,
@@ -156,6 +161,69 @@ describe("M8 counterfactual branches (hold hypotheses)", () => {
     expect(
       c.metrics!.perHypothesis.every((h) => (h.feasibilityDelta ?? 0) <= 0),
     ).toBe(true);
+  });
+
+  it("preserves original evidence time and fixture provenance through What-if reuse and graph traces", async () => {
+    const ids = await parent();
+    const first = await branch(ids, {
+      scoringWeights: { support: 0.2, novelty: 0.3, feasibility: 0.5 },
+    });
+    const second = await branch(
+      {
+        workspaceId: ids.workspaceId,
+        experimentId: first.created.branchExperimentId,
+      },
+      { constraints: { capacity: 20 } },
+    );
+    for (const b of [first, second]) {
+      expect(b.live).toBe(0);
+      const view = await experimentView(
+        handle.db,
+        ids.workspaceId,
+        b.created.branchExperimentId,
+      );
+      const graph = buildEvidenceGraph(view);
+      const evidence = view.hypotheses.flatMap((h) => h.evidence);
+      const reused = evidence.filter((e) => e.dataOrigin === "CACHE");
+      expect(reused.length).toBeGreaterThan(0);
+      for (const e of reused) {
+        const trace = await invocationTrace(
+          handle.db,
+          ids.workspaceId,
+          e.toolInvocationId!,
+        );
+        expect(trace.cacheSourceInvocationId).toBeTruthy();
+        const source = await invocationTrace(
+          handle.db,
+          ids.workspaceId,
+          trace.cacheSourceInvocationId!,
+        );
+        expect(source.dataOrigin).toBe("FIXTURE");
+        expect(e.provenanceClass).toBe("DEVELOPMENT_FIXTURE");
+        expect(e.retrievedAt).toEqual(source.retrievedAt);
+        expect(trace.retrievedAt).toEqual(source.retrievedAt);
+        expect(trace.invokedAt.getTime()).toBeGreaterThan(
+          source.retrievedAt!.getTime(),
+        );
+        const detail = await evidenceTrace(handle.db, ids.workspaceId, e.id);
+        expect(detail.invocation?.retrievedAt).toEqual(source.retrievedAt);
+        expect(detail.invocation?.invokedAt).toEqual(trace.invokedAt);
+        expect(detail.snapshot?.retrievedAt).toEqual(source.retrievedAt);
+        const node = graph.nodes.find(
+          (n) => n.type === "evidence" && n.invocationId === e.toolInvocationId,
+        );
+        expect(node?.provenance).toBe("DEVELOPMENT_FIXTURE");
+      }
+      for (const entity of view.entities) {
+        if (!entity.sourceToolInvocationId) continue;
+        const trace = await invocationTrace(
+          handle.db,
+          ids.workspaceId,
+          entity.sourceToolInvocationId,
+        );
+        expect(entity.retrievedAt).toEqual(trace.retrievedAt);
+      }
+    }
   });
 
   it("seed swap: only dependent queries re-run (WI-A1); evidence and stances genuinely recomputed", async () => {

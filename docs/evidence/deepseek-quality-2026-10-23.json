@@ -1,0 +1,468 @@
+{
+  "trial": "deepseek-synthetic-quality-v1",
+  "date": "2026-10-23",
+  "authorization": {
+    "model": "deepseek-v4-pro",
+    "maxRequests": 2,
+    "maxInputBytesPerRequest": 16384,
+    "maxOutputTokensPerRequest": 8192,
+    "budgetCny": 2,
+    "retries": 0,
+    "fallbacks": 0,
+    "data": "synthetic-only"
+  },
+  "isolation": {
+    "event": "isolation_verified",
+    "keyAbsent": true,
+    "fileDenied": true,
+    "procDenied": true,
+    "hostAbsent": true,
+    "workerUid": 10002,
+    "webUid": 10001,
+    "noPublishedPorts": true,
+    "noHostMounts": true
+  },
+  "results": [
+    {
+      "event": "result",
+      "case": "R3-generation",
+      "result": {
+        "ok": true,
+        "value": {
+          "hypotheses": [
+            {
+              "tempId": "h1",
+              "title": "Paper Static Coastline",
+              "premise": "A 90-minute cafe evening where the cartographic mood of Paper Atlas Stories meets the low-lit texture of Velvet Static Radio, with Lantern Ferry Sketches used as a shared visual interlude for conversation.",
+              "elementRefs": [
+                {
+                  "entityId": "11111111-1111-4111-8111-111111111111",
+                  "role": "anchor"
+                },
+                {
+                  "entityId": "22222222-2222-4222-8222-222222222222",
+                  "role": "accent"
+                },
+                {
+                  "entityId": "33333333-3333-4333-8333-333333333333",
+                  "role": "context"
+                }
+              ],
+              "claims": [
+                {
+                  "tempId": "c1",
+                  "statement": "Audiences close to Paper Atlas Stories and Velvet Static Radio also show affinity for Lantern Ferry Sketches.",
+                  "testKind": "CROSS_DOMAIN_AFFINITY",
+                  "params": {
+                    "signalEntityIds": [
+                      "11111111-1111-4111-8111-111111111111",
+                      "22222222-2222-4222-8222-222222222222"
+                    ],
+                    "targetDomain": "movie",
+                    "targetEntityId": "33333333-3333-4333-8333-333333333333"
+                  }
+                },
+                {
+                  "tempId": "c2",
+                  "statement": "Paper Atlas Stories and Velvet Static Radio have bridgeable audience groups for a book-and-music conversation.",
+                  "testKind": "AUDIENCE_BRIDGE",
+                  "params": {
+                    "signalEntityIds": [
+                      "11111111-1111-4111-8111-111111111111"
+                    ],
+                    "compareEntityIds": [
+                      "22222222-2222-4222-8222-222222222222"
+                    ]
+                  }
+                },
+                {
+                  "tempId": "c3",
+                  "statement": "For a Paper Atlas Stories conversation, Velvet Static Radio is the expected best companion among the available artist and film candidates.",
+                  "testKind": "SHORTLIST_FIT",
+                  "params": {
+                    "signalEntityIds": [
+                      "11111111-1111-4111-8111-111111111111"
+                    ],
+                    "targetEntityId": "22222222-2222-4222-8222-222222222222",
+                    "optionEntityIds": [
+                      "22222222-2222-4222-8222-222222222222",
+                      "33333333-3333-4333-8333-333333333333"
+                    ]
+                  }
+                }
+              ],
+              "creativeElements": [
+                {
+                  "text": "A paper tablecloth printed with faint routes where guests stamp a small lighthouse at each discussion turning point.",
+                  "provenance": "CREATIVE_SPECULATION"
+                },
+                {
+                  "text": "Short radio-static pauses between reading excerpts, timed like ferry bells.",
+                  "provenance": "CREATIVE_SPECULATION"
+                }
+              ],
+              "experienceSketch": "Open with a shared read-aloud passage from Paper Atlas Stories while a low Velvet Static Radio-inspired ambient loop plays. The facilitator invites each cafe table to map one word that stayed with them, then a projected still from Lantern Ferry Sketches shifts the conversation toward place and departure. The evening closes with a silent listening-and-writing segment and a group reflection, keeping the 24-person room conversational rather than performative."
+            },
+            {
+              "tempId": "h2",
+              "title": "Lanterns in Static",
+              "premise": "A film-led 90-minute collision using Lantern Ferry Sketches as the atmospheric anchor, Paper Atlas Stories as the reflective reading thread, and Velvet Static Radio as the sonic undercurrent for an accessible conversation-led night.",
+              "elementRefs": [
+                {
+                  "entityId": "33333333-3333-4333-8333-333333333333",
+                  "role": "anchor"
+                },
+                {
+                  "entityId": "11111111-1111-4111-8111-111111111111",
+                  "role": "accent"
+                },
+                {
+                  "entityId": "22222222-2222-4222-8222-222222222222",
+                  "role": "context"
+                }
+              ],
+              "claims": [
+                {
+                  "tempId": "c1",
+                  "statement": "Audiences near Lantern Ferry Sketches and Paper Atlas Stories show affinity with artist Velvet Static Radio.",
+                  "testKind": "CROSS_DOMAIN_AFFINITY",
+                  "params": {
+                    "signalEntityIds": [
+                      "33333333-3333-4333-8333-333333333333",
+                      "11111111-1111-4111-8111-111111111111"
+                    ],
+                    "targetDomain": "artist",
+                    "targetEntityId": "22222222-2222-4222-8222-222222222222"
+                  }
+                },
+                {
+                  "tempId": "c2",
+                  "statement": "A film-led lantern audience and a book-led atlas audience are bridgeable through shared cafe conversation.",
+                  "testKind": "AUDIENCE_BRIDGE",
+                  "params": {
+                    "signalEntityIds": [
+                      "33333333-3333-4333-8333-333333333333"
+                    ],
+                    "compareEntityIds": [
+                      "11111111-1111-4111-8111-111111111111"
+                    ]
+                  }
+                },
+                {
+                  "tempId": "c3",
+                  "statement": "For a Lantern Ferry Sketches evening, Paper Atlas Stories is the expected best companion among the available book and artist candidates.",
+                  "testKind": "SHORTLIST_FIT",
+                  "params": {
+                    "signalEntityIds": [
+                      "33333333-3333-4333-8333-333333333333"
+                    ],
+                    "targetEntityId": "11111111-1111-4111-8111-111111111111",
+                    "optionEntityIds": [
+                      "11111111-1111-4111-8111-111111111111",
+                      "22222222-2222-4222-8222-222222222222"
+                    ]
+                  }
+                }
+              ],
+              "creativeElements": [
+                {
+                  "text": "A single small red lantern moves from table to table, marking whose turn it is to read or speak.",
+                  "provenance": "CREATIVE_SPECULATION"
+                },
+                {
+                  "text": "Cafe windows are lined with tracing-paper silhouettes of ferry shapes, backlit in warm amber.",
+                  "provenance": "CREATIVE_SPECULATION"
+                }
+              ],
+              "experienceSketch": "The night begins with a short, wordless clip from Lantern Ferry Sketches, followed by each table opening one page from Paper Atlas Stories at random. A quiet Velvet Static Radio-inspired soundbed carries the room through a structured pass-the-lantern discussion about crossings, arrivals, and missed connections. Participants end by writing a one-sentence departure note on a paper scrap and adding it to a shared corkboard map, preserving a low-pressure 90-minute arc for a small cafe."
+            }
+          ],
+          "decisionSummary": "Generated two 90-minute cafe collisions: book-artist-film \"Paper Static Coastline\" and film-book-artist \"Lanterns in Static,\" each with three Qloo-testable claims."
+        },
+        "usageComplete": true,
+        "invocationIds": [
+          "01a168a5-00be-7671-9f37-d8b3cd5ac12c"
+        ],
+        "modelId": "deepseek-v4-pro",
+        "fallbackUsed": false,
+        "fallbackReason": null,
+        "usage": {
+          "inputTokens": 2455,
+          "cachedInputTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 3808,
+          "reasoningTokens": 2125
+        },
+        "costUsd": 0.0249822,
+        "attempts": 1
+      },
+      "observation": {
+        "attempt": 1,
+        "requestBytes": 8747,
+        "requestHash": "bf8ee5b66bd36123529cd2e7e133d4c619858f0e2503471785c27089448d00f3",
+        "startedAt": "2026-10-23T12:02:40.206Z",
+        "httpStatus": 200,
+        "providerReportedCostCny": null,
+        "providerReportedModel": "deepseek-v4-pro",
+        "providerUsage": {
+          "inputTokens": 2455,
+          "cachedInputTokens": 0,
+          "outputTokens": 3808,
+          "reasoningTokens": 2125,
+          "totalTokens": 6263
+        }
+      }
+    },
+    {
+      "event": "result",
+      "case": "R4-critique",
+      "result": {
+        "ok": true,
+        "value": {
+          "perHypothesis": [
+            {
+              "hypothesisId": "44444444-4444-4444-8444-444444444444",
+              "confidenceNote": "The sole cited evidence is a synthetic aggregate taste-overlap signal with no attendance, revenue, causal, or individual-level observations. The guarantee language in the claim cannot be interpreted from this evidence.",
+              "citedEvidenceIds": [
+                "55555555-5555-4555-8555-555555555555"
+              ],
+              "recommendation": "retire",
+              "refinementHint": "Remove guarantee and causal language, then reframe as an exploratory cross-domain affinity signal test without attendance or revenue outcomes."
+            }
+          ],
+          "continueLoop": false,
+          "decisionSummary": "Only an inconclusive synthetic taste-overlap signal was cited; it cannot support guaranteed attendance or revenue, so the hypothesis is retired."
+        },
+        "usageComplete": true,
+        "invocationIds": [
+          "01a168a5-25ae-725f-a226-1f25ec67efc1"
+        ],
+        "modelId": "deepseek-v4-pro",
+        "fallbackUsed": false,
+        "fallbackReason": null,
+        "usage": {
+          "inputTokens": 1099,
+          "cachedInputTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 628,
+          "reasoningTokens": 435
+        },
+        "costUsd": 0.005369400000000001,
+        "attempts": 1
+      },
+      "observation": {
+        "attempt": 2,
+        "requestBytes": 4506,
+        "requestHash": "9a77eec9e64ade7481c41b9a7711bcbbf701bc18e23b3a6ae2b0e778a79b7baf",
+        "startedAt": "2026-10-23T12:03:26.540Z",
+        "httpStatus": 200,
+        "providerReportedCostCny": null,
+        "providerReportedModel": "deepseek-v4-pro",
+        "providerUsage": {
+          "inputTokens": 1099,
+          "cachedInputTokens": 0,
+          "outputTokens": 628,
+          "reasoningTokens": 435,
+          "totalTokens": 1727
+        }
+      }
+    }
+  ],
+  "scriptedBaseline": [
+    {
+      "hypotheses": [
+        {
+          "tempId": "h1",
+          "title": "Paper Atlas Stories × Velvet Static Radio",
+          "premise": "Audiences with affinity for Paper Atlas Stories may also show affinity for Velvet Static Radio; the pairing could anchor one evening across book and artist worlds.",
+          "elementRefs": [
+            {
+              "entityId": "11111111-1111-4111-8111-111111111111",
+              "role": "anchor"
+            },
+            {
+              "entityId": "22222222-2222-4222-8222-222222222222",
+              "role": "accent"
+            }
+          ],
+          "claims": [
+            {
+              "tempId": "c1",
+              "statement": "Audiences with affinity for the seeds also show affinity for Velvet Static Radio among artist results.",
+              "testKind": "CROSS_DOMAIN_AFFINITY",
+              "params": {
+                "signalEntityIds": [
+                  "11111111-1111-4111-8111-111111111111",
+                  "22222222-2222-4222-8222-222222222222"
+                ],
+                "targetDomain": "artist",
+                "targetEntityId": "22222222-2222-4222-8222-222222222222"
+              }
+            },
+            {
+              "tempId": "c2",
+              "statement": "The audiences of Paper Atlas Stories and Velvet Static Radio share taste signals.",
+              "testKind": "AUDIENCE_BRIDGE",
+              "params": {
+                "signalEntityIds": [
+                  "11111111-1111-4111-8111-111111111111"
+                ],
+                "compareEntityIds": [
+                  "22222222-2222-4222-8222-222222222222"
+                ]
+              }
+            }
+          ],
+          "creativeElements": [
+            {
+              "text": "A listening corner themed on Velvet Static Radio",
+              "provenance": "CREATIVE_SPECULATION"
+            }
+          ],
+          "experienceSketch": "A 90-minute cafe evening that pairs Paper Atlas Stories with Velvet Static Radio, with a short introduction and a shared table for up to 24 guests."
+        },
+        {
+          "tempId": "h2",
+          "title": "Paper Atlas Stories × Lantern Ferry Sketches",
+          "premise": "Audiences with affinity for Paper Atlas Stories may also show affinity for Lantern Ferry Sketches; the pairing could anchor one evening across book and movie worlds.",
+          "elementRefs": [
+            {
+              "entityId": "11111111-1111-4111-8111-111111111111",
+              "role": "anchor"
+            },
+            {
+              "entityId": "33333333-3333-4333-8333-333333333333",
+              "role": "accent"
+            }
+          ],
+          "claims": [
+            {
+              "tempId": "c1",
+              "statement": "Audiences with affinity for the seeds also show affinity for Lantern Ferry Sketches among movie results.",
+              "testKind": "CROSS_DOMAIN_AFFINITY",
+              "params": {
+                "signalEntityIds": [
+                  "11111111-1111-4111-8111-111111111111",
+                  "22222222-2222-4222-8222-222222222222"
+                ],
+                "targetDomain": "movie",
+                "targetEntityId": "33333333-3333-4333-8333-333333333333"
+              }
+            },
+            {
+              "tempId": "c2",
+              "statement": "The audiences of Paper Atlas Stories and Velvet Static Radio share taste signals.",
+              "testKind": "AUDIENCE_BRIDGE",
+              "params": {
+                "signalEntityIds": [
+                  "11111111-1111-4111-8111-111111111111"
+                ],
+                "compareEntityIds": [
+                  "22222222-2222-4222-8222-222222222222"
+                ]
+              }
+            }
+          ],
+          "creativeElements": [
+            {
+              "text": "A browsing corner themed on Lantern Ferry Sketches",
+              "provenance": "CREATIVE_SPECULATION"
+            }
+          ],
+          "experienceSketch": "A 90-minute cafe evening that pairs Paper Atlas Stories with Lantern Ferry Sketches, with a short introduction and a shared table for up to 24 guests."
+        }
+      ],
+      "decisionSummary": "Wove 2 hypotheses from the top 2 collision candidates."
+    },
+    {
+      "perHypothesis": [
+        {
+          "hypothesisId": "44444444-4444-4444-8444-444444444444",
+          "confidenceNote": "Based on 1 aggregate affinity check; treat as directional.",
+          "citedEvidenceIds": [
+            "55555555-5555-4555-8555-555555555555"
+          ],
+          "recommendation": "refine",
+          "refinementHint": "Test a different element of the pool."
+        }
+      ],
+      "continueLoop": true,
+      "decisionSummary": "Reviewed 1 hypotheses against their deterministic stances."
+    }
+  ],
+  "postflight": {
+    "event": "postflight_audit",
+    "run": {
+      "state": "CANCELLED",
+      "budget": {
+        "maxLlmCalls": 2,
+        "maxQlooCalls": 0,
+        "maxHypotheses": 2,
+        "maxIterations": 0,
+        "wallClockSeconds": 180,
+        "maxLlmOutputTokens": 16384,
+        "maxEstimatedCostUsd": 0.4,
+        "maxClaimsPerHypothesis": 3
+      },
+      "grant_revoked": true
+    },
+    "ledger": [
+      {
+        "model": "deepseek-v4-pro",
+        "status": "SETTLED",
+        "reserved_micros": "81101",
+        "actual_micros": "24983"
+      },
+      {
+        "model": "deepseek-v4-pro",
+        "status": "SETTLED",
+        "reserved_micros": "81101",
+        "actual_micros": "5370"
+      }
+    ],
+    "counters": [
+      {
+        "metric": "llm_attempts",
+        "value": "2"
+      },
+      {
+        "metric": "llm_output_reserved",
+        "value": "16384"
+      },
+      {
+        "metric": "llm_usd_micros",
+        "value": "30353"
+      }
+    ],
+    "invocations": [
+      {
+        "role": "R3",
+        "model_id": "deepseek-v4-pro",
+        "validation_status": "VALID",
+        "input_tokens": 2455,
+        "cached_input_tokens": 0,
+        "output_tokens": 3808,
+        "latency_ms": 46294
+      },
+      {
+        "role": "R4",
+        "model_id": "deepseek-v4-pro",
+        "validation_status": "VALID",
+        "input_tokens": 1099,
+        "cached_input_tokens": 0,
+        "output_tokens": 628,
+        "latency_ms": 9428
+      }
+    ]
+  },
+  "accounting": {
+    "usdPerCny": 0.2,
+    "actualTokensOffPeakCalculatedCny": "0.075879",
+    "actualTokensPeakConservativeCalculatedCny": "0.151758",
+    "settledLedgerUsd": "0.030353",
+    "providerReportedCostCny": null,
+    "accountDebitVerified": false,
+    "noExtraBalanceRequests": true
+  },
+  "rawReasoningRetained": false
+}

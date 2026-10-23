@@ -3,6 +3,8 @@ import { uuidv7 } from "../../packages/core/src";
 import {
   createProject,
   createWorkspace,
+  invocationTrace,
+  recordToolInvocation,
   sql,
   type Db,
 } from "../../packages/db/src";
@@ -18,6 +20,7 @@ import { createTestDatabase } from "./helpers/test-db";
 let db: Db;
 let drop: () => Promise<void>;
 let projectId: string;
+let workspaceId: string;
 
 // Synthetic payload mirroring the V1-observed recommend shape; values are fictional.
 const recommendOk = {
@@ -73,6 +76,7 @@ beforeAll(async () => {
   db = test.handle.db;
   drop = test.drop;
   const workspace = await createWorkspace(db, { secretHash: "a".repeat(64) });
+  workspaceId = workspace.id;
   projectId = (
     await createProject(db, {
       workspaceId: workspace.id,
@@ -88,9 +92,11 @@ afterAll(async () => {
 describe("adapter + database recorder", () => {
   it("records harness provenance, never stores raw payloads by default, and links cache hits", async () => {
     const transport = new StubLiveTransport();
+    const retrievedAt = new Date("2026-10-01T10:00:00Z");
     const adapter = new QlooAdapter({
       transport,
       harnessVersion: "0.1.26",
+      now: () => retrievedAt.getTime(),
       recorder: createDbRecorder(db),
       sleep: async () => {},
     });
@@ -133,7 +139,41 @@ describe("adapter + database recorder", () => {
     expect(cached).toMatchObject({
       data_origin: "CACHE",
       cache_source_invocation_id: live!.id,
+      snapshot_id: live!.snapshot_id,
+      harness_endpoint: "/v2/insights",
+      correlation_id: "corr-int",
+      harness_requests: recommendOk.provenance.requests,
     });
+
+    expect(second.provenance.snapshotId).toBe(first.provenance.snapshotId);
+    expect(second.provenance.retrievedAt).toBe(retrievedAt.toISOString());
+    for (const invocation of [live!, cached!]) {
+      const trace = await invocationTrace(db, workspaceId, invocation.id);
+      expect(trace.retrievedAt).toEqual(retrievedAt);
+      expect(trace.invokedAt.getTime()).toBeGreaterThan(retrievedAt.getTime());
+    }
+
+    // Existing rows can have no snapshot link. Even nested legacy reuse must resolve
+    // the original source date, while retaining a distinct invocation timestamp.
+    let sourceId = live!.id;
+    for (let i = 0; i < 2; i++) {
+      const legacy = await recordToolInvocation(db, {
+        projectId,
+        purpose: "legacy cache regression",
+        method: "recommend",
+        workflow: "recommend",
+        transport: "HARNESS_CLI",
+        argsRedacted: {},
+        requestHash: first.provenance.requestHash,
+        dataOrigin: "CACHE",
+        cacheSourceInvocationId: sourceId,
+        summary: first.envelope,
+      });
+      const trace = await invocationTrace(db, workspaceId, legacy.id);
+      expect(trace.retrievedAt).toEqual(retrievedAt);
+      expect(trace.invokedAt).toEqual(legacy.createdAt);
+      sourceId = legacy.id;
+    }
 
     const snapshot = await db.execute<{
       raw: unknown;

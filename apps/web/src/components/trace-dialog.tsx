@@ -27,7 +27,8 @@ interface InvocationTrace {
   }[];
   latencyMs: number | null;
   attempt: number;
-  retrievedAt: string;
+  retrievedAt: string | null;
+  invokedAt: string;
 }
 
 interface EvidenceTraceData {
@@ -207,8 +208,18 @@ export function TraceDialog({
               </dd>
               <dt className="text-muted-foreground">Transport</dt>
               <dd>{invocation.transport}</dd>
-              <dt className="text-muted-foreground">Retrieved</dt>
-              <dd>{new Date(invocation.retrievedAt).toLocaleString()}</dd>
+              <dt className="text-muted-foreground">Originally retrieved</dt>
+              <dd>
+                {invocation.retrievedAt
+                  ? new Date(invocation.retrievedAt).toLocaleString()
+                  : "Unknown"}
+              </dd>
+              <dt className="text-muted-foreground">
+                {invocation.dataOrigin === "CACHE"
+                  ? "Reused"
+                  : "Invocation recorded"}
+              </dt>
+              <dd>{new Date(invocation.invokedAt).toLocaleString()}</dd>
               <dt className="text-muted-foreground">Request hash</dt>
               <dd className="truncate font-mono text-xs">
                 {invocation.requestHash}

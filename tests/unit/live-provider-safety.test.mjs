@@ -59,3 +59,30 @@ describe("calibration HTTP boundary (fake fetch, no live services)", () => {
     });
   });
 });
+
+describe("Phase 2 exact-request boundary (synthetic IDs, no network)", () => {
+  const approved =
+    "https://hackathon.api.qloo.com/v2/insights?filter.type=urn%3Aentity%3Abook&take=1&signal.interests.entities=11111111-1111-4111-8111-111111111111";
+  it("permits only the exact Insights request and one dispatch, including on HTTP failure", async () => {
+    const network = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 429 }));
+    const guarded = calibrationFetch(network, approved);
+    expect((await guarded(approved)).status).toBe(429);
+    await expect(guarded(approved)).rejects.toThrow("denied");
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(network.mock.calls[0][1].redirect).toBe("error");
+  });
+  it.each([
+    approved.replace("take=1", "take=20"),
+    approved + "&page=2",
+    approved + "#ignored",
+    url,
+  ])("blocks drift or fan-out before any HTTP dispatch: %s", async (actual) => {
+    const network = vi.fn();
+    await expect(calibrationFetch(network, approved)(actual)).rejects.toThrow(
+      "denied",
+    );
+    expect(network).not.toHaveBeenCalled();
+  });
+});
