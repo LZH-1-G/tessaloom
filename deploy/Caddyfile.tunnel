@@ -1,0 +1,28 @@
+{
+	admin off
+	auto_https off
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+			}
+		}
+	}
+}
+# The connector terminates public TLS; this origin is loopback-only on the host.
+http://{$TLS_DOMAIN} {
+	request_body {
+		max_size 65536
+	}
+	reverse_proxy app:3000 {
+		# Keep conservative shared-peer throttling; never trust client IP headers.
+		header_up X-Forwarded-For {remote_host}
+		header_up -Forwarded
+		header_up -X-Real-IP
+		header_up -CF-Connecting-IP
+		header_up X-Forwarded-Proto https
+		flush_interval -1
+	}
+}

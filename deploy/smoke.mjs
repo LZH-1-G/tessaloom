@@ -12,12 +12,12 @@ const root = path.resolve(import.meta.dirname, "..");
 const temporary = mkdtempSync(path.join(tmpdir(), "tessaloom-deploy-smoke-"));
 const project = `tl-deploy-${process.pid}-${Date.now()}`;
 const privateDir = path.join(temporary, "private");
-const image = process.env.M10B_IMAGE ?? "tessaloom:m10b";
+const image = process.env.M10B_IMAGE ?? "tessaloom:m11";
 const env = {
   ...process.env,
   APP_IMAGE: image,
   PRIVATE_DIR: privateDir,
-  TLS_DOMAIN: "localhost",
+  TLS_DOMAIN: "proxy",
   ACME_EMAIL: "test@example.invalid",
   BIND_IP: "127.0.0.1",
   HTTP_PORT: "0",
@@ -79,7 +79,7 @@ const clientScript = `
 const fs = require('node:fs');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const lib = require(input.plain ? 'node:http' : 'node:https');
-const req = lib.request({hostname:'proxy', port:input.plain ? 80 : 443, servername:'localhost', ca:fs.readFileSync('/tmp/https-ca.crt'), path:input.route, method:input.method, headers:{host:'localhost', ...input.headers}}, res=>{
+const req = lib.request({hostname:'proxy', port:input.plain ? 80 : 443, servername:'proxy', ca:fs.readFileSync('/tmp/https-ca.crt'), path:input.route, method:input.method, headers:{host:'proxy', ...input.headers}}, res=>{
   let text=''; res.setEncoding('utf8'); res.on('data', c=>text+=c);
   res.on('end', ()=>console.log(JSON.stringify({status:res.statusCode,headers:res.headers,text})));
 });
@@ -131,6 +131,34 @@ try {
   assert.equal(config.services.app.environment.GLOBAL_DAILY_LLM_USD, "0");
   assert.equal(config.services.app.mem_limit, "2147483648");
   assert(config.networks.backend.internal && config.networks.outbound.internal);
+  const operatorConfig = JSON.parse(
+    compose("--profile", "operator", "config", "--format", "json"),
+  );
+  assert.deepEqual(Object.keys(operatorConfig.services.admin.environment), [
+    "APP_ENV",
+  ]);
+  assert.deepEqual(
+    operatorConfig.services.admin.secrets.map((s) => s.source).sort(),
+    ["app_password", "share_token_pepper"],
+  );
+  assert.deepEqual(Object.keys(operatorConfig.services.admin.networks), [
+    "backend",
+  ]);
+  const tunnelConfig = JSON.parse(
+    docker(
+      ...composeArgs,
+      "-f",
+      path.join(root, "deploy/compose.tunnel.yml"),
+      "config",
+      "--format",
+      "json",
+    ),
+  );
+  assert.equal(tunnelConfig.services.proxy.ports.length, 1);
+  assert.equal(tunnelConfig.services.proxy.ports[0].host_ip, "127.0.0.1");
+  assert.equal(tunnelConfig.services.proxy.ports[0].target, 80);
+  assert.equal(tunnelConfig.services.app.ports, undefined);
+  assert.equal(tunnelConfig.services.postgres.ports, undefined);
   log("configuration_safe");
   compose("up", "-d", "--wait", "postgres");
   compose("run", "--rm", "migrate");
@@ -232,7 +260,29 @@ if(!found) process.exit(2);
     "setInterval(()=>{},1000)",
   );
   docker("cp", caPath, `${client}:/tmp/https-ca.crt`);
-  const origin = "https://localhost";
+  docker(
+    "cp",
+    path.join(root, "deploy/health.mjs"),
+    `${client}:/tmp/health.mjs`,
+  );
+  const health = () =>
+    JSON.parse(
+      docker(
+        "exec",
+        client,
+        "node",
+        "/tmp/health.mjs",
+        "https://proxy",
+        "--ca",
+        "/tmp/https-ca.crt",
+      ),
+    );
+  assert.throws(() =>
+    docker("exec", client, "node", "/tmp/health.mjs", "https://proxy"),
+  );
+  assert.equal(health().ok, true);
+  log("external_health_probe_local_tls_passed");
+  const origin = "https://proxy";
   async function request(
     route,
     { method = "GET", headers = {}, body, plain = false } = {},
@@ -251,7 +301,7 @@ if(!found) process.exit(2);
   }
   const redirect = await request("/", { plain: true });
   assert.equal(redirect.status, 308);
-  assert.match(redirect.headers.location, /^https:\/\/localhost/);
+  assert.match(redirect.headers.location, /^https:\/\/proxy/);
   const ready = await request("/api/health/ready");
   assert.equal(ready.status, 200);
   assert.equal(
@@ -356,39 +406,126 @@ if(!found) process.exit(2);
   assert.equal(sql("SELECT count(*) FROM agent_runs"), "0");
   assert.equal(sql("SELECT count(*) FROM llm_spend_reservations"), "0");
   log("production_invite_denial_passed");
+  const grant = JSON.parse(
+    compose(
+      "run",
+      "--rm",
+      "admin",
+      "grant",
+      "create",
+      "--label",
+      "smoke-zero-budget",
+      "--days",
+      "1",
+      "--runs",
+      "0",
+      "--usd",
+      "0",
+    ),
+  );
+  assert.equal(grant.maxRuns, 0);
+  assert.equal(grant.maxLlmUsd, 0);
+  assert(grant.code.length >= 32);
+  const grants = JSON.parse(compose("run", "--rm", "admin", "grant", "list"));
+  assert(grants.some((g) => g.id === grant.grantId));
+  assert(!JSON.stringify(grants).includes(grant.code));
+  assert.equal(
+    JSON.parse(
+      compose("run", "--rm", "admin", "grant", "revoke", grant.grantId),
+    ).revoked,
+    true,
+  );
+  assert.equal(
+    JSON.parse(compose("run", "--rm", "admin", "spend", "today"))
+      .globalLlmUsdToday,
+    0,
+  );
+  log("keyless_operator_grant_lifecycle_passed");
   if (!securityOnly) {
     const backup = path.join(temporary, "backup.dump");
-    execFileSync("bash", [path.join(root, "deploy/backup.sh"), backup], {
-      env: { ...env, COMPOSE_PROJECT_NAME: project },
-      stdio: "pipe",
-    });
-    sql("CREATE DATABASE tessaloom_restore");
-    const dbId = compose("ps", "-q", "postgres");
-    docker("cp", backup, `${dbId}:/tmp/restore.dump`);
-    compose(
-      "exec",
-      "-T",
-      "postgres",
-      "pg_restore",
-      "-U",
-      "postgres",
-      "-d",
-      "tessaloom_restore",
-      "--exit-on-error",
-      "--no-owner",
-      "/tmp/restore.dump",
+    const operatorEnv = path.join(temporary, "deploy.env");
+    writeFileSync(
+      operatorEnv,
+      [
+        "APP_IMAGE",
+        "PRIVATE_DIR",
+        "TLS_DOMAIN",
+        "ACME_EMAIL",
+        "BIND_IP",
+        "HTTP_PORT",
+        "HTTPS_PORT",
+        "RUN_ACCESS",
+        "GLOBAL_DAILY_LLM_USD",
+        "GLOBAL_DAILY_QLOO_CALLS",
+      ]
+        .map((key) => `${key}=${env[key]}`)
+        .join("\n"),
+      { mode: 0o600 },
+    );
+    execFileSync(
+      "bash",
+      [path.join(root, "deploy/backup.sh"), backup, operatorEnv, project],
+      {
+        env: { ...env, COMPOSE_PROJECT_NAME: project },
+        stdio: "pipe",
+      },
+    );
+    const restoreArgs = [
+      path.join(root, "deploy/restore-check.sh"),
+      backup,
+      operatorEnv,
+      project,
+      "tl_restore_smoke",
+    ];
+    execFileSync("bash", restoreArgs, { env, stdio: "pipe" });
+    assert.throws(() =>
+      execFileSync("bash", restoreArgs, { env, stdio: "pipe" }),
+    );
+    assert.throws(() =>
+      execFileSync(
+        "bash",
+        [path.join(root, "deploy/backup.sh"), backup, operatorEnv, project],
+        { env, stdio: "pipe" },
+      ),
     );
     assert.equal(
       sql(
         "SELECT count(*) FROM drizzle.__drizzle_migrations",
-        "tessaloom_restore",
+        "tl_restore_smoke",
       ),
       "8",
     );
     assert.equal(
-      sql("SELECT name FROM projects", "tessaloom_restore"),
+      sql(
+        "SET ROLE tessaloom_app; SELECT name FROM projects",
+        "tl_restore_smoke",
+      )
+        .split("\n")
+        .at(-1),
       "Deployment smoke",
     );
+    assert.equal(
+      sql(
+        "SELECT count(*) FROM demo_access_grants WHERE revoked_at IS NOT NULL",
+        "tl_restore_smoke",
+      ),
+      "1",
+    );
+    assert.equal(
+      sql("SELECT count(*) FROM llm_spend_reservations", "tl_restore_smoke"),
+      "0",
+    );
+    sql(
+      "BEGIN; SET ROLE tessaloom_app; UPDATE projects SET name='restore-write-check'; ROLLBACK",
+      "tl_restore_smoke",
+    );
+    assert.throws(() =>
+      sql(
+        "SET ROLE tessaloom_app; CREATE TABLE forbidden_restore(id int)",
+        "tl_restore_smoke",
+      ),
+    );
+    log("backup_restore_runtime_permissions_passed");
     // Recreation preserves the named PostgreSQL volume; no public ports or real provider credentials.
     compose("up", "-d", "--force-recreate", "--wait", "postgres");
     await until(
@@ -398,6 +535,7 @@ if(!found) process.exit(2);
     compose("stop", "postgres");
     assert.equal((await request("/api/health/ready")).status, 503);
     assert.equal((await request("/api/health")).status, 200);
+    assert.throws(() => health());
     compose("start", "postgres");
     await until(
       async () => (await request("/api/health/ready")).status === 200,
@@ -460,6 +598,42 @@ if(!found) process.exit(2);
     log("backup_persistence_restart_and_recovery_passed", {
       memorySnapshot: stats,
     });
+    // Rehearse the actual loopback tunnel origin configuration without any connector.
+    // Networks remain internal, no public TLS/DNS/ACME or tunnel service is contacted.
+    phase = "tunnel_origin_poc";
+    writeFileSync(
+      caddyPath,
+      readFileSync(path.join(root, "deploy/Caddyfile.tunnel")),
+    );
+    compose("up", "-d", "--force-recreate", "proxy");
+    await until(
+      async () =>
+        (await request("/api/health/ready", { plain: true })).status === 200,
+    );
+    const tunnelWorkspace = await request("/api/v1/workspace", { plain: true });
+    assert(
+      tunnelWorkspace.headers["set-cookie"].every((c) => /; Secure/i.test(c)),
+    );
+    assert.equal(
+      (
+        await request(`/api/v1/projects/${projectId}/experiments`, {
+          plain: true,
+          method: "POST",
+          headers,
+          body: { briefVersionId: JSON.parse(brief.text).id, mode: "live" },
+        })
+      ).status,
+      403,
+    );
+    assert.equal(sql("SELECT count(*) FROM agent_runs"), "0");
+    assert.equal(sql("SELECT count(*) FROM llm_spend_reservations"), "0");
+    // Restore the HTTPS configuration for optional fixture-denial checks below.
+    writeFileSync(caddyPath, caddy);
+    compose("up", "-d", "--force-recreate", "proxy");
+    await until(
+      async () => (await request("/api/health/ready")).status === 200,
+    );
+    log("tunnel_origin_local_poc_passed");
     log("deployment_smoke_passed");
   } else {
     log("deployment_security_checks_passed");

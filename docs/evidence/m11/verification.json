@@ -1,0 +1,110 @@
+{
+  "reviewedOn": "2026-10-24",
+  "timezone": "Asia/Shanghai",
+  "branch": "codex/m11-public-demo",
+  "baseCommit": "492a6526709b806122dc52b0c9e4141c19f97688",
+  "remoteMainMatched": true,
+  "baselineCi": {
+    "commit": "08db9fb",
+    "passed": [
+      "lint-typecheck",
+      "unit",
+      "integration",
+      "e2e",
+      "security",
+      "docker"
+    ],
+    "codeql": "skipped",
+    "m11RemoteCi": "not run"
+  },
+  "image": {
+    "platform": "linux/arm64",
+    "base": "sha256:d806ce325865ffe673f83aefd12dcfc1c4799f3f63ed8052c22f984a08dbf801",
+    "accepted": "sha256:e83f8b9ba942cbe7d70a8349dd5255f1521f565b25f1f2b7d67798ac4c17e926",
+    "build": "deploy/Dockerfile.runtime",
+    "unchangedBaseLayers": 15,
+    "addedLayers": 1,
+    "fullBuild": "stalled on Google font TLS/socket errors; interrupted, not passed",
+    "amd64": "not tested"
+  },
+  "tests": {
+    "unit": {
+      "files": 27,
+      "passed": 399
+    },
+    "focusedDeploymentUnit": {
+      "files": 3,
+      "passed": 11,
+      "includedInFullUnit": true
+    },
+    "costSafetyIntegration": {
+      "files": 1,
+      "passed": 21
+    },
+    "deploymentSmoke": "passed",
+    "containerSmoke": "passed",
+    "eslint": "passed",
+    "prettier": "passed",
+    "shellAndNodeSyntax": "passed",
+    "diffWhitespace": "passed",
+    "gitleaksSource": "passed; cached 8.30.0; network disabled",
+    "gitleaksPreCheckpointHistory": "passed; 30 commits; network disabled"
+  },
+  "deploymentMarkers": [
+    "configuration_safe",
+    "secret_file_isolation_passed",
+    "web_worker_credential_environment_isolation_passed",
+    "image_and_limits",
+    "external_health_probe_local_tls_passed",
+    "https_access_proxy_and_tls_passed",
+    "production_invite_denial_passed",
+    "keyless_operator_grant_lifecycle_passed",
+    "backup_restore_runtime_permissions_passed",
+    "proxy_error_log_redaction_passed",
+    "container_restart_started",
+    "container_restart_recovered",
+    "backup_persistence_restart_and_recovery_passed",
+    "tunnel_origin_local_poc_passed",
+    "deployment_smoke_passed"
+  ],
+  "containerMarkers": [
+    "harness_version",
+    "image_migrations_applied",
+    "process_isolation_passed",
+    "supervised_worker_harness_passed",
+    "worker_heartbeat_passed",
+    "run_queue_roundtrip_passed",
+    "local_backup_restore_passed",
+    "supervised_log_redaction_passed",
+    "web_worker_access_denied",
+    "worker_restart_passed",
+    "readiness_outage_recovery_passed",
+    "graceful_shutdown_passed",
+    "production_fixture_guard_passed",
+    "root_identity_fail_closed_passed",
+    "container_smoke_passed"
+  ],
+  "localIdleMiB": {
+    "app": 133.9,
+    "postgres": 28.07,
+    "proxy": 18.35,
+    "loadBenchmark": false
+  },
+  "providerHttpRequests": 0,
+  "publicExposure": false,
+  "paidResourcesProvisioned": false,
+  "organizerContact": false,
+  "unverified": [
+    "public TLS/DNS/firewall",
+    "actual tunnel transport/SSE",
+    "cloud reboot/disaster cutover",
+    "off-host encrypted backup and alert delivery",
+    "current Qloo quota/expiry/permissions",
+    "live Qloo plus DeepSeek journey",
+    "judge restriction compatibility",
+    "account entitlement/stock and final tax-inclusive quote",
+    "M11 remote CI",
+    "AMD64 M11 acceptance"
+  ],
+  "cleanup": "no disposable smoke containers, volumes or networks remain"
+}

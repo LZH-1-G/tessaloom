@@ -12,6 +12,8 @@ try {
   chownSync("/run/secrets", 0, 0);
   chmodSync("/run/secrets", 0o700);
   const migrating = process.argv[2] === "migrate";
+  const administering = process.argv[2] === "admin";
+  if (process.argv[2] && !migrating && !administering) throw new Error();
   const role = migrating ? "tessaloom_migrator" : "tessaloom_app";
   const password = secret(migrating ? "migrator_password" : "app_password");
   if (!password || process.env.APP_ENV !== "production") throw new Error();
@@ -19,17 +21,29 @@ try {
   url.password = password;
   url.searchParams.set("sslmode", "verify-full");
   url.searchParams.set("sslrootcert", "/run/tessaloom/db-ca.crt");
-  if (migrating) {
-    // A one-shot service with no runtime/session/provider secrets.
+  if (migrating || administering) {
+    // One-shot services never start the worker or load provider credentials.
     const child = spawn(
       process.execPath,
-      ["--max-old-space-size=256", "packages/db/dist/migrate.mjs"],
+      [
+        "--max-old-space-size=256",
+        migrating
+          ? "packages/db/dist/migrate.mjs"
+          : "packages/db/dist/admin.mjs",
+        ...(administering ? process.argv.slice(3) : []),
+      ],
       {
         stdio: "inherit",
+        ...(administering ? { uid: 10001, gid: 10001 } : {}),
         env: {
           PATH: process.env.PATH,
           APP_ENV: "production",
-          DATABASE_URL_MIGRATOR: url.toString(),
+          ...(migrating
+            ? { DATABASE_URL_MIGRATOR: url.toString() }
+            : {
+                DATABASE_URL: url.toString(),
+                SHARE_TOKEN_PEPPER: secret("share_token_pepper"),
+              }),
         },
       },
     );
