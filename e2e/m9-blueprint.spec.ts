@@ -101,7 +101,7 @@ test("E2E-09: compose from H3 → traceability meter → citation trace → edit
   const path = info.outputPath("blueprint-sample.md");
   await download.saveAs(path);
   const md = await readFile(path, "utf8");
-  expect(md).toContain("Development fixtures — not real Qloo data");
+  expect(md).toContain("FIXTURE — not real Qloo data");
   expect(md).toContain("## Provenance legend");
   expect(md).toContain("## Evidence appendix");
   expect(md).toContain("Keep the welcome short.");
@@ -134,7 +134,21 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   browser,
 }, info) => {
   test.setTimeout(180_000);
-  const projectUrl = await runToSelection(page, "Blueprint share");
+  const projectUrl = await runToSelection(page, "Blueprint share", true);
+  // One continuous judge journey, including the graph and persisted history.
+  await page.getByRole("tab", { name: "Evidence graph" }).click();
+  await expect(
+    page
+      .getByTestId("graph-canvas")
+      .locator('[data-node-type="evidence"]')
+      .first(),
+  ).toBeVisible();
+  await expectFixtureBanner(page);
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Select hypotheses" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Board", exact: true }).click();
 
   // A rescore-only What-if branch (no new Qloo data) is a valid source for a blueprint.
   const card = page.getByTestId("hypothesis-card").first();
@@ -201,6 +215,14 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   expect(await shared.content()).not.toContain(projectUrl.split("/").at(-1)!);
   await expectAccessible(shared);
   await snap(shared, info, "shared-view");
+  await shared.setViewportSize({ width: 390, height: 844 });
+  await expectAccessible(shared);
+  expect(
+    await shared.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await snap(shared, info, "shared-view-mobile");
 
   // Revocation is immediate.
   await share.getByRole("button", { name: "Revoke" }).click();

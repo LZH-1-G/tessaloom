@@ -24,8 +24,10 @@ services:
       DATABASE_URL: postgresql://tessaloom:local-development-only@postgres:5432/tessaloom
       SESSION_SECRET: local-development-placeholder-32-bytes
       SHARE_TOKEN_PEPPER: local-share-placeholder-at-least-32-bytes
-      QLOO_MODE: fixture
+      QLOO_MODE: synthetic
       LLM_PROVIDER: scripted
+      GLOBAL_DAILY_LLM_USD: "0"
+      GLOBAL_DAILY_QLOO_CALLS: "0"
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

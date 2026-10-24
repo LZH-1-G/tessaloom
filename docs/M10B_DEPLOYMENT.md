@@ -1,5 +1,7 @@
 # M10-B: zero-cost deployment preparation
 
+> Submission preparation update (2026-10-24): see [current acceptance](submission/ACCEPTANCE.md) and [deployment decision](submission/DEPLOYMENT.md). This earlier milestone/checklist remains historical. Production still rejects fixture generation and fixture reads; no public-demo exception has been approved. The current deployment preparation also creates an empty worker-only `deepseek_key` file.
+
 Status: locally verifiable deployment preparation complete; see [M10B_VERIFICATION.md](M10B_VERIFICATION.md) for completed checks and remaining acceptance gates; **no cloud resources provisioned, no public deployment, no live provider calls**. Baseline: PR #12 merge `96d48c1`, branch `codex/m10b-deployment`. The branch initially pointed to M9; the owner explicitly authorized fetching `origin/main` and a fast-forward before implementation. No push or merge commit was made by this task.
 
 ## Feasibility and current hosting comparison

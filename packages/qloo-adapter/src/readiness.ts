@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { qlooChildEnv } from "./transports/env";
 
 export interface QlooReadiness {
   ready: boolean;
@@ -41,7 +42,7 @@ export async function checkQlooReadiness(options: {
   command?: string;
   timeoutMs?: number;
 }): Promise<QlooReadiness> {
-  const env = options.env ?? process.env;
+  const env = qlooChildEnv(options.env ?? process.env);
   const command = options.command ?? "qloo";
   const timeoutMs = options.timeoutMs ?? 15_000;
   const expected = options.expectedBaseUrl.replace(/\/+$/, "");

@@ -26,7 +26,7 @@ export { expect };
 /** TEST_PLAN §10: the FIXTURE banner must be visible in every E2E test. */
 export async function expectFixtureBanner(page: Page) {
   await expect(page.getByTestId("fixture-banner")).toHaveText(
-    /Development fixtures — not real Qloo data/,
+    /FIXTURE — not real Qloo data/,
   );
 }
 
@@ -127,9 +127,15 @@ export const TYPED_BRIEF = {
 };
 
 /** New project → H1 → discovery → pool committed → Hypothesis Lab paused at gate H3. */
-export async function runToSelection(page: Page, name: string) {
+export async function runToSelection(
+  page: Page,
+  name: string,
+  useExample = false,
+) {
   await createProject(page, name);
-  await fillBrief(page, TYPED_BRIEF);
+  if (useExample)
+    await page.getByRole("button", { name: "Use the fixture example" }).click();
+  else await fillBrief(page, TYPED_BRIEF);
   await page.getByRole("button", { name: "Interpret brief" }).click();
   await page.getByRole("button", { name: "Confirm & discover" }).click();
   await page.getByRole("link", { name: "Open the Discovery canvas" }).click();
@@ -142,7 +148,10 @@ export async function runToSelection(page: Page, name: string) {
     .click();
   // Navigating before the confirmation lands would abort the request.
   await expect(pool.getByText("The pool was committed")).toBeVisible();
-  await page.goto(page.url().replace(/\/discovery$/, "/hypotheses"));
+  await page
+    .getByRole("navigation", { name: "Experiment steps" })
+    .getByRole("link", { name: /Hypotheses/ })
+    .click();
   await expect(
     page.getByRole("region", { name: "Select hypotheses" }),
   ).toBeVisible({ timeout: 90_000 });

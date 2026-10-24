@@ -20,6 +20,8 @@ import {
   toolInvocations,
 } from "../schema";
 
+import { sourceRetrievedAt } from "./qloo";
+
 /** Read models for the product pages (API_CONTRACTS §9). Every read is workspace-scoped. */
 
 export async function projectOverview(
@@ -163,7 +165,7 @@ export async function experimentView(
           .select({
             evidence: evidenceRecords,
             dataOrigin: toolInvocations.dataOrigin,
-            retrievedAt: toolInvocations.createdAt,
+            retrievedAt: sourceRetrievedAt,
           })
           .from(evidenceRecords)
           .leftJoin(
@@ -189,7 +191,7 @@ export async function experimentView(
         .select({
           entity: culturalEntities,
           dataOrigin: toolInvocations.dataOrigin,
-          retrievedAt: toolInvocations.createdAt,
+          retrievedAt: sourceRetrievedAt,
         })
         .from(culturalEntities)
         .leftJoin(
@@ -279,6 +281,14 @@ export async function evidenceTrace(
           .where(eq(toolInvocations.id, row.evidence.toolInvocationId))
       )[0]
     : undefined;
+  const sourceTime = invocation
+    ? ((
+        await db
+          .select({ retrievedAt: sourceRetrievedAt })
+          .from(toolInvocations)
+          .where(eq(toolInvocations.id, invocation.id))
+      )[0]?.retrievedAt ?? null)
+    : null;
   const snapshot = invocation?.snapshotId
     ? (
         await db
@@ -319,7 +329,8 @@ export async function evidenceTrace(
           harnessRequests: invocation.harnessRequests,
           latencyMs: invocation.latencyMs,
           attempt: invocation.attempt,
-          retrievedAt: invocation.createdAt,
+          retrievedAt: sourceTime,
+          invokedAt: invocation.createdAt,
         }
       : null,
     snapshot: snapshot ?? null,
@@ -333,7 +344,7 @@ export async function invocationTrace(
   invocationId: string,
 ) {
   const [row] = await db
-    .select({ invocation: toolInvocations })
+    .select({ invocation: toolInvocations, retrievedAt: sourceRetrievedAt })
     .from(toolInvocations)
     .innerJoin(projects, eq(projects.id, toolInvocations.projectId))
     .where(
@@ -363,6 +374,7 @@ export async function invocationTrace(
     harnessRequests: i.harnessRequests,
     latencyMs: i.latencyMs,
     attempt: i.attempt,
-    retrievedAt: i.createdAt,
+    retrievedAt: row.retrievedAt,
+    invokedAt: i.createdAt,
   };
 }

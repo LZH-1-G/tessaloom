@@ -4,6 +4,28 @@ import type { Executor } from "../client";
 import { DomainRuleError } from "../errors";
 import { qlooResponseSnapshots, toolInvocations } from "../schema";
 
+/** Keep the response retrieval date separate from a later invocation/reuse date.
+ * Follow legacy cache rows too; broken/cyclic chains return null, never fresh-looking reuse time.
+ * Correlated to toolInvocations in the enclosing, workspace-scoped read query.
+ */
+export const sourceRetrievedAt = sql<Date | null>`(
+  WITH RECURSIVE lineage AS (
+    SELECT source.id, source.snapshot_id, source.created_at, source.data_origin,
+           source.cache_source_invocation_id, 0 AS depth
+    FROM tool_invocations source WHERE source.id = ${sql.raw('"tool_invocations"."id"')}
+    UNION ALL
+    SELECT source.id, source.snapshot_id, source.created_at, source.data_origin,
+           source.cache_source_invocation_id, parent.depth + 1
+    FROM tool_invocations source JOIN lineage parent ON source.id = parent.cache_source_invocation_id
+    WHERE parent.data_origin = 'CACHE' AND parent.depth < 32
+      AND source.project_id = ${sql.raw('"tool_invocations"."project_id"')}
+  )
+  SELECT coalesce(snapshot.retrieved_at,
+    CASE WHEN source.data_origin = 'REPLAY' THEN NULL ELSE source.created_at END)
+  FROM lineage source LEFT JOIN qloo_response_snapshots snapshot ON snapshot.id = source.snapshot_id
+  WHERE source.data_origin <> 'CACHE' ORDER BY source.depth DESC LIMIT 1
+)`.mapWith((value: string | Date) => new Date(value));
+
 /**
  * Raw Qloo payload retention. "off" (default) stores only the structural summary; raw
  * responses are not persisted until storage/redistribution permission is confirmed (R-08).

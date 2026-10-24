@@ -466,7 +466,7 @@ export function blueprintMarkdown(input: {
   const lines: string[] = [`# ${content.title}`, ""];
   if (fixture)
     lines.push(
-      "> **Development fixtures — not real Qloo data.** This blueprint was composed from synthetic test data.",
+      "> **FIXTURE — not real Qloo data.** This blueprint was composed from synthetic test data.",
       "",
     );
   lines.push(

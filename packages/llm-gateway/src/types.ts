@@ -30,6 +30,8 @@ export type StopReason =
   | "other";
 
 export interface ProviderUsage {
+  /** Subset of outputTokens, never billed twice; no reasoning text is retained. */
+  reasoningTokens?: number;
   inputTokens: number;
   cachedInputTokens: number;
   cacheWriteTokens: number;
@@ -57,6 +59,7 @@ export class ProviderError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly status?: number,
+    readonly requestSent: boolean = true,
   ) {
     super(message);
   }
@@ -64,6 +67,8 @@ export class ProviderError extends Error {
 
 export interface LlmProvider {
   readonly name: string;
+  /** Explicit account attestation; reservations still use conservative published paid rates. */
+  readonly billing?: "confirmed-free-tier";
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 
@@ -77,6 +82,7 @@ export interface ValidationIssue {
 export type SemanticValidator<T> = (value: T) => ValidationIssue[];
 
 export interface LlmCallContext {
+  inputOrigin?: "synthetic" | "unknown";
   projectId: string;
   runId?: string | null;
   signal?: AbortSignal;
@@ -108,6 +114,7 @@ export type FailureReason =
   | "CONFIGURATION";
 
 export interface GenerateMeta {
+  usageComplete?: boolean;
   invocationIds: string[];
   modelId: string | null;
   fallbackUsed: boolean;

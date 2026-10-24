@@ -284,15 +284,19 @@ export function ActivityFull({
                       {l.fallbackUsed ? " (fallback)" : ""}
                     </td>
                     <td className="py-1">{l.attempts}</td>
-                    <td className="py-1">{l.outputTokens}</td>
+                    <td className="py-1">
+                      {l.usageComplete ? l.outputTokens : "Unavailable"}
+                    </td>
                     <td className="py-1 text-right font-mono">
-                      ${l.costUsd.toFixed(4)}
+                      {l.usageComplete ? `$${l.costUsd.toFixed(4)}` : "Unknown"}
                     </td>
                   </tr>
                 ))}
                 <tr className="border-t border-border font-semibold">
                   <td className="py-1" colSpan={4}>
-                    Total
+                    {llm.some((l) => !l.usageComplete)
+                      ? "Known subtotal"
+                      : "Total"}
                   </td>
                   <td className="py-1 text-right font-mono">
                     ${totalCost.toFixed(4)}
@@ -301,8 +305,9 @@ export function ActivityFull({
               </tbody>
             </table>
             <p className="text-[11px] text-muted-foreground">
-              Costs are estimates from token counts; a scripted model reports
-              $0.
+              Costs are estimates. Scripted models and confirmed free-tier calls
+              report $0. Missing provider usage is unknown; its spending
+              reservation remains held.
             </p>
           </section>
         </div>

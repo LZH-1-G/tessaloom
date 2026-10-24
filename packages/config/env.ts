@@ -123,6 +123,22 @@ export const workerEnvSchema = z
     // M0 never constructs adapters or calls providers. Key requirements belong to M2/M3.
     QLOO_API_KEY: z.string().min(1).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    DEEPSEEK_API_KEY: z.string().min(1).optional(),
+    DEEPSEEK_LIVE_APPROVED: z.enum(["off", "on"]).default("off"),
+    DEEPSEEK_MAX_REQUESTS: z.coerce.number().int().min(0).max(4).default(0),
+    DEEPSEEK_BUDGET_CNY: z.coerce.number().min(0).max(2).default(0),
+    DEEPSEEK_USD_PER_CNY: z.coerce.number().positive().max(1).optional(),
+    DEEPSEEK_PRICING_VERIFIED_AT: z.string().datetime().optional(),
+    GEMINI_FREE_TIER_CONFIRMED: z.enum(["off", "on"]).default("off"),
+    GEMINI_DATA_SHARING_APPROVED: z.enum(["off", "on"]).default("off"),
+    GEMINI_MAX_REQUESTS: z.coerce.number().int().min(0).max(50).default(0),
+    GEMINI_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(120_000)
+      .default(60_000),
     QLOO_HOME: z.string().min(1).optional(),
     // V1: the hackathon endpoint requires both variables, set to the same exact URL.
     QLOO_BASE_URL: z.string().url().startsWith("https://").optional(),
@@ -135,7 +151,9 @@ export const workerEnvSchema = z
     // M10-A spend ledger caps (USD). Every paid attempt reserves against all of them.
     WORKSPACE_DAILY_LLM_USD: z.coerce.number().nonnegative().default(3),
     EXPERIMENT_LLM_USD: z.coerce.number().nonnegative().default(5),
-    LLM_PROVIDER: z.enum(["anthropic", "scripted"]).default("anthropic"),
+    LLM_PROVIDER: z
+      .enum(["anthropic", "scripted", "gemini", "deepseek"])
+      .default("anthropic"),
     LLM_MODEL: z.string().min(1).default("claude-opus-5-5"),
     LLM_FALLBACK_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
     // economy: every step uses LLM_FALLBACK_MODEL (ADR-018).

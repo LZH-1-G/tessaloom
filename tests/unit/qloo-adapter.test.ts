@@ -476,6 +476,10 @@ describe("adapter behavior", () => {
   });
   it("retries only retryable errors and reserves quota for every attempt", async () => {
     const quota = { consume: vi.fn(async () => true) };
+    const record = vi.fn(async () => ({
+      toolInvocationId: "inv",
+      snapshotId: null,
+    }));
     const retrying = new FakeTransport([
       raw(errorObject("UPSTREAM_5XX", true), 1),
       raw(recommendOk),
@@ -484,11 +488,19 @@ describe("adapter behavior", () => {
       transport: retrying,
       harnessVersion: "0.1.26",
       quota,
+      recorder: { record },
       sleep: noSleep,
     });
     expect((await adapter.recommend(recommendInput, ctx)).kind).toBe("OK");
     expect(retrying.calls).toHaveLength(2);
     expect(quota.consume).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record.mock.calls[0]).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        envelope: expect.objectContaining({ errorCode: "UPSTREAM_5XX" }),
+      }),
+    ]);
 
     const fatal = new FakeTransport([raw(errorObject("QLOO_AUTH"), 4)]);
     const outcome = await new QlooAdapter({

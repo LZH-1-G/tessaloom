@@ -1,36 +1,50 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
+import { until, hasStatus, failureSummary } from "./smoke-poll.mjs";
 
 const image = process.env.M0_IMAGE ?? "tessaloom:m0";
 const suffix = `${process.pid}-${Date.now()}`;
 const network = `tl-m0-${suffix}`;
 const db = `${network}-db`;
 const app = `${network}-app`;
-/** @param {...string} args */
-const docker = (...args) =>
+/** @param {number} timeoutMs @param {...string} args */
+const dockerWithin = (timeoutMs, ...args) =>
   execFileSync("docker", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 120_000,
+    timeout: Math.max(1, Math.min(120_000, timeoutMs)),
+    killSignal: "SIGKILL",
   }).trim();
+/** @param {...string} args */
+const docker = (...args) => dockerWithin(120_000, ...args);
 /** @param {string} event @param {Record<string, unknown>} details */
 const log = (event, details = {}) =>
   console.log(JSON.stringify({ event, ...details }));
 
-/** @param {() => boolean | Promise<boolean>} check @param {number} timeoutMs */
-async function until(check, timeoutMs = 60_000) {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-  while (Date.now() < deadline) {
+// Timeout diagnostics intentionally exclude environment, command arguments and logs.
+// Docker state fields are enough to distinguish crashed containers from an HTTP stall.
+function containerStates() {
+  return [app, db].map((name) => {
     try {
-      if (await check()) return;
+      const state = JSON.parse(
+        dockerWithin(3_000, "inspect", "--format", "{{json .State}}", name),
+      );
+      return {
+        container: name === app ? "app" : "db",
+        running: state.Running,
+        status: state.Status,
+        exitCode: state.ExitCode,
+        oomKilled: state.OOMKilled,
+        restarting: state.Restarting,
+        health: state.Health?.Status,
+      };
     } catch (error) {
-      lastError = error;
+      return {
+        container: name === app ? "app" : "db",
+        inspectError: failureSummary(error),
+      };
     }
-    await delay(200);
-  }
-  throw new Error("Smoke check timed out", { cause: lastError });
+  });
 }
 
 const inspectScript = `
@@ -54,14 +68,16 @@ const inspectScript = `
   console.log(JSON.stringify({ rows, home: { uid: home.uid, mode: home.mode & 511 } }));
 `;
 
-function inspectProcesses() {
+/** @param {() => number} [remainingMs] */
+function inspectProcesses(remainingMs = () => 120_000) {
   // Default Docker capabilities do not let root inspect a different UID's
   // environment. Read each process as its own UID without adding capabilities.
   /** @typedef {{pid: number, role: string, uid: number, gid: number, envNames: string[]}} ProcessRow */
   /** @type {{rows: ProcessRow[], home: {uid: number, mode: number}}[]} */
   const states = [10001, 10002].map((uid) =>
     JSON.parse(
-      docker(
+      dockerWithin(
+        remainingMs(),
         "exec",
         "--user",
         `${uid}:${uid}`,
@@ -96,17 +112,20 @@ try {
     "POSTGRES_DB=tessaloom",
     "postgres:16",
   );
-  await until(() =>
-    // TCP check: during initdb the temporary server listens only on the Unix socket.
-    docker(
-      "exec",
-      db,
-      "pg_isready",
-      "-h",
-      "127.0.0.1",
-      "-U",
-      "tessaloom",
-    ).includes("accepting connections"),
+  await until(
+    ({ remainingMs }) =>
+      // TCP check: during initdb the temporary server listens only on the Unix socket.
+      dockerWithin(
+        remainingMs(),
+        "exec",
+        db,
+        "pg_isready",
+        "-h",
+        "127.0.0.1",
+        "-U",
+        "tessaloom",
+      ).includes("accepting connections"),
+    { label: "database TCP readiness" },
   );
   // M2: the image's release-step migrator applies the schema (forward-only, idempotent).
   const migrated = docker(
@@ -150,18 +169,18 @@ try {
     "-e",
     "ANTHROPIC_API_KEY=m0-llm-secret-sentinel",
     "-e",
+    "GEMINI_API_KEY=live-gemini-secret-sentinel",
+    "-e",
+    "DEEPSEEK_API_KEY=live-deepseek-secret-sentinel",
+    "-e",
     "DATABASE_URL_MIGRATOR=m0-migrator-secret-sentinel",
     image,
   );
   const port = docker("port", app, "3000/tcp").split(":").at(-1);
   const url = `http://127.0.0.1:${port}`;
   await until(
-    async () =>
-      (
-        await fetch(`${url}/api/health/ready`, {
-          signal: AbortSignal.timeout(3_000),
-        })
-      ).status === 200,
+    ({ signal }) => hasStatus(`${url}/api/health/ready`, 200, signal),
+    { label: "application startup GET /api/health/ready = 200" },
   );
   assert.equal((await fetch(`${url}/api/health`)).status, 200);
   const first = inspectProcesses();
@@ -185,6 +204,8 @@ try {
   );
   assert(worker.envNames.includes("QLOO_API_KEY"));
   assert(worker.envNames.includes("ANTHROPIC_API_KEY"));
+  assert(worker.envNames.includes("GEMINI_API_KEY"));
+  assert(worker.envNames.includes("DEEPSEEK_API_KEY"));
   assert(
     !worker.envNames.some((name) =>
       [
@@ -233,9 +254,10 @@ try {
   log("supervised_worker_harness_passed", harness);
   // M2: the supervised worker reaches PostgreSQL and records its heartbeat.
   await until(
-    () =>
+    ({ remainingMs }) =>
       Number(
-        docker(
+        dockerWithin(
+          remainingMs(),
           "exec",
           db,
           "psql",
@@ -247,7 +269,7 @@ try {
           "SELECT count(*) FROM worker_heartbeats WHERE last_beat_at > now() - interval '1 minute'",
         ),
       ) >= 1,
-    20_000,
+    { label: "worker database heartbeat", timeoutMs: 20_000 },
   );
   log("worker_heartbeat_passed");
   // M4/M5: one run travels web → pg-boss → worker inside the image, with synthetic fixtures and
@@ -313,16 +335,20 @@ try {
   assert.equal(reused, false);
   /** @type {{ state: string; terminalReason: string | null }} */
   let finalRun = { state: "QUEUED", terminalReason: null };
-  await until(async () => {
-    finalRun = /** @type {typeof finalRun} */ (
-      await (
-        await fetch(`${url}/api/v1/runs/${runId}`, {
-          headers: { cookie: cookies.join("; ") },
-        })
-      ).json()
-    );
-    return finalRun.state === "AWAITING_BRIEF_CONFIRMATION";
-  }, 30_000);
+  await until(
+    async ({ signal }) => {
+      finalRun = /** @type {typeof finalRun} */ (
+        await (
+          await fetch(`${url}/api/v1/runs/${runId}`, {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(3_000)]),
+            headers: { cookie: cookies.join("; ") },
+          })
+        ).json()
+      );
+      return finalRun.state === "AWAITING_BRIEF_CONFIRMATION";
+    },
+    { label: "fixture run reaches brief confirmation", timeoutMs: 30_000 },
+  );
   assert.equal(finalRun.terminalReason, null);
   const sse = await (
     await fetch(`${url}/api/v1/runs/${runId}/events`, {
@@ -444,13 +470,16 @@ try {
   log("web_worker_access_denied", { environment: true, harnessHome: true });
   const killedAt = Date.now();
   docker("exec", app, "node", "-e", `process.kill(${worker.pid}, "SIGKILL")`);
-  await until(async () => {
-    assert.equal((await fetch(`${url}/api/health`)).status, 200);
-    const state = inspectProcesses();
-    return state.rows.some(
-      (row) => row.role === "worker" && row.pid !== worker.pid,
-    );
-  }, 5_000);
+  await until(
+    async ({ signal, remainingMs }) => {
+      assert(await hasStatus(`${url}/api/health`, 200, signal));
+      const state = inspectProcesses(remainingMs);
+      return state.rows.some(
+        (row) => row.role === "worker" && row.pid !== worker.pid,
+      );
+    },
+    { label: "worker restart with web liveness", timeoutMs: 5_000 },
+  );
   log("worker_restart_passed", { elapsedMs: Date.now() - killedAt });
   const captured = spawnSync("docker", ["logs", app], {
     encoding: "utf8",
@@ -461,18 +490,22 @@ try {
   for (const sentinel of [
     "m0-qloo-secret-sentinel",
     "m0-llm-secret-sentinel",
+    "live-gemini-secret-sentinel",
+    "live-deepseek-secret-sentinel",
     "m0-migrator-secret-sentinel",
   ]) {
     assert(!logs.includes(sentinel), "Secret value leaked to logs");
   }
   docker("stop", "--time", "10", db);
   await until(
-    async () => (await fetch(`${url}/api/health/ready`)).status === 503,
+    ({ signal }) => hasStatus(`${url}/api/health/ready`, 503, signal),
+    { label: "database outage GET /api/health/ready = 503" },
   );
   assert.equal((await fetch(`${url}/api/health`)).status, 200);
   docker("start", db);
   await until(
-    async () => (await fetch(`${url}/api/health/ready`)).status === 200,
+    ({ signal }) => hasStatus(`${url}/api/health/ready`, 200, signal),
+    { label: "database recovery GET /api/health/ready = 200" },
   );
   log("readiness_outage_recovery_passed");
   docker("stop", "--time", "30", app);
@@ -529,17 +562,43 @@ try {
   }
   log("root_identity_fail_closed_passed");
   log("container_smoke_passed");
+} catch (error) {
+  const e =
+    /** @type {Error & {label?: string, timeoutMs?: number, attempts?: number, elapsedMs?: number, lastOutcome?: string, lastFailure?: unknown}} */ (
+      error
+    );
+  log("container_smoke_failed", {
+    ...failureSummary(error),
+    location: e.stack?.match(/container-smoke\.mjs:\d+:\d+/)?.[0],
+    label: e.label,
+    timeoutMs: e.timeoutMs,
+    attempts: e.attempts,
+    elapsedMs: e.elapsedMs,
+    lastOutcome: e.lastOutcome,
+    lastFailure: e.lastFailure,
+    containers: containerStates(),
+  });
+  // Do not rethrow child_process errors: they carry raw command/env arguments.
+  process.exitCode = 1;
 } finally {
   for (const name of [app, db]) {
     try {
-      docker("rm", "-f", "-v", name);
-    } catch {
-      /* Only this run's resources. */
+      dockerWithin(10_000, "rm", "-f", "-v", name);
+    } catch (error) {
+      log("smoke_cleanup_failed", {
+        resource: name === app ? "app" : "db",
+        ...failureSummary(error),
+      });
+      process.exitCode = 1;
     }
   }
   try {
-    docker("network", "rm", network);
-  } catch {
-    /* May not have been created. */
+    dockerWithin(10_000, "network", "rm", network);
+  } catch (error) {
+    log("smoke_cleanup_failed", {
+      resource: "network",
+      ...failureSummary(error),
+    });
+    process.exitCode = 1;
   }
 }

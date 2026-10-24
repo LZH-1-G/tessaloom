@@ -126,6 +126,7 @@ interface Sample {
   scope: string;
   projectName: string;
   useCase: string;
+  fixture?: boolean;
 }
 
 /** Read-only demo samples (featured project links): browsing them never starts AI work. */
@@ -153,6 +154,11 @@ export function DemoSamples() {
               className="block rounded-lg border border-border bg-card p-4 hover:border-warp"
             >
               <p className="font-serif text-lg">{s.projectName}</p>
+              {s.fixture ? (
+                <p className="mt-1 text-xs font-semibold text-rust">
+                  FIXTURE — not real Qloo data
+                </p>
+              ) : null}
               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Eye aria-hidden className="size-3.5" /> Read-only · no AI run
                 needed

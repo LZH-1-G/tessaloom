@@ -300,10 +300,6 @@ export class QlooAdapter {
                 "Harness call failed",
                 false,
               );
-        if (te.retryable && attempt < maxAttempts) {
-          await this.sleep(this.backoff(attempt, te.code));
-          continue;
-        }
         const envelope: EnvelopeSummary = {
           status: "transport_error",
           shape: "unknown",
@@ -323,6 +319,10 @@ export class QlooAdapter {
           attempt,
           latencyMs: null,
         });
+        if (te.retryable && attempt < maxAttempts) {
+          await this.sleep(this.backoff(attempt, te.code));
+          continue;
+        }
         return {
           kind: "ERROR",
           code: te.code,
@@ -333,10 +333,6 @@ export class QlooAdapter {
       }
 
       const parsed = parseEnvelope(call, result);
-      if (parsed.error?.retryable && attempt < maxAttempts) {
-        await this.sleep(this.backoff(attempt, parsed.error.code));
-        continue;
-      }
       const dataOrigin = result.transport === "FIXTURE" ? "FIXTURE" : "LIVE";
       const provenance = await this.persist({
         method,
@@ -352,6 +348,10 @@ export class QlooAdapter {
         attempt,
         latencyMs: result.durationMs,
       });
+      if (parsed.error?.retryable && attempt < maxAttempts) {
+        await this.sleep(this.backoff(attempt, parsed.error.code));
+        continue;
+      }
       const outcome = this.buildOutcome(
         parsed,
         result.payload,

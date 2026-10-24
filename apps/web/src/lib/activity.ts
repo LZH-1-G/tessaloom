@@ -71,6 +71,7 @@ export function toolStats(events: RunEventView[]): ToolStat[] {
 }
 
 export interface LlmStat {
+  usageComplete: boolean;
   seq: number;
   role: string | null;
   promptId: string;
@@ -93,6 +94,7 @@ export function llmStats(events: RunEventView[]): LlmStat[] {
         fallbackUsed?: boolean;
         outputTokens?: number;
         costUsd?: number;
+        usageComplete?: boolean;
       };
       return {
         seq: e.seq,
@@ -103,6 +105,7 @@ export function llmStats(events: RunEventView[]): LlmStat[] {
         fallbackUsed: !!p.fallbackUsed,
         outputTokens: p.outputTokens ?? 0,
         costUsd: p.costUsd ?? 0,
+        usageComplete: p.usageComplete !== false,
       };
     });
 }

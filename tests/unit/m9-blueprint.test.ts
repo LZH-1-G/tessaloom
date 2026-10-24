@@ -301,7 +301,7 @@ describe("EB-A4: Markdown export fidelity", () => {
       hypotheses: ["Atlas × Gallery"],
       report: traceabilityReport(bp, new Set(order)),
     });
-    expect(md).toContain("Development fixtures — not real Qloo data");
+    expect(md).toContain("FIXTURE — not real Qloo data");
     for (const title of Object.values(SECTION_TITLE))
       expect(md).toContain(`## ${title}`);
     const blocks = bp.sections.flatMap((s) => s.blocks);

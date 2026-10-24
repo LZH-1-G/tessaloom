@@ -95,7 +95,7 @@ export function failLlm(
     case "INVALID_OUTPUT":
       return fatal(
         "LLM_INVALID_OUTPUT",
-        `${label}: output failed validation after one repair`,
+        `${label}: output failed validation within the allowed attempts`,
         carry,
       );
     case "UNAVAILABLE":
@@ -152,6 +152,7 @@ export async function llmCall<S extends z.ZodType>(
     effort: ctx.run.config.effortByRole[req.role],
     ctx: {
       projectId: ctx.experiment.projectId,
+      inputOrigin: ctx.inputOrigin,
       runId: ctx.run.id,
       signal: ctx.signal,
       remainingUsd: left.costUsd,
@@ -178,6 +179,7 @@ export async function llmCall<S extends z.ZodType>(
     attempts: result.attempts,
     invocationIds: result.invocationIds,
     outputTokens: result.usage.outputTokens,
+    usageComplete: result.usageComplete !== false,
     costUsd: Number(result.costUsd.toFixed(6)),
   };
   if (result.attempts > 1)

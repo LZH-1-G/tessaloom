@@ -74,6 +74,9 @@ test("M7 evidence graph: provenance labels, keyboard navigation, inspector trace
   await inspector.getByRole("button", { name: "Trace" }).click();
   const trace = page.getByRole("dialog", { name: "Trace: request to result" });
   await expect(trace.getByTestId("trace-envelope")).toBeVisible();
+  await expect(trace).toContainText("Originally retrieved");
+  await expect(trace).toContainText("Invocation recorded");
+  await expect(trace).not.toContainText("Invalid Date");
   await expect(trace.getByTestId("trace-fact").first()).toContainText(
     "at ingest ✓",
   );

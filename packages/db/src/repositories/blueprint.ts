@@ -1,3 +1,4 @@
+import { sourceRetrievedAt } from "./qloo";
 import type { RunAdmission } from "./cost";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
@@ -366,7 +367,7 @@ export async function evidenceAppendix(
       claim: hypothesisClaims.statement,
       hypothesisTitle: hypotheses.title,
       dataOrigin: toolInvocations.dataOrigin,
-      retrievedAt: toolInvocations.createdAt,
+      retrievedAt: sourceRetrievedAt,
     })
     .from(evidenceRecords)
     .innerJoin(
@@ -394,7 +395,7 @@ export async function evidenceAppendix(
         r.dataOrigin === "CACHE"
           ? sources.get(r.e.toolInvocationId!)
           : undefined;
-      const retrievedAt = source ? source.createdAt : r.retrievedAt;
+      const retrievedAt = r.retrievedAt;
       return {
         id,
         label: `E-${i + 1}`,
@@ -832,6 +833,7 @@ export async function listSamples(db: Executor, now = new Date()) {
       projectName: projects.name,
       useCase: projects.useCase,
       createdAt: shareLinks.createdAt,
+      fixture: sql<boolean>`exists (select 1 from experiments e where e.project_id = ${projects.id} and e.mode = 'fixture')`,
     })
     .from(shareLinks)
     .innerJoin(projects, eq(projects.id, shareLinks.projectId))
@@ -983,6 +985,7 @@ async function sharedViewOfLink(
         id: experiments.id,
         kind: experiments.kind,
         label: experiments.label,
+        mode: experiments.mode,
         createdAt: experiments.createdAt,
       })
       .from(experiments)
@@ -993,6 +996,11 @@ async function sharedViewOfLink(
   return {
     ...base,
     overview: {
+      // Overview payloads omit individual evidence; retain the fixture marker so
+      // the reader banner and production firewall cannot lose it in projection.
+      ...(exps.some((x) => x.mode === "fixture")
+        ? { provenanceClass: "DEVELOPMENT_FIXTURE" as const }
+        : {}),
       experiments: exps.map((x) => ({
         kind: x.kind,
         label: x.label,

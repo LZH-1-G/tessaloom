@@ -220,7 +220,7 @@ describe("M9 blueprint composition", () => {
     for (const title of Object.values(SECTION_TITLE))
       expect(md.body).toContain(`## ${title}`);
     expect(md.body).toContain("## Evidence appendix");
-    expect(md.body).toContain("Development fixtures — not real Qloo data");
+    expect(md.body).toContain("FIXTURE — not real Qloo data");
     expect(md.body).toMatch(/\| E-1 \|.*\| \d{4}-\d{2}-\d{2} \|/);
     const blockLines = md.body
       .split("\n")

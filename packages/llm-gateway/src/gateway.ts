@@ -2,6 +2,8 @@ import { canonicalize, sha256Hex } from "@tessaloom/core";
 import { z } from "zod";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import {
+  PRICES,
+  type PriceTable,
   addUsage,
   emptyUsage,
   estimateCostUsd,
@@ -32,6 +34,9 @@ export type LlmMode = "standard" | "economy";
 
 export interface LlmGatewayOptions {
   provider: LlmProvider;
+  prices?: PriceTable;
+  pricingContext?: Record<string, unknown>;
+  retryTruncation?: boolean;
   primaryModel: string;
   fallbackModel?: string | null;
   mode?: LlmMode;
@@ -62,6 +67,9 @@ interface Attempt {
 export class LlmGateway {
   readonly prompts: PromptRegistry;
   private readonly provider: LlmProvider;
+  private readonly prices: PriceTable;
+  private readonly pricingContext: Record<string, unknown>;
+  private readonly retryTruncation: boolean;
   private readonly primaryModel: string;
   private readonly fallbackModel: string | null;
   private readonly mode: LlmMode;
@@ -74,12 +82,21 @@ export class LlmGateway {
 
   constructor(options: LlmGatewayOptions) {
     this.provider = options.provider;
+    this.prices = options.prices ?? PRICES;
+    this.pricingContext = options.pricingContext ?? {};
+    this.retryTruncation =
+      options.provider.name === "deepseek"
+        ? false
+        : (options.retryTruncation ?? true);
     this.primaryModel = options.primaryModel;
-    this.fallbackModel = options.fallbackModel ?? null;
+    this.fallbackModel = ["gemini", "deepseek"].includes(options.provider.name)
+      ? null
+      : (options.fallbackModel ?? null);
     this.mode = options.mode ?? "standard";
     this.prompts = options.prompts ?? new PromptRegistry();
     this.recorder = options.recorder;
-    this.maxRepairs = options.maxRepairs ?? 1;
+    this.maxRepairs =
+      options.provider.name === "deepseek" ? 0 : (options.maxRepairs ?? 1);
     this.ceiling = options.maxOutputTokensCeiling ?? 32_000;
     this.allowUnpriced =
       options.provider.name === "scripted" &&
@@ -113,6 +130,7 @@ export class LlmGateway {
     );
 
     const meta: GenerateMeta = {
+      usageComplete: true,
       invocationIds: [],
       modelId: null,
       fallbackUsed: false,
@@ -133,6 +151,17 @@ export class LlmGateway {
       ...meta,
     });
 
+    if (
+      this.provider.name === "deepseek" &&
+      req.ctx.inputOrigin !== "synthetic"
+    )
+      return fail("CONFIGURATION", [
+        {
+          code: "DATA_SHARING_BLOCKED",
+          message: "DeepSeek validation accepts verified synthetic inputs only",
+        },
+      ]);
+
     let attempt = this.chooseModel(
       promptChars,
       req.maxOutputTokens,
@@ -145,7 +174,7 @@ export class LlmGateway {
           message: "Remaining LLM budget is below one call",
         },
       ]);
-    if (!this.allowUnpriced && !hasPrice(attempt.model))
+    if (!this.allowUnpriced && !hasPrice(attempt.model, this.prices))
       return fail("CONFIGURATION", [
         {
           code: "UNPRICED_MODEL",
@@ -154,7 +183,10 @@ export class LlmGateway {
       ]);
 
     let messages: ChatMessage[] = [{ role: "user", content: userTurn }];
-    let maxTokens = req.maxOutputTokens;
+    let maxTokens =
+      this.provider.name === "deepseek"
+        ? Math.min(req.maxOutputTokens, this.ceiling)
+        : req.maxOutputTokens;
     let repairs = 0;
     let truncationRetried = false;
     let repairOfId: string | null = null;
@@ -169,7 +201,7 @@ export class LlmGateway {
             message: "Paid calls require spending reservations",
           },
         ]);
-      if (!this.allowUnpriced && !hasPrice(attempt.model))
+      if (!this.allowUnpriced && !hasPrice(attempt.model, this.prices))
         return fail("CONFIGURATION", [
           {
             code: "UNPRICED_MODEL",
@@ -205,7 +237,12 @@ export class LlmGateway {
         const reserved = await this.spendGuard.reserve({
           ctx: req.ctx,
           model: attempt.model,
-          upperBoundUsd: upperBoundCostUsd(attempt.model, bytes, maxTokens),
+          upperBoundUsd: upperBoundCostUsd(
+            attempt.model,
+            this.provider.name === "deepseek" ? Math.max(bytes, 16_384) : bytes,
+            maxTokens,
+            this.prices,
+          ),
           maxOutputTokens: maxTokens,
         });
         if (!reserved.ok)
@@ -222,6 +259,7 @@ export class LlmGateway {
       };
 
       meta.attempts += 1;
+      meta.modelId = attempt.model;
       const started = this.now();
       let response: ProviderResponse;
       try {
@@ -236,11 +274,55 @@ export class LlmGateway {
           signal: req.ctx.signal,
         });
       } catch (error) {
-        await settle(null); // the provider may have billed: keep the full reservation
         const pe =
           error instanceof ProviderError
             ? error
             : new ProviderError("unknown", "LLM call failed", false);
+        await settle(pe.requestSent ? null : 0);
+        if (pe.requestSent) meta.usageComplete = false;
+        else meta.attempts -= 1;
+        // Preserve failed attempts in the activity trace too. Zero token fields mean
+        // unavailable telemetry here, explicitly qualified by USAGE_UNKNOWN.
+        if (this.recorder) {
+          const id = await this.recorder.record({
+            ctx: req.ctx,
+            role: req.role,
+            promptId: prompt.id,
+            promptVersion: versionLabel(prompt),
+            provider: this.provider.name,
+            modelId: attempt.model,
+            fallbackUsed: attempt.fallbackUsed,
+            effort: req.effort,
+            inputHash,
+            inputExcerpt: {
+              ...(req.inputExcerpt ?? { promptId: prompt.id }),
+              ...this.pricingContext,
+            },
+            output: null,
+            validationStatus: "INVALID",
+            validationErrors: [
+              {
+                code: `PROVIDER_${pe.kind.toUpperCase()}`,
+                message: "Provider attempt failed",
+              },
+              ...(pe.requestSent
+                ? [
+                    {
+                      code: "USAGE_UNKNOWN",
+                      message:
+                        "Token usage and actual cost unavailable; spending reservation retained",
+                    },
+                  ]
+                : []),
+            ],
+            repairOfId,
+            stopReason: pe.requestSent ? "provider_error" : "provider_not_sent",
+            usage: emptyUsage(),
+            costUsd: 0,
+            latencyMs: Math.round(this.now() - started),
+          });
+          meta.invocationIds.push(id);
+        }
         if (req.ctx.signal?.aborted) return fail("CANCELLED");
         if (pe.kind === "auth" || pe.kind === "bad_request")
           return fail("CONFIGURATION", [
@@ -275,8 +357,9 @@ export class LlmGateway {
       const servedBy = response.modelId || attempt.model;
       if (
         this.provider.name !== "scripted" &&
-        (!hasPrice(servedBy) || servedBy !== attempt.model)
+        (!hasPrice(servedBy, this.prices) || servedBy !== attempt.model)
       ) {
+        meta.usageComplete = false;
         await settle(null);
         return fail("CONFIGURATION", [
           {
@@ -291,6 +374,7 @@ export class LlmGateway {
           (n) => !Number.isSafeInteger(n) || n < 0,
         )
       ) {
+        meta.usageComplete = false;
         await settle(null);
         return fail("CONFIGURATION", [
           {
@@ -299,7 +383,11 @@ export class LlmGateway {
           },
         ]);
       }
-      const costUsd = estimateCostUsd(servedBy, response.usage);
+      const costUsd =
+        this.provider.name === "gemini" &&
+        this.provider.billing === "confirmed-free-tier"
+          ? 0
+          : estimateCostUsd(servedBy, response.usage, this.prices);
       await settle(costUsd);
       meta.usage = addUsage(meta.usage, response.usage);
       meta.costUsd += costUsd;
@@ -326,7 +414,13 @@ export class LlmGateway {
           fallbackUsed,
           effort: req.effort,
           inputHash,
-          inputExcerpt: req.inputExcerpt ?? { promptId: prompt.id },
+          inputExcerpt: {
+            ...(req.inputExcerpt ?? { promptId: prompt.id }),
+            ...this.pricingContext,
+            ...(response.usage.reasoningTokens !== undefined
+              ? { reasoningTokens: response.usage.reasoningTokens }
+              : {}),
+          },
           output,
           validationStatus: status,
           validationErrors: errors,
@@ -355,7 +449,11 @@ export class LlmGateway {
           { code: "MAX_TOKENS", message: `Output reached ${maxTokens} tokens` },
         ]);
         const nextCap = Math.ceil(maxTokens * 1.5);
-        if (!truncationRetried && nextCap <= this.ceiling) {
+        if (
+          this.retryTruncation &&
+          !truncationRetried &&
+          nextCap <= this.ceiling
+        ) {
           truncationRetried = true;
           maxTokens = nextCap;
           continue; // same conversation, larger cap; budget is re-checked at the loop top
@@ -380,6 +478,7 @@ export class LlmGateway {
           response.text,
           req.schema,
           req.validate,
+          this.provider.name === "deepseek",
         );
         if (parsed.ok) value = parsed.value;
         else {
@@ -424,8 +523,12 @@ export class LlmGateway {
       return { model: fallback, fallbackUsed: true, fallbackReason: "economy" };
     if (
       remainingUsd === undefined ||
-      worstCaseCostUsd(this.primaryModel, promptChars, maxTokens) <=
-        remainingUsd
+      worstCaseCostUsd(
+        this.primaryModel,
+        promptChars,
+        maxTokens,
+        this.prices,
+      ) <= remainingUsd
     )
       return {
         model: this.primaryModel,
@@ -434,7 +537,8 @@ export class LlmGateway {
       };
     if (
       fallback &&
-      worstCaseCostUsd(fallback, promptChars, maxTokens) <= remainingUsd
+      worstCaseCostUsd(fallback, promptChars, maxTokens, this.prices) <=
+        remainingUsd
     )
       return { model: fallback, fallbackUsed: true, fallbackReason: "budget" };
     return null;
@@ -464,7 +568,7 @@ export class LlmGateway {
         promptChars +
         messages.slice(1).reduce((n, m) => n + m.content.length, 0);
       if (
-        meta.costUsd + worstCaseCostUsd(model, chars, maxTokens) >
+        meta.costUsd + worstCaseCostUsd(model, chars, maxTokens, this.prices) >
         remainingUsd
       )
         return { code: "BUDGET_USD", message: "LLM cost budget exhausted" };
@@ -486,6 +590,7 @@ export function parseAndValidate<S extends z.ZodType>(
   text: string,
   schema: S,
   validate?: (value: z.output<S>) => ValidationIssue[],
+  rejectUnknownKeys = false,
 ):
   | { ok: true; value: z.output<S> }
   | { ok: false; issues: ValidationIssue[]; schemaValid?: z.output<S> } {
@@ -509,6 +614,32 @@ export function parseAndValidate<S extends z.ZodType>(
       })),
     };
   }
+  // Zod object schemas normally strip unknown fields. Live DeepSeek output must not
+  // silently drop invented fields, including nested fields, before semantic checks.
+  const hasDiscardedKey = (raw: unknown, checked: unknown): boolean => {
+    if (Array.isArray(raw) && Array.isArray(checked))
+      return raw.some((item, index) => hasDiscardedKey(item, checked[index]));
+    if (
+      raw &&
+      checked &&
+      typeof raw === "object" &&
+      typeof checked === "object"
+    )
+      return Object.keys(raw).some(
+        (key) =>
+          !Object.hasOwn(checked, key) ||
+          hasDiscardedKey(
+            (raw as Record<string, unknown>)[key],
+            (checked as Record<string, unknown>)[key],
+          ),
+      );
+    return false;
+  };
+  if (rejectUnknownKeys && hasDiscardedKey(json, parsed.data))
+    return {
+      ok: false,
+      issues: [{ code: "SCHEMA", message: "Output contains unknown fields" }],
+    };
   const semantic = validate?.(parsed.data) ?? [];
   return semantic.length > 0
     ? { ok: false, issues: semantic.slice(0, 20), schemaValid: parsed.data }

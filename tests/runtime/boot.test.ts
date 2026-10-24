@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { once } from "node:events";
 import { expect, it } from "vitest";
 
 const run = promisify(execFile);
@@ -13,7 +14,13 @@ const base = {
   SHARE_TOKEN_PEPPER: "runtime-pepper-placeholder-32-bytes",
 };
 
-it.each(["QLOO_API_KEY", "ANTHROPIC_API_KEY", "OTHER_API_KEY"])(
+it.each([
+  "QLOO_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "OTHER_API_KEY",
+])(
   "the standalone web process exits for %s, without logging its value",
   async (key) => {
     try {
@@ -118,7 +125,11 @@ async function headersFrom(
     }
     throw new Error("web server did not start");
   } finally {
-    child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, "exit");
+      child.kill("SIGTERM");
+      await exited; // Never reuse a port while the prior environment is still serving.
+    }
   }
 }
 

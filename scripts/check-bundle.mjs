@@ -5,6 +5,8 @@ const build = path.resolve("apps/web/.next");
 const canaries = [
   "m0-qloo-secret-sentinel",
   "m0-llm-secret-sentinel",
+  "live-gemini-secret-sentinel",
+  "live-deepseek-secret-sentinel",
   "m0-migrator-secret-sentinel",
 ];
 let count = 0;

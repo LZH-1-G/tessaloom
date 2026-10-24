@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { qlooChildEnv } from "./env";
 import {
   TransportError,
   type HarnessCall,
@@ -15,7 +16,7 @@ export interface McpTransportOptions {
 
 /**
  * Persistent `qloo mcp` stdio child (the kit's primary route). The child receives the
- * worker's (already supervisor-filtered) environment, as the kit requires (`env: process.env`).
+ * worker's Qloo-only environment (model keys and database credentials are excluded).
  * After repeated failures within a minute it reports MCP_UNAVAILABLE so the router can use
  * the CLI transport; it never falls back to fixtures.
  */
@@ -44,7 +45,7 @@ export class McpTransport implements HarnessTransport {
       const transport = new StdioClientTransport({
         command: this.options.command ?? "qloo",
         args: ["mcp"],
-        env: (this.options.env ?? process.env) as Record<string, string>,
+        env: qlooChildEnv(this.options.env ?? process.env),
         stderr: "ignore",
       });
       const client = new Client({ name: "tessaloom-worker", version: "0.1.0" });

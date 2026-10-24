@@ -1,4 +1,12 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { z } from "zod";
 import {
   getProjectDetail,
@@ -20,6 +28,8 @@ import {
   MAX_MANUAL_RETRIES,
   QUEUES,
   createDemoGrant,
+  createProjectShareLink,
+  experimentView,
   getUsage,
   hashDemoCode,
   reserveLlmSpend,
@@ -36,10 +46,16 @@ import {
 } from "../../packages/db/src";
 import {
   LlmGateway,
+  GeminiProvider,
+  DeepSeekProvider,
+  deepseekUsdPrices,
   ProviderError,
   ScriptedLlmProvider,
 } from "../../packages/llm-gateway/src";
-import { createSpendGuard } from "../../apps/worker/src/llm";
+import {
+  createSpendGuard,
+  createDbLlmRecorder,
+} from "../../apps/worker/src/llm";
 import { ORIGIN, apiClient, json, makeServices } from "./helpers/api-client";
 import { startBoss } from "./helpers/exploration";
 import { syntheticHarness } from "./helpers/synthetic";
@@ -542,6 +558,42 @@ describe("run admission, demo access, and abuse limits (API)", () => {
 });
 
 describe("retries and read-only samples", () => {
+  it("project sample projections retain fixture provenance and cannot bypass production denial", async () => {
+    const ids = await harness.start(BRIEF);
+    const view = await experimentView(
+      handle.db,
+      ids.workspaceId,
+      ids.experimentId,
+    );
+    const link = await createProjectShareLink(handle.db, {
+      workspaceId: ids.workspaceId,
+      projectId: view.experiment.projectId,
+      scope: "project",
+      targetId: view.experiment.projectId,
+      tokenHash: "f".repeat(64),
+      expiresInDays: 1,
+    });
+    await setSampleFeatured(handle.db, link.id, true);
+    const req = () => new Request(`${ORIGIN}/api/v1/samples/${link.id}`);
+    const local = await getSample(base, req(), { sampleId: link.id });
+    expect(local.status).toBe(200);
+    expect(await local.text()).toContain('"DEVELOPMENT_FIXTURE"');
+    const listed = await json<{ items: { id: string; fixture: boolean }[] }>(
+      await getSamples(base, req()),
+    );
+    expect(listed.items.find((s) => s.id === link.id)?.fixture).toBe(true);
+    const denied = await getSample({ ...base, appEnv: "production" }, req(), {
+      sampleId: link.id,
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).not.toContain(view.experiment.projectId);
+    const productionList = await getSamples(
+      { ...base, appEnv: "production" },
+      req(),
+    );
+    expect(await productionList.text()).not.toContain(link.id);
+    await setSampleFeatured(handle.db, link.id, false);
+  });
   it(`a run cannot be retried more than ${MAX_MANUAL_RETRIES} times`, async () => {
     const { runId, workspaceId } = await harness.start(BRIEF);
     const fail = () =>
@@ -763,5 +815,228 @@ describe("durable fail-closed accounting", () => {
       const response = await postRunAccess(s, request);
       expect(response.status).toBe(n < 10 ? 400 : 429);
     }
+  });
+});
+
+describe("Gemini + PostgreSQL spend guard (mock HTTP, synthetic inputs only)", () => {
+  it("keeps invite/off protection, persists usage and repairs, and retains reservations on network errors", async () => {
+    await freshGlobalDay();
+    const { runId, experimentId } = await harness.start(BRIEF);
+    const row = await handle.db.execute<{ project_id: string }>(
+      sql`SELECT project_id FROM experiments WHERE id = ${experimentId}`,
+    );
+    const projectId = row.rows[0]!.project_id;
+    const model = "gemini-3.5-flash-lite";
+    let attempts = 0;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => {
+      attempts++;
+      if (attempts > 2) throw new Error("private-network-detail");
+      return new Response(
+        JSON.stringify({
+          modelVersion: model,
+          candidates: [
+            {
+              finishReason: "STOP",
+              content: {
+                parts: [
+                  {
+                    text: attempts === 1 ? '{"answer":""}' : '{"answer":"ok"}',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 100,
+            cachedContentTokenCount: 20,
+            candidatesTokenCount: 10,
+            thoughtsTokenCount: 5,
+            totalTokenCount: 115,
+          },
+        }),
+      );
+    });
+    const provider = new GeminiProvider({
+      model,
+      apiKey: "test-private-sentinel",
+      freeTierConfirmed: true,
+      dataSharingApproved: true,
+      maxRequests: 3,
+      fetch: fetcher,
+    });
+    const gateway = (access: LlmSpendLimits["access"]) =>
+      new LlmGateway({
+        provider,
+        primaryModel: model,
+        spendGuard: createSpendGuard(handle, { ...OPEN, access }),
+        recorder: createDbLlmRecorder(handle.db),
+      });
+    const request = {
+      role: "R1" as const,
+      promptId: "r1.intent",
+      input: { synthetic: true, brief: "Locally invented cafe" },
+      schema: z.object({ answer: z.string().min(1) }),
+      effort: "low" as const,
+      maxOutputTokens: 256,
+      ctx: { projectId, runId },
+    };
+    for (const access of ["invite", "off"] as const) {
+      expect(await gateway(access).generate(request)).toMatchObject({
+        ok: false,
+        reason: "BUDGET",
+      });
+      expect(fetcher).not.toHaveBeenCalled();
+    }
+    expect(await gateway("open").generate(request)).toMatchObject({
+      ok: true,
+      attempts: 2,
+      costUsd: 0,
+      usage: { inputTokens: 160, cachedInputTokens: 40, outputTokens: 30 },
+    });
+    const recorded = await handle.db.execute(
+      sql`SELECT provider, validation_status, output_tokens, estimated_cost_usd FROM llm_invocations WHERE run_id = ${runId} ORDER BY created_at, id`,
+    );
+    expect(recorded.rows).toMatchObject([
+      {
+        provider: "gemini",
+        validation_status: "INVALID",
+        output_tokens: 15,
+        estimated_cost_usd: "0.0000",
+      },
+      {
+        provider: "gemini",
+        validation_status: "REPAIRED",
+        output_tokens: 15,
+        estimated_cost_usd: "0.0000",
+      },
+    ]);
+    expect(await counter("run", runId)).toBe(0);
+    expect(await gateway("open").generate(request)).toMatchObject({
+      ok: false,
+      reason: "UNAVAILABLE",
+      attempts: 1,
+    });
+    const ledger = await handle.db.execute(
+      sql`SELECT status FROM llm_spend_reservations WHERE run_id = ${runId} ORDER BY created_at, id`,
+    );
+    expect(ledger.rows.map((r) => r.status)).toEqual([
+      "SETTLED",
+      "SETTLED",
+      "UNKNOWN",
+    ]);
+    expect(await counter("run", runId)).toBeGreaterThan(0);
+    const failed = await handle.db.execute(
+      sql`SELECT stop_reason, validation_errors FROM llm_invocations WHERE run_id = ${runId} AND stop_reason = 'provider_error'`,
+    );
+    expect(failed.rows).toHaveLength(1);
+    expect(JSON.stringify(failed.rows)).toContain("USAGE_UNKNOWN");
+    expect(JSON.stringify(failed.rows)).not.toContain("private-network-detail");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("DeepSeek CNY to USD PostgreSQL accounting (mock HTTP only)", () => {
+  it("enforces public access, converts once, persists pricing context and retains unknown spend", async () => {
+    await freshGlobalDay();
+    const { runId, experimentId } = await harness.start(BRIEF);
+    const row = await handle.db.execute<{ project_id: string }>(
+      sql`SELECT project_id FROM experiments WHERE id = ${experimentId}`,
+    );
+    const projectId = row.rows[0]!.project_id;
+    const now = Date.parse("2026-10-23T10:00:00Z");
+    const approval = {
+      usdPerCny: 0.2,
+      verifiedAt: new Date(now).toISOString(),
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            model: "deepseek-v4-pro",
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: '{"answer":"ok"}' }],
+              },
+            ],
+            usage: {
+              input_tokens: 100,
+              output_tokens: 30,
+              total_tokens: 130,
+              input_tokens_details: { cached_tokens: 20 },
+              output_tokens_details: { reasoning_tokens: 10 },
+            },
+          }),
+        ),
+      )
+      .mockRejectedValue(new Error("private transport details"));
+    const provider = new DeepSeekProvider({
+      apiKey: "fake-sentinel",
+      liveApproved: true,
+      priceApproval: approval,
+      maxRequests: 4,
+      budgetCny: 2,
+      now: () => now,
+      fetch: fetcher,
+    });
+    const gateway = (access: LlmSpendLimits["access"]) =>
+      new LlmGateway({
+        provider,
+        primaryModel: "deepseek-v4-pro",
+        prices: deepseekUsdPrices(approval, now),
+        pricingContext: {
+          billingCurrency: "CNY",
+          ledgerCurrency: "USD",
+          usdPerCny: 0.2,
+        },
+        spendGuard: createSpendGuard(handle, { ...OPEN, access }),
+        recorder: createDbLlmRecorder(handle.db),
+      });
+    const request = {
+      role: "R1" as const,
+      promptId: "r1.intent",
+      input: { synthetic: true, brief: "Invented cafe" },
+      schema: z.strictObject({ answer: z.string() }),
+      effort: "low" as const,
+      maxOutputTokens: 8192,
+      ctx: { projectId, runId, inputOrigin: "synthetic" as const },
+    };
+    for (const access of ["off", "invite"] as const)
+      expect(await gateway(access).generate(request)).toMatchObject({
+        ok: false,
+        reason: "BUDGET",
+      });
+    expect(fetcher).not.toHaveBeenCalled();
+    const result = await gateway("open").generate(request);
+    expect(result).toMatchObject({
+      ok: true,
+      attempts: 1,
+      usage: { reasoningTokens: 10 },
+    });
+    expect(result.costUsd).toBeCloseTo(0.0003072, 10);
+    expect(await counter("run", runId)).toBe(308);
+    const rows = await handle.db.execute(
+      sql`SELECT input_excerpt FROM llm_invocations WHERE run_id = ${runId}`,
+    );
+    expect(rows.rows[0]!.input_excerpt).toMatchObject({
+      billingCurrency: "CNY",
+      ledgerCurrency: "USD",
+      usdPerCny: 0.2,
+      reasoningTokens: 10,
+    });
+    expect(await gateway("open").generate(request)).toMatchObject({
+      ok: false,
+      usageComplete: false,
+      attempts: 1,
+    });
+    const ledger = await handle.db.execute(
+      sql`SELECT status FROM llm_spend_reservations WHERE run_id = ${runId} ORDER BY created_at,id`,
+    );
+    expect(ledger.rows.map((r) => r.status)).toEqual(["SETTLED", "UNKNOWN"]);
+    expect(await counter("run", runId)).toBeGreaterThan(308);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
