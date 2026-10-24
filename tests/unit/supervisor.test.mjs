@@ -8,6 +8,7 @@ import {
   restartDelay,
   startSupervisor,
   validateSupervisorEnv,
+  supervisorFailure,
 } from "../../scripts/start.mjs";
 
 const fullEnv = {
@@ -245,6 +246,25 @@ describe("supervisor lifecycle", () => {
     ]) {
       expect(output).not.toContain(value);
     }
+  });
+  it("assigns a fresh colocated readiness identity independent of supplied environment", () => {
+    startSupervisor({
+      ...options(),
+      env: { ...fullEnv, TL_HEARTBEAT_ID: "untrusted" },
+    });
+    const webId = spawnChild.mock.calls[0][2].env.TL_HEARTBEAT_ID;
+    expect(webId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(spawnChild.mock.calls[1][2].env.TL_HEARTBEAT_ID).toBe(webId);
+    startSupervisor(options());
+    expect(spawnChild.mock.calls[2][2].env.TL_HEARTBEAT_ID).not.toBe(webId);
+  });
+  it("reports configuration field names without arbitrary values", () => {
+    expect(
+      supervisorFailure(new Error("Invalid DATABASE_URL: secret-sentinel")),
+    ).toEqual({ reason: "invalid_configuration", variable: "DATABASE_URL" });
+    expect(
+      JSON.stringify(supervisorFailure(new Error("private-sentinel"))),
+    ).not.toContain("private-sentinel");
   });
   it("backs off and exits on the sixth crash across a five-minute window", () => {
     startSupervisor({ ...options(), env: { ...fullEnv, TL_ROLE: "worker" } });

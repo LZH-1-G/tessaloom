@@ -1,5 +1,7 @@
 # M11 deployment acceptance and remaining blockers
 
+> Deployment decision updated 2026-10-25: Northflank is selected. Use [the Northflank recovery runbook](NORTHFLANK_RUNBOOK.md); hosting comparisons below are historical, and Compose commands apply to local tests only.
+
 Reviewed 2026-10-24, Asia/Shanghai. **Local preparation is verified; public deployment and submission are NOT accepted.** No live Qloo/DeepSeek request, public tunnel, hosting purchase/provisioning, organizer message, push, merge, repository publication or submission occurred.
 
 ## Local evidence

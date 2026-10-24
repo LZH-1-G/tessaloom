@@ -1,5 +1,7 @@
 # M11 hosting decision — 2026-10-24
 
+> Deployment decision updated 2026-10-25: Northflank is selected. Use [the Northflank recovery runbook](NORTHFLANK_RUNBOOK.md); hosting comparisons below are historical, and Compose commands apply to local tests only.
+
 **Prepare the existing single-VM Compose deployment. Oracle A1 remains the conditional $0 first choice; Hetzner CX23 EU is the paid fallback requiring approval. No account, capacity or public deployment is confirmed.** Local Mac hosting is an independent POC, not accepted external hosting. No provider request, purchase, DNS change, tunnel or organizer contact was made.
 
 ## Official terms rechecked today

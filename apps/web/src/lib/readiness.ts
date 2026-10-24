@@ -1,4 +1,5 @@
 import pg from "pg";
+import { verifiedDatabaseUrl } from "@tessaloom/config/env";
 
 export interface Readiness {
   db: boolean;
@@ -13,9 +14,10 @@ export interface Readiness {
 export async function checkReadiness(
   connectionString: string,
   maxAgeSeconds = 30,
+  workerId?: string,
 ): Promise<Readiness> {
   const client = new pg.Client({
-    connectionString,
+    connectionString: verifiedDatabaseUrl(connectionString),
     connectionTimeoutMillis: 2_000,
     query_timeout: 2_000,
     statement_timeout: 2_000,
@@ -31,8 +33,8 @@ export async function checkReadiness(
   }
   try {
     const result = await client.query<{ fresh: boolean | null }>(
-      "SELECT max(last_beat_at) > now() - make_interval(secs => $1) AS fresh FROM worker_heartbeats",
-      [maxAgeSeconds],
+      "SELECT max(last_beat_at) > now() - make_interval(secs => $1) AS fresh FROM worker_heartbeats WHERE ($2::text IS NULL OR worker_id = $2)",
+      [maxAgeSeconds, workerId ?? null],
     );
     return { db: true, worker: result.rows[0]?.fresh === true };
   } catch {

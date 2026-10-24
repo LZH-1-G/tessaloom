@@ -1,4 +1,5 @@
 import { runMigrations } from "./migrate";
+import { databaseFailure } from "./diagnostics";
 
 // Entry point for the bundled release-step migrator (dist/migrate.mjs) only. Kept separate from
 // migrate.ts so that bundling the library elsewhere (e.g. the worker) never runs migrations.
@@ -16,11 +17,11 @@ runMigrations(url).then(
   () => console.log(JSON.stringify({ event: "migrations_applied" })),
   (error: unknown) => {
     // Never log the connection string; report only the error code.
-    const code =
-      (error as { code?: string; cause?: { code?: string } }).cause?.code ??
-      (error as { code?: string }).code;
     console.error(
-      JSON.stringify({ event: "migrations_failed", code: code ?? "unknown" }),
+      JSON.stringify({
+        event: "migrations_failed",
+        reason: databaseFailure(error),
+      }),
     );
     process.exit(1);
   },

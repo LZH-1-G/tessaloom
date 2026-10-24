@@ -4,7 +4,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const readiness = await checkReadiness(process.env.DATABASE_URL ?? "");
+  const readiness = await checkReadiness(
+    process.env.DATABASE_URL ?? "",
+    30,
+    process.env.TL_HEARTBEAT_ID,
+  );
   return Response.json(readiness, {
     status: readiness.db && readiness.worker ? 200 : 503,
     headers: { "Cache-Control": "no-store" },

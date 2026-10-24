@@ -1,4 +1,5 @@
 import { PgBoss } from "pg-boss";
+import { verifiedDatabaseUrl } from "../../config/env";
 import type { RawSql } from "./client";
 
 /** API_CONTRACTS §8 queues. */
@@ -23,7 +24,7 @@ export const runStepKey = (job: RunStepJob) =>
  * role has no DDL rights, roles.sql) and from test database setup.
  */
 export async function installQueues(connectionString: string): Promise<void> {
-  const migrationUrl = new URL(connectionString);
+  const migrationUrl = new URL(verifiedDatabaseUrl(connectionString));
   migrationUrl.searchParams.set(
     "options",
     `${migrationUrl.searchParams.get("options") ?? ""} -c statement_timeout=120000 -c lock_timeout=60000`.trim(),
@@ -77,12 +78,18 @@ export function createBoss(
   connectionString: string,
   options: BossOptions,
 ): PgBoss {
+  const runtimeUrl = new URL(verifiedDatabaseUrl(connectionString));
+  runtimeUrl.searchParams.set(
+    "options",
+    `${runtimeUrl.searchParams.get("options") ?? ""} -c statement_timeout=15000`.trim(),
+  );
   const boss = new PgBoss({
-    connectionString,
+    connectionString: runtimeUrl.toString(),
     schema: BOSS_SCHEMA,
     application_name:
       options.applicationName ?? `tessaloom-${options.role}-queue`,
     max: options.max ?? 2,
+    connectionTimeoutMillis: 5_000,
     migrate: false,
     createSchema: false,
     supervise: options.role === "worker",

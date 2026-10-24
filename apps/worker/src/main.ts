@@ -4,6 +4,7 @@ import {
   beatWorker,
   createBoss,
   createDb,
+  databaseFailure,
   registerPromptTemplate,
   type JobWithMetadata,
   type RunStepJob,
@@ -45,7 +46,7 @@ const log = (event: string, details: Record<string, unknown> = {}) =>
 
 // M4: the worker executes run steps from pg-boss, owns Qloo readiness and the heartbeat
 // that `/api/health/ready` consumes, and publishes its run configuration with each beat.
-const workerId = `worker-${process.pid}`;
+const workerId = env.TL_HEARTBEAT_ID ?? `worker-${crypto.randomUUID()}`;
 const handle = createDb(env.DATABASE_URL, {
   max: 5,
   applicationName: "tessaloom-worker",
@@ -56,6 +57,8 @@ let readiness: QlooReadiness | null = null;
 let stopping = false;
 let queuesStarted = false;
 let lastHeartbeatError: string | null = null;
+let startupStage = "queue_connect";
+let startup: Promise<void> | undefined;
 
 // Every provider attempt goes through the spend ledger (M10-A public demo cost safety).
 const gateway = createLlmGateway(
@@ -101,7 +104,7 @@ async function refreshReadiness() {
 
 async function heartbeat() {
   // Readiness means "can execute runs": beat only once the job consumer is running.
-  if (!queuesStarted) return;
+  if (!queuesStarted || stopping) return;
   try {
     await beatWorker(handle.db, {
       workerId,
@@ -118,17 +121,17 @@ async function heartbeat() {
     lastHeartbeatError = null;
   } catch (error) {
     // Database outages must not crash the worker; log each failure class once.
-    const code =
-      (error as { cause?: { code?: string }; code?: string }).cause?.code ??
-      (error as { code?: string }).code ??
-      "unknown";
+    const code = databaseFailure(error);
     if (lastHeartbeatError !== code) log("worker_heartbeat_failed", { code });
     lastHeartbeatError = code;
   }
 }
 
 async function startQueues() {
+  if (stopping) return;
+  startupStage = "queue_connect";
   await boss.start();
+  if (stopping) return;
   const qloo = createQlooAdapter(handle.db, {
     mode: env.QLOO_MODE,
     appEnv: env.APP_ENV,
@@ -143,6 +146,7 @@ async function startQueues() {
     ports: buildPorts(qloo, gateway),
     log,
   };
+  startupStage = "run_step_consumer";
   await boss.work(
     QUEUES.runStep,
     {
@@ -160,6 +164,8 @@ async function startQueues() {
       return { outcome: outcome.outcome };
     },
   );
+  if (stopping) return;
+  startupStage = "maintenance_consumers";
   await boss.work(QUEUES.expirePausedRuns, async () => {
     const expired = await expirePausedRuns(handle, new Date());
     if (expired) log("runs_expired", { count: expired });
@@ -168,14 +174,19 @@ async function startQueues() {
     const recovered = await recoverStalledRuns(handle, boss, new Date());
     if (recovered) log("runs_recovered", { count: recovered });
   });
+  if (stopping) return;
+  startupStage = "maintenance_schedules";
   await boss.schedule(QUEUES.expirePausedRuns, "*/15 * * * *");
   await boss.schedule(QUEUES.recoverRuns, "*/5 * * * *");
+  if (stopping) return;
+  startupStage = "prompt_registry";
   for (const p of prompts.all())
     await registerPromptTemplate(handle.db, {
       promptId: p.id,
       version: p.version,
       contentHash: p.contentHash,
     });
+  if (stopping) return;
   queuesStarted = true;
   log("worker_queues_started", {
     llm: gateway ? gateway.providerName : "unconfigured",
@@ -189,9 +200,12 @@ const readinessTimer = setInterval(() => void refreshReadiness(), 5 * 60_000);
 async function shutdown(signal: NodeJS.Signals) {
   if (stopping) return;
   stopping = true;
+  queuesStarted = false;
   clearInterval(heartbeatTimer);
   clearInterval(readinessTimer);
   clearTimeout(queueRetryTimer);
+  // Serialize stop after an in-flight start: no late consumers or retries after shutdown.
+  await startup;
   await boss.stop({ graceful: true, timeout: 20_000 }).catch(() => {});
   await handle.close().catch(() => {});
   log("worker_stopped", { signal });
@@ -206,16 +220,26 @@ log("worker_started", {
 });
 let queueRetryTimer: NodeJS.Timeout | undefined;
 async function startQueuesWithRetry() {
+  if (stopping) return;
   try {
     await startQueues();
     await heartbeat();
   } catch (error) {
     // The queue schema comes from the release migrator, and the database may still be
     // starting: retry instead of crash-looping. No heartbeat is written meanwhile.
-    log("worker_queue_start_failed", { name: (error as Error).name });
+    queuesStarted = false;
+    log("worker_queue_start_failed", {
+      stage: startupStage,
+      reason: databaseFailure(error),
+      retryMs: 15_000,
+    });
     await boss.stop({ graceful: false }).catch(() => {});
     if (!stopping)
-      queueRetryTimer = setTimeout(() => void startQueuesWithRetry(), 15_000);
+      queueRetryTimer = setTimeout(() => {
+        startup = startQueuesWithRetry();
+      }, 15_000);
   }
 }
-void refreshReadiness().then(startQueuesWithRetry);
+// Local harness diagnostics are independent of queue readiness and never use --network.
+void refreshReadiness();
+startup = startQueuesWithRetry();

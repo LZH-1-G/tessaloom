@@ -14,6 +14,7 @@ const shared = {
     .enum(["development", "test", "production"])
     .default("development"),
   DATABASE_URL: postgresUrl,
+  TL_HEARTBEAT_ID: z.string().uuid().optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -73,6 +74,22 @@ export function databaseTlsAllowed(
   } catch {
     return false;
   }
+}
+
+/** Preserve pg 8's certificate + hostname verification when pg 9 changes sslmode semantics. */
+export function verifiedDatabaseUrl(value: string): string {
+  const url = new URL(value);
+  const modes = url.searchParams.getAll("sslmode");
+  if (
+    modes.length === 1 &&
+    ["require", "verify-ca"].includes(modes[0] ?? "") &&
+    !url.searchParams.has("ssl") &&
+    !url.searchParams.has("uselibpqcompat")
+  ) {
+    url.searchParams.set("sslmode", "verify-full");
+    return url.toString();
+  }
+  return value;
 }
 
 // Inspect the original environment before Zod strips unknown variables.
