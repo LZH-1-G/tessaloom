@@ -119,6 +119,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+  admin:
+    <<: *app
+    profiles: [operator]
+    restart: "no"
+    mem_limit: 384m
+    memswap_limit: 384m
+    networks: [backend]
+    entrypoint: [tini, --, node, deploy/app-entrypoint.mjs, admin]
+    command: [spend, today]
+    environment:
+      APP_ENV: production
+    secrets: [app_password, share_token_pepper]
+    depends_on:
+      postgres:
+        condition: service_healthy
   proxy:
     image: caddy:2.11.7-alpine@sha256:24ec7b05bc532c7bb57f727030c5056e257ff7138b4b50460306819ff79362bd
     restart: unless-stopped

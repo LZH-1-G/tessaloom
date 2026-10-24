@@ -1,5 +1,7 @@
 # Deployment readiness and hosting decision
 
+> M11 update (2026-10-24): use the [current hosting comparison](../M11_HOSTING.md), [exact runbook](../M11_RUNBOOK.md), [judge access](../M11_JUDGE_ACCESS.md) and [acceptance gates](../M11_ACCEPTANCE.md). The earlier submission record below remains historical. M11 adds a local tunnel-origin POC without public exposure; it does not claim a permitted real-Qloo public sample exists.
+
 Reviewed 2026-10-24. No account was created, no host ordered or provisioned, and no public service deployed. Oracle support is not a dependency for completing the code, documentation or local acceptance work.
 
 ## Decision
@@ -58,7 +60,7 @@ Preserve the production fixture firewall. Keep synthetic demonstrations local or
 ## Release gates owned by the operator
 
 1. Approve the host, final cost and public deployment. Verify the architecture (ARM64 vs AMD64), entitlement, storage, traffic and recovery access.
-2. Build and pin the accepted image digest. Transfer only reviewed files and synthetic sample data; inject fresh private secrets outside the repository.
+2. Build and pin the accepted image digest. Transfer only reviewed files and separately approved nonfixture sample data; inject fresh private secrets outside the repository. Synthetic samples remain local and are denied in production.
 3. Configure a real hostname, public TLS and cloud/host firewalls. Only HTTPS/HTTP are public; restrict SSH, and keep app/DB ports private. Preserve the proxy trust chain.
 4. Verify samples and denial of paid generation from an independent browser, IPv4/IPv6 where configured. Run Chromium and WebKit against the approved public URL before submission.
 5. Establish off-host encrypted backups, rehearse restore/reboot, monitor availability and sample expiry through judging. Local successful recovery is not a cloud RTO claim.

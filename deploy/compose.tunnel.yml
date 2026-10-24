@@ -1,0 +1,9 @@
+# Local origin POC only. This does NOT start a tunnel or issue a public certificate.
+# Compose >= 2.24.4 is required for !override; never replace this with appended ports.
+services:
+  proxy:
+    ports: !override
+      - "127.0.0.1:${TUNNEL_PORT:-18080}:80"
+configs:
+  caddy:
+    file: ./Caddyfile.tunnel

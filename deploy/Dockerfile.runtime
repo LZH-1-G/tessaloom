@@ -1,0 +1,6 @@
+# Deployment-entrypoint-only update. The base must already contain the accepted web,
+# worker, DB bundles, migrations and supervisor for the SAME source baseline.
+# This is not a replacement for a full build when application code/dependencies change.
+ARG VERIFIED_BASE_IMAGE
+FROM ${VERIFIED_BASE_IMAGE}
+COPY deploy/app-entrypoint.mjs /app/deploy/app-entrypoint.mjs

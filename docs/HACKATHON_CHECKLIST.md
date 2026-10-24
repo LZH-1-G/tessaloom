@@ -1,5 +1,7 @@
 # Tessaloom — Hackathon Rules and Submission Compliance Checklist
 
+> M11 rules recheck (2026-10-24): the official rules are now readable; see [current source and calendar](M11_HOSTING.md). Deadline: **October 31, 11:45 Beijing time**. The page currently lists judging November 2–5, which differs from the historical November 2–16 record below. Maintain the conservative November 30 availability target. Public access, quota policy and home-tunnel compliance are not certified by this checklist.
+
 > Submission preparation update (2026-10-24): see [current acceptance](submission/ACCEPTANCE.md) and [deployment decision](submission/DEPLOYMENT.md). This earlier milestone/checklist remains historical. Production still rejects fixture generation and fixture reads; no public-demo exception has been approved. The current deployment preparation also creates an empty worker-only `deepseek_key` file.
 
 > **Event:** Qloo Agentic Hackathon 2026 (Devpost: https://qloo.devpost.com/)
