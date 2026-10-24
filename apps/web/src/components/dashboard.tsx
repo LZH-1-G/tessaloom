@@ -84,9 +84,12 @@ export function Dashboard() {
             Where different worlds create new possibilities.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Describe your venue and the cultures you love. Tessaloom weaves
-            cross-domain hypotheses and tests each one against aggregate Qloo
-            audience-affinity data, showing exactly where every fact came from.
+            Describe your venue and the cultures you love. Weave cross-domain
+            hypotheses, inspect their evidence, then change one assumption and
+            compare the result before composing an experience blueprint.
+            {status?.mode === "fixture"
+              ? " This demonstration uses fictional cultural data; it does not establish real audience demand."
+              : " Live integrations use aggregate Qloo affinities, not predictions of attendance or sales."}
           </p>
           <ol
             className="mt-8 grid gap-3 sm:grid-cols-3"
@@ -94,7 +97,7 @@ export function Dashboard() {
           >
             {[
               ["Brief", "Your challenge and 2–6 cultural interests."],
-              ["Hypotheses", "Collisions tested with Qloo evidence."],
+              ["Hypotheses", "Creative ideas with traceable claims."],
               ["What-if & blueprint", "Branch, compare, and compose."],
             ].map(([title, text], i) => (
               <li

@@ -380,12 +380,15 @@ export const getSamples = handle(async (s: Services, req: Request) => {
   );
   const items = await listSamples(s.handle.db);
   return json({
-    items: items.map((i) => ({
-      id: i.id,
-      scope: i.scope,
-      projectName: i.projectName,
-      useCase: i.useCase,
-    })),
+    items: items
+      .filter((i) => s.appEnv !== "production" || !i.fixture)
+      .map((i) => ({
+        id: i.id,
+        scope: i.scope,
+        projectName: i.projectName,
+        useCase: i.useCase,
+        fixture: i.fixture,
+      })),
   });
 });
 

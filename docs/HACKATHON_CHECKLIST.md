@@ -1,5 +1,7 @@
 # Tessaloom — Hackathon Rules and Submission Compliance Checklist
 
+> Submission preparation update (2026-10-24): see [current acceptance](submission/ACCEPTANCE.md) and [deployment decision](submission/DEPLOYMENT.md). This earlier milestone/checklist remains historical. Production still rejects fixture generation and fixture reads; no public-demo exception has been approved. The current deployment preparation also creates an empty worker-only `deepseek_key` file.
+
 > **Event:** Qloo Agentic Hackathon 2026 (Devpost: https://qloo.devpost.com/)
 > **Status:** v1.1 · updated 2026-10-20 (architecture review) · **No submission item is complete yet**, except where evidence is cited.
 > **Deadline:** **Friday, October 30, 2026, 11:45 PM EDT** = 2026-10-31 03:45 UTC. DST in the US ends Sunday, Nov 1, 2026, so EDT (UTC−4) applies.

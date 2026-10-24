@@ -20,7 +20,7 @@ for (const name of [
     randomBytes(32).toString("hex") + "\n",
     { mode: 0o600, flag: "wx" },
   );
-for (const name of ["qloo_key", "anthropic_key"])
+for (const name of ["qloo_key", "anthropic_key", "deepseek_key"])
   writeFileSync(path.join(destination, name), "", { mode: 0o600, flag: "wx" });
 const openssl = (...args) =>
   execFileSync("openssl", args, { cwd: destination, stdio: "ignore" });

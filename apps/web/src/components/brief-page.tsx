@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { api, ApiRequestError } from "@/lib/api";
 import type { BriefContent, BriefVersion, IntentFrameView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { JUDGE_BRIEF } from "@/lib/judge-scenario";
 import { useProject } from "./project-context";
 import { DOMAIN_LABEL, DomainBadge, ProvenanceChip } from "./provenance";
 import { Button, Card, Field, inputClass, SectionTitle } from "./ui";
@@ -391,7 +392,8 @@ function Shuttle({ text }: { text: string }) {
 }
 
 export function BriefPage() {
-  const { projectId, overview, view, run, refresh, loading } = useProject();
+  const { projectId, overview, view, run, refresh, loading, status } =
+    useProject();
   const latest = overview?.briefs[0] ?? null;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(empty);
@@ -538,6 +540,32 @@ export function BriefPage() {
             className="@container space-y-5"
             aria-label="Brief form"
           >
+            {!latest &&
+            status?.mode === "fixture" &&
+            !form.title &&
+            !form.challenge ? (
+              <div className="rounded-lg border border-border bg-surface-2 p-4 text-sm">
+                <p className="font-medium">
+                  Try a complete cultural experiment
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Bring cozy games, illustrated travel stories and neon cinema
+                  into a 40-seat supper club. All titles and affinity data in
+                  this example are fictional.
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={() => {
+                    setForm(fromBrief(JUDGE_BRIEF));
+                    setErrors({});
+                  }}
+                >
+                  Use the fixture example
+                </Button>
+              </div>
+            ) : null}
             <Field label="Title" htmlFor="brief-title" error={errors.title}>
               <input
                 id="brief-title"

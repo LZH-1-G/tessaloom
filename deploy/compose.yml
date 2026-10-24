@@ -87,7 +87,12 @@ services:
       TL_WEB_MAX_OLD_SPACE_MB: "512"
       TL_WORKER_MAX_OLD_SPACE_MB: "768"
       QLOO_MODE: live
-      LLM_PROVIDER: anthropic
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      DEEPSEEK_LIVE_APPROVED: ${DEEPSEEK_LIVE_APPROVED:-off}
+      DEEPSEEK_MAX_REQUESTS: ${DEEPSEEK_MAX_REQUESTS:-0}
+      DEEPSEEK_BUDGET_CNY: ${DEEPSEEK_BUDGET_CNY:-0}
+      DEEPSEEK_USD_PER_CNY: ${DEEPSEEK_USD_PER_CNY:-}
+      DEEPSEEK_PRICING_VERIFIED_AT: ${DEEPSEEK_PRICING_VERIFIED_AT:-}
       QLOO_RAW_RETENTION: "off"
       LOG_LEVEL: info
     secrets:
@@ -97,6 +102,7 @@ services:
         share_token_pepper,
         qloo_key,
         anthropic_key,
+        deepseek_key,
       ]
     depends_on:
       postgres:
@@ -175,3 +181,5 @@ secrets:
     file: ${PRIVATE_DIR}/qloo_key
   anthropic_key:
     file: ${PRIVATE_DIR}/anthropic_key
+  deepseek_key:
+    file: ${PRIVATE_DIR}/deepseek_key

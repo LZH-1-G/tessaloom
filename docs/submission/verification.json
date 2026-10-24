@@ -1,0 +1,152 @@
+{
+  "reviewedOn": "2026-10-24",
+  "baseCheckpoint": "d3ac49aa93e286b43d2bb0c9e17180843869eba1",
+  "branch": "codex/live-provider-validation",
+  "providerHttpRequestsThisWork": 0,
+  "publicDeployment": false,
+  "finalImage": {
+    "id": "sha256:d806ce325865ffe673f83aefd12dcfc1c4799f3f63ed8052c22f984a08dbf801",
+    "platform": "linux/arm64"
+  },
+  "tests": {
+    "unit": {
+      "passed": 387,
+      "files": 25
+    },
+    "previousFullIntegration": {
+      "passed": 81,
+      "files": 14,
+      "checkpoint": "d3ac49a"
+    },
+    "affectedBlueprintIntegration": {
+      "passed": 2
+    },
+    "finalSampleShareCostIntegration": {
+      "passed": 24,
+      "includesNewTest": true,
+      "overlapsPreviousSuite": true
+    },
+    "completeBrowserJourneys": {
+      "passed": 28,
+      "browsers": ["chromium", "webkit"]
+    },
+    "inviteBrowserChecks": {
+      "passed": 2
+    },
+    "preparedSampleBrowserChecks": {
+      "passed": 2,
+      "browsers": ["chromium", "webkit"],
+      "mobileWidth": 390
+    },
+    "runtimeBoot": {
+      "passed": 12
+    },
+    "bundleScanFiles": 670
+  },
+  "productionDependencyAudit": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "dependencies": 163,
+    "devDependencies": 0,
+    "optionalDependencies": 83,
+    "totalDependencies": 246
+  },
+  "secrets": {
+    "historyCommitsScanned": 28,
+    "historyFindings": 0,
+    "changedFileFindings": 0
+  },
+  "installedLicenseManifests": 485,
+  "fullDeploymentSmoke": [
+    {
+      "event": "secret_file_isolation_passed"
+    },
+    {
+      "event": "web_worker_credential_environment_isolation_passed"
+    },
+    {
+      "event": "https_access_proxy_and_tls_passed"
+    },
+    {
+      "event": "production_invite_denial_passed"
+    },
+    {
+      "event": "proxy_error_log_redaction_passed"
+    },
+    {
+      "event": "container_restart_recovered",
+      "restartsAfter": 1
+    },
+    {
+      "event": "backup_persistence_restart_and_recovery_passed"
+    },
+    {
+      "event": "deployment_smoke_passed"
+    }
+  ],
+  "containerSmoke": [
+    {
+      "event": "process_isolation_passed"
+    },
+    {
+      "event": "supervised_worker_harness_passed"
+    },
+    {
+      "event": "worker_heartbeat_passed"
+    },
+    {
+      "event": "run_queue_roundtrip_passed"
+    },
+    {
+      "event": "local_backup_restore_passed"
+    },
+    {
+      "event": "supervised_log_redaction_passed"
+    },
+    {
+      "event": "worker_restart_passed"
+    },
+    {
+      "event": "readiness_outage_recovery_passed"
+    },
+    {
+      "event": "graceful_shutdown_passed"
+    },
+    {
+      "event": "production_fixture_guard_passed"
+    },
+    {
+      "event": "root_identity_fail_closed_passed"
+    },
+    {
+      "event": "container_smoke_passed"
+    }
+  ],
+  "finalProductionSampleSmoke": [
+    {
+      "event": "secret_file_isolation_passed"
+    },
+    {
+      "event": "web_worker_credential_environment_isolation_passed"
+    },
+    {
+      "event": "production_invite_denial_passed"
+    },
+    {
+      "event": "deployment_security_checks_passed"
+    },
+    {
+      "event": "production_fixture_sample_denial_passed",
+      "samples": 2,
+      "newRuns": 0,
+      "reservations": 0
+    }
+  ],
+  "coverageTiming": "Full browser and M10-B suites passed earlier in this work. The dependency patch was rebuilt and container-tested; the subsequent sample projection fix was rebuilt, covered by 24 integration tests, both sample browsers, and the final production security/sample-denial smoke. Unaffected lengthy suites were not repeated.",
+  "publicFixturePolicy": "Current production rejects fixture generation and reads; this guard remains unchanged. Synthetic walkthroughs stay local or in labelled supporting recordings. Public application content requires authorized nonfixture data."
+}

@@ -28,6 +28,8 @@ import {
   MAX_MANUAL_RETRIES,
   QUEUES,
   createDemoGrant,
+  createProjectShareLink,
+  experimentView,
   getUsage,
   hashDemoCode,
   reserveLlmSpend,
@@ -556,6 +558,42 @@ describe("run admission, demo access, and abuse limits (API)", () => {
 });
 
 describe("retries and read-only samples", () => {
+  it("project sample projections retain fixture provenance and cannot bypass production denial", async () => {
+    const ids = await harness.start(BRIEF);
+    const view = await experimentView(
+      handle.db,
+      ids.workspaceId,
+      ids.experimentId,
+    );
+    const link = await createProjectShareLink(handle.db, {
+      workspaceId: ids.workspaceId,
+      projectId: view.experiment.projectId,
+      scope: "project",
+      targetId: view.experiment.projectId,
+      tokenHash: "f".repeat(64),
+      expiresInDays: 1,
+    });
+    await setSampleFeatured(handle.db, link.id, true);
+    const req = () => new Request(`${ORIGIN}/api/v1/samples/${link.id}`);
+    const local = await getSample(base, req(), { sampleId: link.id });
+    expect(local.status).toBe(200);
+    expect(await local.text()).toContain('"DEVELOPMENT_FIXTURE"');
+    const listed = await json<{ items: { id: string; fixture: boolean }[] }>(
+      await getSamples(base, req()),
+    );
+    expect(listed.items.find((s) => s.id === link.id)?.fixture).toBe(true);
+    const denied = await getSample({ ...base, appEnv: "production" }, req(), {
+      sampleId: link.id,
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).not.toContain(view.experiment.projectId);
+    const productionList = await getSamples(
+      { ...base, appEnv: "production" },
+      req(),
+    );
+    expect(await productionList.text()).not.toContain(link.id);
+    await setSampleFeatured(handle.db, link.id, false);
+  });
   it(`a run cannot be retried more than ${MAX_MANUAL_RETRIES} times`, async () => {
     const { runId, workspaceId } = await harness.start(BRIEF);
     const fail = () =>

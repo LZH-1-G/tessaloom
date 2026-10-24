@@ -53,6 +53,10 @@ try {
         SHARE_TOKEN_PEPPER: secret("share_token_pepper"),
         QLOO_API_KEY: secret("qloo_key") || undefined,
         ANTHROPIC_API_KEY: secret("anthropic_key") || undefined,
+        DEEPSEEK_API_KEY: secret("deepseek_key") || undefined,
+        DEEPSEEK_USD_PER_CNY: process.env.DEEPSEEK_USD_PER_CNY || undefined,
+        DEEPSEEK_PRICING_VERIFIED_AT:
+          process.env.DEEPSEEK_PRICING_VERIFIED_AT || undefined,
       },
     });
   }

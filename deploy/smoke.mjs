@@ -103,6 +103,10 @@ try {
     path.join(privateDir, "anthropic_key"),
     "deployment-anthropic-test-sentinel",
   );
+  writeFileSync(
+    path.join(privateDir, "deepseek_key"),
+    "deployment-deepseek-test-sentinel",
+  );
   const caddy = readFileSync(
     path.join(root, "deploy/Caddyfile"),
     "utf8",
@@ -151,6 +155,7 @@ try {
       "share_token_pepper",
       "qloo_key",
       "anthropic_key",
+      "deepseek_key",
     ]) {
       docker(
         "exec",
@@ -177,7 +182,7 @@ for (const pid of fs.readdirSync('/proc').filter(p=>/^\\d+$/.test(p))) {
     const args=fs.readFileSync('/proc/'+pid+'/cmdline','utf8').split('\\0');
     if (${JSON.stringify(role)}==='web' ? !args[0]?.startsWith('next-server') : !args.some(a=>a.endsWith('apps/worker/dist/main.js'))) continue;
     const env=Object.fromEntries(fs.readFileSync('/proc/'+pid+'/environ','utf8').split('\\0').filter(Boolean).map(s=>[s.slice(0,s.indexOf('=')),s.slice(s.indexOf('=')+1)]));
-    const ok=${JSON.stringify(role)}==='worker' ? env.QLOO_API_KEY==='deployment-qloo-test-sentinel' && env.ANTHROPIC_API_KEY==='deployment-anthropic-test-sentinel' && !env.SESSION_SECRET && !env.SHARE_TOKEN_PEPPER : !env.QLOO_API_KEY && !env.ANTHROPIC_API_KEY && Boolean(env.SESSION_SECRET) && Boolean(env.SHARE_TOKEN_PEPPER);
+    const ok=${JSON.stringify(role)}==='worker' ? env.QLOO_API_KEY==='deployment-qloo-test-sentinel' && env.ANTHROPIC_API_KEY==='deployment-anthropic-test-sentinel' && env.DEEPSEEK_API_KEY==='deployment-deepseek-test-sentinel' && !env.SESSION_SECRET && !env.SHARE_TOKEN_PEPPER : !env.QLOO_API_KEY && !env.ANTHROPIC_API_KEY && !env.DEEPSEEK_API_KEY && Boolean(env.SESSION_SECRET) && Boolean(env.SHARE_TOKEN_PEPPER);
     if(!ok || env.DATABASE_URL_MIGRATOR) process.exit(1);
     found=true;
   } catch(e) { if(!['ENOENT','ESRCH','EACCES'].includes(e.code)) throw e; }
@@ -458,6 +463,61 @@ if(!found) process.exit(2);
     log("deployment_smoke_passed");
   } else {
     log("deployment_security_checks_passed");
+  }
+  // Optional data-only dump produced by seed-judge-demo.ts. This is imported only
+  // into this disposable stack after the empty-database admission assertions.
+  if (process.env.DEPLOY_FIXTURE_DUMP) {
+    phase = "readonly_fixture_samples";
+    assert(path.isAbsolute(process.env.DEPLOY_FIXTURE_DUMP));
+    const dbId = compose("ps", "-q", "postgres");
+    docker("cp", process.env.DEPLOY_FIXTURE_DUMP, `${dbId}:/tmp/fixture.dump`);
+    compose(
+      "exec",
+      "-T",
+      "postgres",
+      "pg_restore",
+      "-U",
+      "postgres",
+      "-d",
+      "tessaloom",
+      "--data-only",
+      "--schema=public",
+      "--disable-triggers",
+      "--single-transaction",
+      "--exit-on-error",
+      "/tmp/fixture.dump",
+    );
+    assert.equal(
+      sql(
+        "SELECT count(*) FROM tool_invocations WHERE data_origin NOT IN ('FIXTURE','CACHE')",
+      ),
+      "0",
+    );
+    assert.equal(sql("SELECT count(*) FROM llm_spend_reservations"), "0");
+    const runsBefore = sql("SELECT count(*) FROM agent_runs");
+    assert.equal(
+      JSON.parse((await request("/api/v1/samples")).text).items.length,
+      0,
+    );
+    const sampleList = sql("SELECT id FROM share_links WHERE featured")
+      .split("\n")
+      .map((id) => ({ id }));
+    assert.equal(sampleList.length, 2);
+    for (const sample of sampleList) {
+      const response = await request(`/api/v1/samples/${sample.id}`);
+      // Production rejects fixture reads too; featured status is not a bypass.
+      assert.equal(response.status, 403);
+      assert(!response.text.includes("DEVELOPMENT_FIXTURE"));
+      assert(!response.text.includes("tokenHash"));
+      assert.equal((await request(`/samples/${sample.id}`)).status, 200);
+    }
+    assert.equal(sql("SELECT count(*) FROM agent_runs"), runsBefore);
+    assert.equal(sql("SELECT count(*) FROM llm_spend_reservations"), "0");
+    log("production_fixture_sample_denial_passed", {
+      samples: sampleList.length,
+      newRuns: 0,
+      reservations: 0,
+    });
   }
 } catch (error) {
   const scrub = createRedactor(

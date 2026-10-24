@@ -11,3 +11,5 @@ onlyBuiltDependencies:
 # Force the patched release already used elsewhere in the tree.
 overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
+  # GHSA-27r3-jxmh-p828: patch the MCP SDK's transitive Express parser.
+  body-parser: 2.4.0

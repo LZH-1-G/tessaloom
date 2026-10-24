@@ -33,7 +33,7 @@ export function ModeBanner({ status }: { status: SystemStatus | null }) {
           className="flex items-center justify-center gap-2 bg-rust px-4 py-1.5 text-center text-sm font-semibold text-white"
         >
           <FlaskConical aria-hidden className="size-4" />
-          Development fixtures — not real Qloo data
+          FIXTURE — not real Qloo data
         </div>
       ) : null}
       {status && !status.workerOnline ? (
