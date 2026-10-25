@@ -14,7 +14,8 @@ logged `worker_queue_start_failed` with only `name: Error`. This proves DB conne
 and absence of a fresh accepted heartbeat, not the precise remote queue failure.
 
 Local starting commit was verified against remote main: `47063389ca83090ad85a0ebc9d8592736d28e3aa`.
-Its six CI jobs passed; CodeQL was skipped for the private repository. Repair CI has not run.
+Its six CI jobs passed; CodeQL was skipped for the private repository. Check the repair PR
+for its current CI results; local evidence is recorded separately in NORTHFLANK_VERIFICATION.md.
 No Northflank connector is available in this session, and native Chrome inspection timed out.
 The current image, port visibility, variables, latest instance logs and readiness remain unverified.
 
@@ -140,7 +141,8 @@ After approval to publish/release the local repair:
 
 1. Keep the existing service private and `RUN_ACCESS=off`. Disable automatic deployment (CD)
    while arranging migration ordering; pushing to connected main can otherwise deploy immediately.
-   No push, merge, CD change or deployment has been performed by this repair task.
+   The repair branch and PR are authorized for publication; merging, CD changes and production
+   deployment require separate approval and have not been performed by this repair task.
 2. Create/reuse a **one-off job**, in the same project and environment, named
    `tessaloom-migrate`, from the **exact reviewed app image/build**. Verify its displayed cost
    stays within the existing Sandbox entitlement; stop for approval if it would be billable.
