@@ -1,5 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { verifiedDatabaseUrl } from "../../config/env";
 import * as schema from "./schema";
 
 export type Db = NodePgDatabase<typeof schema>;
@@ -22,7 +23,7 @@ export function createDb(
   } = {},
 ): DbHandle {
   const pool = new pg.Pool({
-    connectionString,
+    connectionString: verifiedDatabaseUrl(connectionString),
     max: options.max ?? 5,
     application_name: options.applicationName ?? "tessaloom",
     connectionTimeoutMillis: 5_000,

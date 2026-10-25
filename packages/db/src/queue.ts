@@ -1,4 +1,7 @@
 import { PgBoss } from "pg-boss";
+import bossPackage from "pg-boss/package.json";
+import type { Pool } from "pg";
+import { verifiedDatabaseUrl } from "../../config/env";
 import type { RawSql } from "./client";
 
 /** API_CONTRACTS §8 queues. */
@@ -9,6 +12,38 @@ export const QUEUES = {
 } as const;
 
 export const BOSS_SCHEMA = "pgboss";
+
+/**
+ * A heartbeat must reflect current queue capability, not just successful initial startup.
+ * Read-only and bounded by the worker pool timeout; never consumes a job or calls providers.
+ */
+export async function assertQueueReady(pool: Pool): Promise<void> {
+  const { rows } = await pool.query<{
+    version: number | null;
+    queues: number;
+    permitted: boolean;
+  }>(
+    `SELECT (SELECT version FROM pgboss.version LIMIT 1) AS version,
+      (SELECT count(*)::int FROM pgboss.queue WHERE name = ANY($1::text[])) AS queues,
+      coalesce((SELECT bool_and(
+        has_schema_privilege(current_user, n.oid, 'USAGE') AND
+        has_table_privilege(current_user, c.oid, 'SELECT') AND
+        has_table_privilege(current_user, c.oid, 'INSERT') AND
+        has_table_privilege(current_user, c.oid, 'UPDATE') AND
+        has_table_privilege(current_user, c.oid, 'DELETE'))
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'pgboss' AND c.relkind IN ('r','p')), false) AS permitted`,
+    [Object.values(QUEUES)],
+  );
+  if (rows[0]?.version !== bossPackage.pgboss.schema)
+    throw new Error("pg-boss database requires migrations");
+  if (rows[0]?.queues !== Object.keys(QUEUES).length)
+    throw new Error("required pg-boss queues are missing");
+  if (!rows[0]?.permitted)
+    throw Object.assign(new Error("Queue privileges unavailable"), {
+      code: "42501",
+    });
+}
 
 export interface RunStepJob {
   runId: string;
@@ -23,7 +58,7 @@ export const runStepKey = (job: RunStepJob) =>
  * role has no DDL rights, roles.sql) and from test database setup.
  */
 export async function installQueues(connectionString: string): Promise<void> {
-  const migrationUrl = new URL(connectionString);
+  const migrationUrl = new URL(verifiedDatabaseUrl(connectionString));
   migrationUrl.searchParams.set(
     "options",
     `${migrationUrl.searchParams.get("options") ?? ""} -c statement_timeout=120000 -c lock_timeout=60000`.trim(),
@@ -77,12 +112,18 @@ export function createBoss(
   connectionString: string,
   options: BossOptions,
 ): PgBoss {
+  const runtimeUrl = new URL(verifiedDatabaseUrl(connectionString));
+  runtimeUrl.searchParams.set(
+    "options",
+    `${runtimeUrl.searchParams.get("options") ?? ""} -c statement_timeout=15000`.trim(),
+  );
   const boss = new PgBoss({
-    connectionString,
+    connectionString: runtimeUrl.toString(),
     schema: BOSS_SCHEMA,
     application_name:
       options.applicationName ?? `tessaloom-${options.role}-queue`,
     max: options.max ?? 2,
+    connectionTimeoutMillis: 5_000,
     migrate: false,
     createSchema: false,
     supervise: options.role === "worker",

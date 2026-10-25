@@ -1,0 +1,63 @@
+{
+  "verifiedOnBeijing": "2026-10-25",
+  "baseCommit": "47063389ca83090ad85a0ebc9d8592736d28e3aa",
+  "branch": "codex/northflank-production-repair",
+  "imageId": "sha256:6422df8842b113ac4aff58ebb2ea858abb70bd54200c61f647d80d24a91cb539",
+  "platform": "linux/arm64",
+  "containerNode": "22.23.4",
+  "hostNode": "26.11.1",
+  "tests": {
+    "unit": 414,
+    "integration": 85,
+    "runtime": 12,
+    "browser": 28,
+    "inviteBrowser": 2
+  },
+  "resourceSmoke": {
+    "cpu": 0.2,
+    "memoryLimitMiB": 512,
+    "peakMiB": 228.2,
+    "startupAndMigrationMs": 20549,
+    "beforeMigration": {
+      "status": 503,
+      "body": {
+        "db": true,
+        "worker": false
+      }
+    },
+    "afterMigration": {
+      "status": 200,
+      "body": {
+        "db": true,
+        "worker": true
+      }
+    },
+    "httpRequests": 12,
+    "httpConcurrency": 3,
+    "exitCode": 0,
+    "oomKilled": false,
+    "queuePrivilegeRevocation": {
+      "oldImageStatus": 200,
+      "finalImageStatus": 503,
+      "recoveredStatus": 200
+    }
+  },
+  "paidCalls": 0,
+  "qlooCalls": 0,
+  "publicPortsCreated": 0,
+  "deployed": false,
+  "remoteRootCauseConfirmed": false,
+  "limitations": [
+    "Northflank account/instance state unavailable",
+    "Actual production runtime not tested",
+    "Real provider workload not exercised",
+    "Remote CI reported separately on PR"
+  ],
+  "secretScan": {
+    "candidateSource": "passed",
+    "committedHistory": "passed",
+    "ignoredGeneratedCaches": "excluded from release inputs"
+  },
+  "initialRepairCheckpoint": "6694217b70227a56d9c93056b6e2129ced74aa1c",
+  "publicationStateAtCapture": "Local verification before user-authorized branch push and PR; consult PR for current status"
+}

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -23,6 +24,7 @@ const common = [
   "DATABASE_URL",
   "LOG_LEVEL",
   "RUN_ACCESS",
+  "TL_HEARTBEAT_ID",
 ];
 const allowlists = {
   web: [
@@ -206,6 +208,8 @@ export function startSupervisor({
   },
 } = {}) {
   const roles = validateSupervisorEnv(env);
+  // Each colocated web/worker pair gets its own readiness identity, including during rollouts.
+  if (roles.length === 2) env = { ...env, TL_HEARTBEAT_ID: randomUUID() };
   const redact = createRedactor(env);
   /** @param {unknown} value @returns {unknown} */
   const scrub = (value) =>
@@ -344,6 +348,34 @@ export function startSupervisor({
   return { shutdown };
 }
 
+/** @param {unknown} error */
+export function supervisorFailure(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "Invalid QLOO_MODE: fixtures are forbidden in production")
+    return { reason: "production_fixture_forbidden", variable: "QLOO_MODE" };
+  for (const variable of [
+    "TL_ROLE",
+    "QLOO_MODE",
+    "LLM_PROVIDER",
+    "DATABASE_URL",
+    "TL_WEB_UID",
+    "TL_WEB_GID",
+    "TL_WORKER_UID",
+    "TL_WORKER_GID",
+    "TL_WEB_MAX_OLD_SPACE_MB",
+    "TL_WORKER_MAX_OLD_SPACE_MB",
+  ]) {
+    if (
+      message === `Invalid ${variable}` ||
+      message.startsWith(`Invalid ${variable}:`)
+    )
+      return { reason: "invalid_configuration", variable };
+  }
+  if (message === "TL_WEB_UID and TL_WORKER_UID must be distinct")
+    return { reason: "child_identities_must_differ" };
+  return { reason: "invalid_configuration" };
+}
+
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
@@ -357,12 +389,7 @@ if (
     console.error(
       JSON.stringify({
         event: "supervisor_config_invalid",
-        reason:
-          error instanceof Error &&
-          error.message ===
-            "Invalid QLOO_MODE: fixtures are forbidden in production"
-            ? "production_fixture_forbidden"
-            : "invalid_configuration",
+        ...supervisorFailure(error),
       }),
     );
     process.exitCode = 1;

@@ -55,7 +55,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # No migration command in M0: schemas and migrations belong to M1.
+      # The startup regression executes the actual bundled, keyless worker.
+      - run: pnpm --filter worker build
       - run: pnpm test:integration
   e2e:
     runs-on: ubuntu-latest
@@ -146,3 +147,6 @@ jobs:
       - run: node deploy/smoke.mjs
         env:
           M10B_IMAGE: tessaloom:m0
+      - run: node deploy/northflank-smoke.mjs
+        env:
+          NF_IMAGE: tessaloom:m0

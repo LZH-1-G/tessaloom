@@ -1,5 +1,7 @@
 # M11 deployment and rollback runbook
 
+> Deployment decision updated 2026-10-25: Northflank is selected. Use [the Northflank recovery runbook](NORTHFLANK_RUNBOOK.md); hosting comparisons below are historical, and Compose commands apply to local tests only.
+
 This is an operator procedure, **not permission to deploy**. M11 executes only disposable local tests. Hosting purchase/provisioning, public exposure, live provider use, source publication and submission remain separate owner decisions. [Hosting decision](M11_HOSTING.md), [judge access](M11_JUDGE_ACCESS.md), [acceptance](M11_ACCEPTANCE.md).
 
 ## 1. Freeze an accepted release

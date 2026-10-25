@@ -88,14 +88,14 @@ pnpm audit --prod --audit-level=high
 pnpm check:bundle
 ```
 
-Tests use disposable local databases; do not point them at production. Live-provider suites are separate and require explicit approval. See the [M11 deployment runbook](docs/M11_RUNBOOK.md), [hosting options](docs/M11_HOSTING.md) and [acceptance blockers](docs/M11_ACCEPTANCE.md) for the Compose architecture, safe judge access and local-only smoke tests. Production rejects synthetic samples; a permitted real-Qloo public journey is still a release gate. Hosting purchase/provisioning, public deployment, pushes, repository publication and Devpost submission require owner approval.
+Tests use disposable local databases; do not point them at production. Live-provider suites are separate and require explicit approval. Northflank is the selected host: use the [Northflank recovery runbook](docs/NORTHFLANK_RUNBOOK.md) and [repair evidence](docs/NORTHFLANK_VERIFICATION.md). The [M11 deployment runbook](docs/M11_RUNBOOK.md) remains the local Compose reference. Production rejects synthetic samples; a permitted real-Qloo public journey is still a release gate. Hosting purchase/provisioning, public deployment, pushes, repository publication and Devpost submission require owner approval.
 
 ## Submission package
 
 - [Copy-ready English Devpost content](docs/submission/DEVPOST.md)
 - [Judge walkthrough and screenshots](docs/submission/JUDGE_WALKTHROUGH.md)
 - [Deployment runbook and rollback](docs/M11_RUNBOOK.md)
-- [Current hosting decision](docs/M11_HOSTING.md)
+- [Current Northflank deployment and recovery](docs/NORTHFLANK_RUNBOOK.md)
 - [Public-repository and license audit](docs/submission/PUBLIC_READINESS.md)
 - [Acceptance report and owner checklist](docs/submission/ACCEPTANCE.md)
 - [Architecture](docs/ARCHITECTURE.md), [agent workflow](docs/AGENT_WORKFLOW.md), [API contracts](docs/API_CONTRACTS.md), [security](docs/SECURITY.md), [test plan](docs/TEST_PLAN.md)
