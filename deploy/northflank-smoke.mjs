@@ -236,6 +236,18 @@ SQL
     }));})().catch(()=>process.exit(1));`,
   );
   memory();
+  phase = "queue_privilege_loss";
+  sql("REVOKE UPDATE ON pgboss.job FROM tessaloom_app");
+  await delay(35_000);
+  const revokedReadiness = probe();
+  log("northflank_queue_privilege_probe", revokedReadiness);
+  assert.deepEqual(revokedReadiness, {
+    status: 503,
+    body: { db: true, worker: false },
+  });
+  sql("GRANT UPDATE ON pgboss.job TO tessaloom_app");
+  await until(() => probe().status === 200);
+  log("northflank_queue_privilege_recovery_passed");
   const signalWorker = (signal) =>
     docker(
       "exec",

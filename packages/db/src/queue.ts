@@ -1,4 +1,6 @@
 import { PgBoss } from "pg-boss";
+import bossPackage from "pg-boss/package.json";
+import type { Pool } from "pg";
 import { verifiedDatabaseUrl } from "../../config/env";
 import type { RawSql } from "./client";
 
@@ -10,6 +12,38 @@ export const QUEUES = {
 } as const;
 
 export const BOSS_SCHEMA = "pgboss";
+
+/**
+ * A heartbeat must reflect current queue capability, not just successful initial startup.
+ * Read-only and bounded by the worker pool timeout; never consumes a job or calls providers.
+ */
+export async function assertQueueReady(pool: Pool): Promise<void> {
+  const { rows } = await pool.query<{
+    version: number | null;
+    queues: number;
+    permitted: boolean;
+  }>(
+    `SELECT (SELECT version FROM pgboss.version LIMIT 1) AS version,
+      (SELECT count(*)::int FROM pgboss.queue WHERE name = ANY($1::text[])) AS queues,
+      coalesce((SELECT bool_and(
+        has_schema_privilege(current_user, n.oid, 'USAGE') AND
+        has_table_privilege(current_user, c.oid, 'SELECT') AND
+        has_table_privilege(current_user, c.oid, 'INSERT') AND
+        has_table_privilege(current_user, c.oid, 'UPDATE') AND
+        has_table_privilege(current_user, c.oid, 'DELETE'))
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'pgboss' AND c.relkind IN ('r','p')), false) AS permitted`,
+    [Object.values(QUEUES)],
+  );
+  if (rows[0]?.version !== bossPackage.pgboss.schema)
+    throw new Error("pg-boss database requires migrations");
+  if (rows[0]?.queues !== Object.keys(QUEUES).length)
+    throw new Error("required pg-boss queues are missing");
+  if (!rows[0]?.permitted)
+    throw Object.assign(new Error("Queue privileges unavailable"), {
+      code: "42501",
+    });
+}
 
 export interface RunStepJob {
   runId: string;

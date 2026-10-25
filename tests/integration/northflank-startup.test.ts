@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import {
   createBoss,
+  assertQueueReady,
   createDb,
   runMigrations,
   QUEUES,
@@ -21,7 +22,17 @@ it("reproduces missing pg-boss, recovers after an explicit idempotent release mi
     await expect(boss.start()).rejects.toThrow("pg-boss is not installed");
     await boss.stop({ graceful: false });
     await runMigrations(test.url);
-    await runMigrations(test.url);
+    await test.handle.pool.query(
+      "INSERT INTO worker_heartbeats(worker_id, last_beat_at, qloo_ready) VALUES ('migration-preservation', now(), false)",
+    );
+    await Promise.all([runMigrations(test.url), runMigrations(test.url)]);
+    expect(
+      (
+        await test.handle.pool.query(
+          "SELECT count(*)::int AS count FROM worker_heartbeats WHERE worker_id = 'migration-preservation'",
+        )
+      ).rows[0].count,
+    ).toBe(1);
     await boss.start();
     for (const queue of Object.values(QUEUES))
       expect(await boss.getQueue(queue)).toBeTruthy();
@@ -32,11 +43,26 @@ it("reproduces missing pg-boss, recovers after an explicit idempotent release mi
     const report = await inspectRuntimeDatabase(test.handle.pool);
     expect(Object.values(report.checks).every(Boolean)).toBe(true);
     expect(report.elevated).toBe(true); // diagnostic flags unsafe admin credentials
+    const version = await boss.schemaVersion();
     await boss.stop({ graceful: false });
     await test.handle.pool.query("UPDATE pgboss.version SET version = 0");
     await expect(boss.start()).rejects.toSatisfy(
       (error: unknown) =>
         databaseFailure(error) === "queue_schema_version_mismatch",
+    );
+    await expect(assertQueueReady(test.handle.pool)).rejects.toSatisfy(
+      (error: unknown) =>
+        databaseFailure(error) === "queue_schema_version_mismatch",
+    );
+    await test.handle.pool.query("UPDATE pgboss.version SET version = $1", [
+      version,
+    ]);
+    await test.handle.pool.query("DELETE FROM pgboss.queue WHERE name = $1", [
+      QUEUES.runStep,
+    ]);
+    await expect(assertQueueReady(test.handle.pool)).rejects.toSatisfy(
+      (error: unknown) =>
+        databaseFailure(error) === "queue_definitions_missing",
     );
   } finally {
     await boss.stop({ graceful: false });
@@ -69,6 +95,13 @@ it("distinguishes missing queue privileges and succeeds with a DML-only runtime 
     await boss.start();
     await boss.work(QUEUES.runStep, async () => {});
     await boss.schedule(QUEUES.recoverRuns, "*/5 * * * *");
+    await assertQueueReady(runtime.pool);
+    await test.handle.pool.query(`REVOKE UPDATE ON pgboss.job FROM "${role}"`);
+    await expect(assertQueueReady(runtime.pool)).rejects.toSatisfy(
+      (error: unknown) => databaseFailure(error) === "permission_denied",
+    );
+    await test.handle.pool.query(`GRANT UPDATE ON pgboss.job TO "${role}"`);
+    await assertQueueReady(runtime.pool);
     expect((await inspectRuntimeDatabase(runtime.pool)).elevated).toBe(false);
     expect(
       (await inspectRuntimeDatabase(runtime.pool)).checks.allTablesDml,

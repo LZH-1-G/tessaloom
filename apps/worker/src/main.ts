@@ -2,6 +2,7 @@ import { parseWorkerEnv, runAccessFor } from "@tessaloom/config/env";
 import {
   QUEUES,
   beatWorker,
+  assertQueueReady,
   createBoss,
   createDb,
   databaseFailure,
@@ -106,6 +107,8 @@ async function heartbeat() {
   // Readiness means "can execute runs": beat only once the job consumer is running.
   if (!queuesStarted || stopping) return;
   try {
+    await assertQueueReady(handle.pool);
+    if (stopping) return;
     await beatWorker(handle.db, {
       workerId,
       qlooReady:

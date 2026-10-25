@@ -33,6 +33,8 @@ export function databaseFailure(error: unknown): string {
     if (e.message === "pg-boss is not installed") return "queue_schema_missing";
     if (e.message === "pg-boss database requires migrations")
       return "queue_schema_version_mismatch";
+    if (e.message === "required pg-boss queues are missing")
+      return "queue_definitions_missing";
     current = e.cause;
   }
   return "unknown";

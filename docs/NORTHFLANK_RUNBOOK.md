@@ -188,6 +188,10 @@ startup no longer waits for these local diagnostics.
 - Keep port 3000 private. `TRUSTED_PROXY_HOPS=0` uses a conservative shared-edge rate-limit
   identity until Northflank's header chain is verified. Do not raise it based on a guessed hop count.
 
+Before each heartbeat the worker rechecks queue schema version, required definitions and runtime
+queue permissions. A failure stops renewal; readiness turns 503 within the existing 30-second
+freshness window and recovers when capability returns.
+
 The supervisor generates one UUID per colocated web/worker pair. `/api/health/ready` uses that
 identity, so a still-running old pod cannot make a broken new pod appear ready. Standalone
 `TL_ROLE=web`/`worker` deployments retain shared-heartbeat compatibility; this runbook uses `all`.
@@ -216,6 +220,12 @@ Northflank run `node deploy/health.mjs https://<actual-generated-host>` and requ
 HSTS, no-store and both health endpoints. Verify spoofed forwarding headers cannot bypass
 run access or throttling before trusting forwarded addresses. Record the actual public URL
 only after success; this task has not created or tested one.
+
+Application initialization uses the existing application flow: the worker registers versioned
+prompt templates at startup, and the web UI creates workspace/session state through its normal
+cookie/CSRF-protected routes. No seed/reset command or synthetic production sample is needed.
+After private readiness succeeds, verify the dashboard and a new empty workspace through the
+private access mechanism; leave generation disabled. Do not run local `e2e-db.mjs` on Northflank.
 
 ## 6. Backups and rollback
 

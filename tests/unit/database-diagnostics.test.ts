@@ -5,6 +5,10 @@ import { verifiedDatabaseUrl } from "../../packages/config/env";
 it.each([
   [new Error("pg-boss is not installed"), "queue_schema_missing"],
   [
+    new Error("required pg-boss queues are missing"),
+    "queue_definitions_missing",
+  ],
+  [
     new Error("pg-boss database requires migrations"),
     "queue_schema_version_mismatch",
   ],
