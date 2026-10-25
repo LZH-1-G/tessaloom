@@ -1,8 +1,12 @@
 import type { Pool } from "pg";
 import { QUEUES } from "./queue";
+import bossPackage from "pg-boss/package.json";
 
 /** Read-only catalog checks; never returns identifiers, data rows or connection details. */
-export async function inspectRuntimeDatabase(pool: Pool) {
+export async function inspectRuntimeDatabase(
+  pool: Pool,
+  expectedRole?: string,
+) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN READ ONLY");
@@ -10,11 +14,23 @@ export async function inspectRuntimeDatabase(pool: Pool) {
       tls: boolean;
       elevated: boolean;
       schemaCreate: boolean;
-    }>(`SELECT
+      queueSchemaCreate: boolean;
+      databaseCreate: boolean;
+      configuredRoleMatches: boolean | null;
+      sessionRoleMatches: boolean;
+    }>(
+      `SELECT
       coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS tls,
       (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls) AS elevated,
-      has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate"
-      FROM pg_roles WHERE rolname = current_user`);
+      has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
+      CASE WHEN to_regnamespace('pgboss') IS NOT NULL THEN
+        has_schema_privilege(current_user, 'pgboss', 'CREATE') ELSE false END AS "queueSchemaCreate",
+      has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+      current_user = $1 AS "configuredRoleMatches",
+      current_user = session_user AS "sessionRoleMatches"
+      FROM pg_roles WHERE rolname = current_user`,
+      [expectedRole ?? null],
+    );
     const checks: Record<string, boolean> = {};
     for (const [name, table] of Object.entries({
       workerHeartbeat: "public.worker_heartbeats",
@@ -55,8 +71,34 @@ export async function inspectRuntimeDatabase(pool: Pool) {
       );
       checks.requiredQueues = rows[0]?.count === Object.keys(QUEUES).length;
     } else checks.requiredQueues = false;
+    let schemaVersion: number | null = null;
+    if (checks.queueVersionDml) {
+      const { rows } = await client.query<{ version: number }>(
+        "SELECT version FROM pgboss.version LIMIT 1",
+      );
+      schemaVersion = rows[0]?.version ?? null;
+    }
+    checks.queueSchemaCompatible = schemaVersion === bossPackage.pgboss.schema;
+    for (const [name, signature] of Object.entries({
+      createQueue: "pgboss.create_queue(text,jsonb)",
+      jobClock: "pgboss.job_now()",
+      advisoryLock: "pg_catalog.pg_advisory_xact_lock(bigint)",
+      advisoryHash: "pg_catalog.sha224(bytea)",
+    })) {
+      const { rows } = await client.query<{ allowed: boolean }>(
+        "SELECT coalesce(has_function_privilege(current_user, to_regprocedure($1), 'EXECUTE'), false) AS allowed",
+        [signature],
+      );
+      checks[`${name}Execute`] = rows[0]?.allowed === true;
+    }
     await client.query("COMMIT");
-    return { ...connection.rows[0], checks };
+    return {
+      ...connection.rows[0],
+      packageVersion: bossPackage.version,
+      expectedSchemaVersion: bossPackage.pgboss.schema,
+      schemaVersion,
+      checks,
+    };
   } finally {
     await client.query("ROLLBACK").catch(() => {});
     client.release();
