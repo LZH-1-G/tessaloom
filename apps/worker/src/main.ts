@@ -6,6 +6,8 @@ import {
   createBoss,
   createDb,
   databaseFailure,
+  queueDiagnostic,
+  inspectQueueConnection,
   registerPromptTemplate,
   type JobWithMetadata,
   type RunStepJob,
@@ -125,7 +127,8 @@ async function heartbeat() {
   } catch (error) {
     // Database outages must not crash the worker; log each failure class once.
     const code = databaseFailure(error);
-    if (lastHeartbeatError !== code) log("worker_heartbeat_failed", { code });
+    if (lastHeartbeatError !== code)
+      log("worker_heartbeat_failed", { code, ...queueDiagnostic(error) });
     lastHeartbeatError = code;
   }
 }
@@ -134,6 +137,13 @@ async function startQueues() {
   if (stopping) return;
   startupStage = "queue_connect";
   await boss.start();
+  if (stopping) return;
+  startupStage = "queue_capabilities";
+  await assertQueueReady(handle.pool);
+  log(
+    "worker_queue_connection",
+    await inspectQueueConnection(boss, env.DATABASE_URL),
+  );
   if (stopping) return;
   const qloo = createQlooAdapter(handle.db, {
     mode: env.QLOO_MODE,
@@ -234,6 +244,8 @@ async function startQueuesWithRetry() {
     log("worker_queue_start_failed", {
       stage: startupStage,
       reason: databaseFailure(error),
+      ...queueDiagnostic(error),
+      connection: await inspectQueueConnection(boss, env.DATABASE_URL),
       retryMs: 15_000,
     });
     await boss.stop({ graceful: false }).catch(() => {});

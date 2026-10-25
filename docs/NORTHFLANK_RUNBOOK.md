@@ -73,11 +73,16 @@ node packages/db/dist/diagnose.mjs
 node -e "fetch('http://127.0.0.1:3000/api/health/ready',{signal:AbortSignal.timeout(4500)}).then(async r=>console.log(r.status,await r.text())).catch(()=>{console.log('probe_failed');process.exitCode=1})"
 ```
 
+For the ongoing schema-45 permission incident, use the evidence and rollout boundaries in
+[PG_BOSS_STARTUP_INVESTIGATION.md](PG_BOSS_STARTUP_INVESTIGATION.md). Lack of runtime CREATE
+does not reproduce this incident; do not infer a grant repair from the generic error alone.
+
 `diagnose.mjs` is read-only and never starts a queue consumer. Exit 1 means checks failed or
 runtime credentials have elevated/CREATE privileges; use the reported booleans to choose the
 next step. It checks application/queue tables, required queues, TLS and DML rights. It does not
-prove every migration's content or pg-boss version compatibility; the release migration and
-actual worker startup provide those checks.
+prove every migration's content or installed function body. It now checks pg-boss schema
+version compatibility, relevant function EXECUTE rights and role-match booleans. Actual worker
+startup and processing remain separate acceptance checks.
 
 ## 2. Separate database administration, migrations and runtime
 

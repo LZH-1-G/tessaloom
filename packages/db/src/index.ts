@@ -10,7 +10,8 @@ export {
   type Tx,
 } from "./client";
 export * from "./queue";
-export { databaseFailure } from "./diagnostics";
+export { databaseFailure, databaseDiagnostic } from "./diagnostics";
+export { queueDiagnostic, inspectQueueConnection } from "./queue-diagnostics";
 export * from "./runs";
 export * from "./repositories/orchestrator";
 export { runMigrations, MIGRATIONS_FOLDER } from "./migrate";

@@ -212,11 +212,39 @@ SQL
   await until(() => probe().status === 200);
   assert.deepEqual(probe(), { status: 200, body: { db: true, worker: true } });
   const diagnostic = JSON.parse(
-    docker("exec", container, "node", "packages/db/dist/diagnose.mjs"),
+    // Run the shipped binary as the actual worker UID with the same TLS/runtime URL,
+    // adding a session-only read-only default. No migration role or provider call.
+    docker(
+      "exec",
+      "--user",
+      "10002:10002",
+      container,
+      "node",
+      "--input-type=module",
+      "-e",
+      `
+      import { execFileSync } from 'node:child_process';
+      import { accessSync, constants } from 'node:fs';
+      accessSync('packages/db/dist/diagnose.mjs', constants.R_OK);
+      const url = new URL(process.env.DATABASE_URL);
+      url.searchParams.set('options', '-c default_transaction_read_only=on');
+      process.stdout.write(execFileSync(process.execPath, ['packages/db/dist/diagnose.mjs'], {
+        env: { ...process.env, DATABASE_URL: url.toString() }, encoding: 'utf8', timeout: 15000
+      }));
+    `,
+    ),
   );
   assert.equal(diagnostic.tls, true);
   assert.equal(diagnostic.elevated, false);
   assert.equal(diagnostic.schemaCreate, false);
+  assert.equal(diagnostic.configuredRoleMatches, true);
+  assert.equal(diagnostic.sessionRoleMatches, true);
+  assert.equal(diagnostic.packageVersion, "12.37.0");
+  assert.equal(diagnostic.schemaVersion, 45);
+  for (const secret of Object.values(vars).filter(
+    (value) => value.length >= 20,
+  ))
+    assert(!JSON.stringify(diagnostic).includes(secret));
   assert(Object.values(diagnostic.checks).every(Boolean));
   memory();
   log("northflank_ready_after_release", {

@@ -3,6 +3,7 @@ import bossPackage from "pg-boss/package.json";
 import type { Pool } from "pg";
 import { verifiedDatabaseUrl } from "../../config/env";
 import type { RawSql } from "./client";
+import { instrumentQueueDatabase } from "./queue-diagnostics";
 
 /** API_CONTRACTS §8 queues. */
 export const QUEUES = {
@@ -22,6 +23,7 @@ export async function assertQueueReady(pool: Pool): Promise<void> {
     version: number | null;
     queues: number;
     permitted: boolean;
+    functions: boolean;
   }>(
     `SELECT (SELECT version FROM pgboss.version LIMIT 1) AS version,
       (SELECT count(*)::int FROM pgboss.queue WHERE name = ANY($1::text[])) AS queues,
@@ -32,14 +34,18 @@ export async function assertQueueReady(pool: Pool): Promise<void> {
         has_table_privilege(current_user, c.oid, 'UPDATE') AND
         has_table_privilege(current_user, c.oid, 'DELETE'))
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'pgboss' AND c.relkind IN ('r','p')), false) AS permitted`,
+        WHERE n.nspname = 'pgboss' AND c.relkind IN ('r','p')), false) AS permitted,
+      (SELECT bool_and(coalesce(has_function_privilege(current_user,
+        to_regprocedure(f.signature), 'EXECUTE'), false)) FROM (VALUES
+        ('pgboss.create_queue(text,jsonb)'), ('pgboss.job_now()'),
+        ('pg_catalog.pg_advisory_xact_lock(bigint)'), ('pg_catalog.sha224(bytea)')) AS f(signature)) AS functions`,
     [Object.values(QUEUES)],
   );
   if (rows[0]?.version !== bossPackage.pgboss.schema)
     throw new Error("pg-boss database requires migrations");
   if (rows[0]?.queues !== Object.keys(QUEUES).length)
     throw new Error("required pg-boss queues are missing");
-  if (!rows[0]?.permitted)
+  if (!rows[0]?.permitted || !rows[0]?.functions)
     throw Object.assign(new Error("Queue privileges unavailable"), {
       code: "42501",
     });
@@ -129,6 +135,7 @@ export function createBoss(
     supervise: options.role === "worker",
     schedule: options.role === "worker",
   });
+  instrumentQueueDatabase(boss, connectionString);
   // Connection errors surface through the calls that need the queue; never crash the process.
   boss.on("error", () => {});
   return boss;
