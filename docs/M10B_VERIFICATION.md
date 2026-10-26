@@ -1,6 +1,6 @@
 # M10-B local deployment preparation: verification
 
-Date: 2026-10-22. Repository: `/Users/lzh/Documents/GitHub/tessaloom`. Branch: `codex/m10b-deployment`. Baseline: `96d48c1` (PR #12 merge). This is local preparation, not a public deployment. No hosting purchase/provisioning, live Qloo/paid LLM calls, push or merge commit occurred. The owner explicitly authorized the initial fetch and fast-forward from the stale M9 branch.
+Date: 2026-10-22. Repository: local checkout of `LZH-1-G/tessaloom`. Branch: `codex/m10b-deployment`. Baseline: `96d48c1` (PR #12 merge). This is local preparation, not a public deployment. No hosting purchase/provisioning, live Qloo/paid LLM calls, push or merge commit occurred. The owner explicitly authorized the initial fetch and fast-forward from the stale M9 branch.
 
 ## PR #13 Docker push failure: local fix
 
