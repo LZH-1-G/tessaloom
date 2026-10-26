@@ -94,7 +94,7 @@ const baseDefinition = (): ExperimentDefinition => ({
   briefContentHash: "a".repeat(64),
   seeds: [
     {
-      qlooId: "DE3E9EFA-C76F-4B7B-85A9-C194B36C9C41",
+      qlooId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
       kind: "entity",
       role: "seed",
     },
