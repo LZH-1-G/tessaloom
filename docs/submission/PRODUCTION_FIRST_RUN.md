@@ -71,13 +71,18 @@ Steps 1–4 were completed on 2026-10-26: PR #19 merged as `a37afc6` with CI ful
    deploys it. A faster path is redeploying deployment `6aded5c…` from the Northflank UI.
    Stored data is unaffected; this release has no migrations.
 6. **Expose.** First set `RUN_ACCESS=off` in the service's runtime variables. It is unset today,
-   which production treats as `invite`. Wait for the restart and confirm the home page says "New
-   AI runs are paused". Then Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with
-   the Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0`.
-7. **Public smoke.** From an outside network:
-   `node deploy/public-smoke.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run`, then once with
-   `--write-probe`. It creates one anonymous workspace/project/brief and must get
-   `PAID_RUNS_DISABLED` with no run created.
+   which production treats as `invite`. After the restart, confirm without creating any record:
+   the web `child_start` log line lists `RUN_ACCESS` among its `envNames`, and the runtime
+   variable reads `off` in Northflank. Loading the studio in a browser would create an anonymous
+   workspace. Then Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with the
+   Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0`.
+7. **Public smoke (no production records).** From an outside network:
+   `node deploy/public-smoke.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run` (read-only: headers,
+   readiness, status, samples, 404s, 401 without a workspace, CSRF refusal), then
+   `node deploy/public-render-check.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run <dir>`
+   (Chromium + WebKit, desktop and mobile; workspace/project calls blocked, so nothing is
+   written). `--write-probe` creates one anonymous workspace/project/brief; run it only if the
+   owner accepts that record.
 8. **Un-expose immediately** (port back to private) if the public smoke fails. Then fix or
    roll back as in step 5.
 
