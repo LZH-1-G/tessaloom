@@ -534,6 +534,7 @@ export function BlueprintPage() {
         <ShareDialog
           projectId={projectId}
           scope="blueprint"
+          allowStory
           targetId={detail.blueprint.id}
           label={current?.content.title ?? "Blueprint"}
           onClose={() => setShare(false)}

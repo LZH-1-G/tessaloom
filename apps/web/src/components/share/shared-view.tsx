@@ -15,25 +15,28 @@ import {
   TraceabilityMeter,
 } from "../blueprint/blueprint-document";
 import { ProvenanceChip, StatusPill } from "../provenance";
+import { SharedStory, type Story } from "./shared-story";
 import { Skeleton } from "../ui";
+
+interface SharedBlueprintData {
+  format: string;
+  status: string;
+  hypotheses: { title: string; status: string }[];
+  revision: {
+    revisionNumber: number;
+    author: string;
+    createdAt: string;
+    content: BlueprintContent;
+    traceabilityReport: TraceabilityReport;
+  } | null;
+  appendix: Omit<AppendixEntry, "toolInvocationId">[];
+}
 
 interface Shared {
   scope: "project" | "experiment" | "blueprint";
   expiresAt: string;
   project: { name: string; useCase: string };
-  blueprint?: {
-    format: string;
-    status: string;
-    hypotheses: { title: string; status: string }[];
-    revision: {
-      revisionNumber: number;
-      author: string;
-      createdAt: string;
-      content: BlueprintContent;
-      traceabilityReport: TraceabilityReport;
-    } | null;
-    appendix: Omit<AppendixEntry, "toolInvocationId">[];
-  };
+  blueprint?: SharedBlueprintData;
   experiment?: {
     kind: string;
     brief: { title: string } | null;
@@ -59,6 +62,7 @@ interface Shared {
       }[];
     }[];
   };
+  story?: (Story & { blueprint: SharedBlueprintData | null }) | null;
   overview?: {
     experiments: { kind: string; label: string | null; createdAt: string }[];
     blueprints: {
@@ -169,7 +173,18 @@ export function SharedView(
             {data.experiment ? (
               <SharedExperiment exp={data.experiment} />
             ) : null}
-            {data.overview ? <SharedProject overview={data.overview} /> : null}
+            {data.story ? (
+              <SharedStory
+                story={data.story}
+                blueprint={
+                  data.story.blueprint ? (
+                    <SharedBlueprint token={null} bp={data.story.blueprint} />
+                  ) : undefined
+                }
+              />
+            ) : data.overview ? (
+              <SharedProject overview={data.overview} />
+            ) : null}
           </>
         ) : null}
       </main>
@@ -182,7 +197,7 @@ function SharedBlueprint({
   bp,
 }: {
   token: string | null;
-  bp: NonNullable<Shared["blueprint"]>;
+  bp: SharedBlueprintData;
 }) {
   if (!bp.revision)
     return <p className="text-sm">This blueprint is still being composed.</p>;

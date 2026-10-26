@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { stateSpans } from "@/lib/activity";
 import { api } from "@/lib/api";
+import { describeRunStop } from "@/lib/run-outcome";
 import type { RunEventView, RunView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ActivityFull } from "./activity-full";
@@ -251,6 +252,7 @@ export function ActivityDock({
     }
   };
   const gate = pending ? GATE_COPY[pending.kind] : undefined;
+  const stop = describeRunStop(run.terminalReason);
 
   return (
     <aside
@@ -350,16 +352,9 @@ export function ActivityDock({
               className="m-3 rounded-md border border-rust/60 bg-rust/5 p-3 text-sm"
               role="alert"
             >
-              <p className="font-semibold text-rust">
-                The run stopped:{" "}
-                {run.terminalReason?.replace(/_/g, " ").toLowerCase()}
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Your data so far is saved.
-              </p>
-              {["LLM_UNAVAILABLE", "STEP_RETRIES_EXHAUSTED"].includes(
-                run.terminalReason ?? "",
-              ) ? (
+              <p className="font-semibold text-rust">{stop.title}</p>
+              <p className="mt-1 text-muted-foreground">{stop.detail}</p>
+              {stop.action === "retry" ? (
                 <Button
                   size="sm"
                   className="mt-2"
@@ -369,6 +364,14 @@ export function ActivityDock({
                 >
                   Retry step
                 </Button>
+              ) : null}
+              {stop.action === "new-brief" ? (
+                <Link
+                  href={`/projects/${projectId}/brief`}
+                  className="mt-2 inline-block font-medium text-warp underline underline-offset-2"
+                >
+                  Revise the brief
+                </Link>
               ) : null}
             </div>
           ) : null}

@@ -1,132 +1,194 @@
-# Production first run — Claude API on Northflank (prepared, not executed)
+# Production release and the final paid Claude acceptance (prepared, not executed)
 
-**Status: ready for owner approval. Nothing here has been executed in production.** No API key
-has been created or stored, no production variable changed, no paid call made, and nothing merged
-or deployed. Every step marked **OWNER** needs your explicit go-ahead.
+**Status: ready for owner approval. Nothing here has been executed in production.** No API key has
+been created, requested or configured, no production variable or port changed, and no paid call
+made. Every step marked **OWNER** needs your explicit go-ahead. The paid Claude call is
+deliberately the **last** step. Everything before it is free.
 
-The local subscription run on 2026-10-26 proved the application path
-([report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). This runbook repeats that exact scenario
-once in production, through the official Anthropic API, under a $0.50 total ceiling. The resulting
-blueprint then becomes the public, read-only, real-data demo.
+The local run on 2026-10-26 (live Qloo, Claude Sonnet 5.5 on the owner's subscription) proved the
+application path ([report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). Production repeats that
+scenario once through the official Anthropic API under a $0.50 ceiling. Its result becomes the
+public, read-only, real-data story sample.
+
+## 0. Production as inspected (read-only, 2026-10-26)
+
+| Item | Observed |
+| --- | --- |
+| Service | `default/tessaloom`, 1 instance, plan `nf-compute-20` (build `nf-compute-400-16`) |
+| Deployed commit | `39c0fe5` (PR #18 merged), build SUCCESS, deployment COMPLETED |
+| Readiness probe | HTTP `/api/health/ready` on port 3000, every 20 s |
+| Port `p01` (HTTP 3000) | **`public: false`**. `p01--tessaloom--mpfcqkyl42yb.code.run` does not answer from outside |
+| LLM | `unconfigured` (no provider key). Runs would stop as `LLM_NOT_CONFIGURED` (tested) |
+
+**Blocker for any public demo:** port `p01` must be made public (OWNER, §2.1).
 
 ## 1. What is verified before spending anything
 
 | Check | Evidence |
 | --- | --- |
-| `AnthropicProvider` request shape matches the current Messages API | Unit tests with a fake client: model id, cached system block, `thinking: {type: "adaptive"}`, `output_config.effort` + `output_config.format` (json_schema), no sampling params, streaming above 16k output tokens, `stop_details` refusal mapping |
-| All six role schemas are accepted by structured outputs | `tests/unit/llm-gateway.test.ts`: every object `additionalProperties: false`; no `minLength`/`maxLength`/numeric bounds/`maxItems`/`uniqueItems` sent (the SDK's `zodOutputFormat` strips them and they are validated client-side) |
-| Models and prices | `claude-sonnet-5-5` $2 input / $2.50 5-min cache write / $0.10 cache read / $10 output per MTok; `claude-opus-5-5` $4 / $5 / $0.20 / $20. Re-checked against the official pricing page on 2026-10-26 and identical to `PRICES` |
-| Retries and fallback stay under the ledger | SDK `maxRetries: 0`; server-side fallback disabled by constructor guard; the gateway does one repair and one truncation retry, each reserved before dispatch; an unexpected serving model fails closed |
-| Key stays in the worker | Supervisor allowlist sends `ANTHROPIC_API_KEY` to the worker only; the web env schema rejects every `*_API_KEY`; the CI build scans the browser bundle for a sentinel key |
-| Subscription mode cannot run in production | Refused by the worker env schema, worker factory and supervisor for any `APP_ENV` other than development/test; the SDK is not bundled and not in the image (unit tests) |
-| Judge grant lifecycle | Local rehearsal: create (1 day, 1 run, $0.50; code shown once, hash stored), list, `spend today`, revoke; out-of-range values and a short pepper rejected |
+| `AnthropicProvider` request shape matches the current Messages API | Fake-client unit tests: model id, cached system block, `thinking: {type: "adaptive"}`, `output_config.effort` + `output_config.format` (json_schema), no sampling params, streaming above 16k output tokens, `stop_details` refusal mapping |
+| All six role schemas fit structured outputs | `tests/unit/llm-gateway.test.ts`: every object `additionalProperties: false`; no `minLength`/`maxLength`/numeric bounds/`maxItems`/`uniqueItems` sent (the SDK's `zodOutputFormat` strips them and they are validated client-side) |
+| Models and prices | `claude-sonnet-5-5` $2 input / $2.50 5-min cache write / $0.10 cache read / $10 output per MTok; `claude-opus-5-5` $4 / $5 / $0.20 / $20. Re-checked against the official pricing page 2026-10-26; identical to `PRICES` |
+| Bounded retries | SDK `maxRetries: 0`; server-side fallback disabled by constructor guard; the gateway does at most one repair and one truncation retry, each reserved before dispatch; an unexpected serving model fails closed |
+| Key isolation | Supervisor allowlist sends `ANTHROPIC_API_KEY` to the worker only; the web env schema rejects every `*_API_KEY`; CI scans the browser bundle for a sentinel key |
+| Unconfigured LLM fails safely | Integration test: `LLM_NOT_CONFIGURED`, zero attempts, invocations and reservations. Status reports `llmConfigured: false` and names no model |
+| Subscription mode cannot run in production | Refused by worker env schema, worker factory and supervisor outside development/test; SDK not bundled and absent from the image |
+| Read-only story sample | Integration + Chromium/WebKit tests: full story, no ids or raw Qloo values, fixture wording by experiment mode, per-link revocation |
+| Judge grant lifecycle | Local rehearsal: create (code shown once, hash stored), list, `spend today`, revoke; bad values rejected. Browser invite flow covered by `INVITE_E2E` |
 
-Not verifiable without spending: a real Messages API response, real token counts on the API path,
-and Northflank behaviour with a key present. These are what the first run measures.
+Not verifiable without spending: a real Messages API response, real API token counts, and
+Northflank behaviour with a key present. The final step measures exactly these.
 
-## 2. Exact runtime configuration (OWNER)
+## 2. Free production steps (OWNER approves each)
+
+### 2.1 Release, verify privately, then expose (exact sequence)
+
+**Merging is deploying.** Northflank CI is enabled on `main` (`disabledCI: false`), so merging PR #19
+builds and deploys it automatically. The readiness probe gates traffic, but the port is private
+anyway. Rollback target: commit **`39c0fe5`**, deployment **`6aded5c0351e0f7052ed6dbd`**
+(2026-10-26 04:23 UTC).
+
+1. **Gate.** PR #19's latest head is fully green in CI, including `docker` and `e2e`.
+2. **Record the rollback target.** In Northflank → `tessaloom` → Deployments, note that
+   `6aded5c0…` serves `39c0fe5`. Do not delete old builds.
+3. **Merge** PR #19 with a merge commit, not a squash, so it can be reverted with
+   `git revert -m 1`. Wait for build SUCCESS and deployment COMPLETED, then confirm the new SHA.
+4. **Private smoke, port still private.** From your machine:
+   `northflank forward service --project default --service tessaloom`, then, in another terminal,
+   `node deploy/public-smoke.mjs http://<forwarded-host:port> --local`. All read-only checks must
+   pass, including `llmConfigured: false`. Check the logs for `worker_qloo_readiness ready=true`
+   and no errors. Stop the forward (`northflank forward cleanup-hosts` if it edited hosts).
+5. **Rollback if any check fails.** Revert the merge commit on `main`
+   (`git revert -m 1 <merge-sha>`, then push). CI rebuilds a tree identical to `39c0fe5` and
+   deploys it. A faster path is redeploying deployment `6aded5c…` from the Northflank UI.
+   Stored data is unaffected; this release has no migrations.
+6. **Expose.** Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with the
+   Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0` and
+   `RUN_ACCESS=off`.
+7. **Public smoke.** From an outside network:
+   `node deploy/public-smoke.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run`, then once with
+   `--write-probe`. It creates one anonymous workspace/project/brief and must get
+   `PAID_RUNS_DISABLED` with no run created.
+8. **Un-expose immediately** (port back to private) if the public smoke fails. Then fix or
+   roll back as in step 5.
+
+Known residual risk once public: with `TRUSTED_PROXY_HOPS=0`, every visitor shares one
+rate-limit bucket (workspace creation 20/min, sample reads 60/min, share lookups 30/min, run
+starts 20/min). That's safe for cost and fine for judges, but one aggressive client could
+briefly throttle others. Raising it to `1` needs proof that Northflank's edge overwrites
+`X-Forwarded-For`; that's a post-exposure check, not a release blocker.
+
+### 2.2 Prepare the paid configuration without a key
 
 Apply [`deploy/northflank.anthropic.env.example`](../../deploy/northflank.anthropic.env.example)
-over the current runtime variables. The only differences from today's
-[`northflank.env.example`](../../deploy/northflank.env.example):
+with **`RUN_ACCESS=off`**. Without `ANTHROPIC_API_KEY` the gateway stays unconfigured, so this
+step still cannot spend. Differences from today's [`northflank.env.example`](../../deploy/northflank.env.example):
 
-| Variable | Today | First run |
+| Variable | Today | Final acceptance |
 | --- | --- | --- |
 | `LLM_PROVIDER` | `deepseek` | `anthropic` |
 | `LLM_MODEL` / `LLM_FALLBACK_MODEL` | (unset) | `claude-sonnet-5-5` / `claude-sonnet-5-5` |
 | `LLM_MODE` | `economy` | `standard` |
 | `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `0` | `0.50` |
 | `GLOBAL_DAILY_QLOO_CALLS` | `0` | `60` |
-| `RUN_ACCESS` | `off` | `off`, then `invite` only for the run window (§4) |
-| `CLAUDE_SUBSCRIPTION_*` | (unset) | `off` / `0`, explicit |
+| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` / `WORKSPACE_DAILY_RUNS` | `1` / `1` / `1` | unchanged |
+| `RUN_ACCESS` | `off` | `off`; `invite` only during §4 |
+| `CLAUDE_SUBSCRIPTION_LOCAL_APPROVED` / `_MAX_REQUESTS` | (unset) | `off` / `0`, explicit |
 
-Secret: create a **dedicated** Claude Console API key in its own workspace. Add it as
-`ANTHROPIC_API_KEY` in Northflank's **restricted runtime secrets** for this service, never in a
-secret group shared with other services, build arguments, the repo or chat. Keep the existing
-`SESSION_SECRET` and `SHARE_TOKEN_PEPPER`; changing the pepper invalidates grants and shares.
+Keep `SESSION_SECRET` and `SHARE_TOKEN_PEPPER` unchanged; changing the pepper invalidates grants
+and shares.
 
-Independent backstop (OWNER, Claude Console): set a low monthly spend limit on that workspace
-(for example $5). The application ledger is an estimate, not a provider invoice ceiling.
+## 3. Anthropic Console (OWNER, only when approving the final step)
 
-## 3. The $0.50 guard, layer by layer
+1. Create a **dedicated workspace** for Tessaloom and a key in it. The key is never pasted into
+   chat, the repo, build arguments, logs or a shared secret group.
+2. Set a **workspace spend limit** (for example $5/month) as an independent backstop. The
+   application ledger estimates cost; it is not a provider-side guarantee.
+3. Add the key as `ANTHROPIC_API_KEY` in this service's **restricted runtime secrets**, then
+   restart. Expect `llmConfigured: true` and `llmModel: claude-sonnet-5-5`, with no spend.
+
+## 4. Final paid acceptance (OWNER approves; run once, last)
+
+### The $0.50 guard, layer by layer
 
 1. **Spend ledger (M10-A).** Before every attempt (first try, repair, truncation retry) the worker
    reserves the call's upper bound against the global-daily, workspace-daily and experiment caps
-   (all $0.50) and the grant cap ($0.50). If the reservation does not fit, the call is never sent.
-   Unknown outcomes keep the full reservation charged.
-2. **Grant.** One grant: `--days 1 --runs 1 --usd 0.50`. One run admission, revocable at once.
-3. **Serial.** `MAX_WORKING_RUNS=1`, `MAX_ACTIVE_RUNS_PER_WORKSPACE=1`, `WORKSPACE_DAILY_RUNS=1`.
-4. **Run budget.** Per-run limits from `AGENT_WORKFLOW.md` §7 (exploration ≤ 14 LLM calls,
-   ≤ 40 Qloo calls; composition ≤ 3 LLM calls, ≤ 4 Qloo calls).
-5. **Provider.** No SDK retries, no server-side fallback, approved model only.
+   ($0.50 each) and the grant cap ($0.50). If it does not fit, the call is never sent. Unknown
+   outcomes keep the full reservation.
+2. **Grant:** `--days 1 --runs 1 --usd 0.50`. One run admission, revocable at once.
+3. **Serial:** one working run, one active run per workspace, one run per workspace per day.
+4. **Run budget:** exploration ≤ 14 LLM / 40 Qloo calls; composition ≤ 3 LLM / 4 Qloo calls.
+5. **Provider and retries:** no SDK retries, no server-side fallback, approved model only. A
+   transient error (429/5xx) gets at most one same-model gateway retry, and the step is retried
+   at most twice by the queue (`retryLimit: 2`). Every attempt reserves first, so rate limits
+   or outages end in `LLM_UNAVAILABLE`/`STEP_RETRIES_EXHAUSTED`, never in unbounded spend. A
+   Tier 1 Anthropic workspace's rate limits are far above this serial workload.
 6. **Console spend limit**, outside the application.
 
-Expected cost: the same scenario's measured tokens price at **≈ $0.14** for the full workflow
-(R1 $0.007 cached, R3 $0.074, R4 $0.024, R6 $0.032). The largest single reservation was $0.18
-(R3, 12k output cap). Messages API token counts differ from the Agent SDK's, so treat $0.14 as an
-estimate. In the worst case, with every call at its output cap plus a repair, the ledger refuses
-the next reservation and the run ends `COMPLETED_WITH_LIMITS` or `FAILED` before $0.50. It never
-overspends to finish.
+Expected cost **≈ $0.14** for the full workflow (local measurement at API list prices: R1 $0.007
+cached, R3 $0.074, R4 $0.024, R6 $0.032). The largest single reservation was $0.18 (R3, 12k output
+cap). API token counts differ from the Agent SDK's. In the worst case the ledger refuses the next
+reservation and the run stops early. It never overspends to finish.
 
-## 4. Production E2E script (OWNER approves each step; run once)
+### Steps
 
-Preconditions: PR #18 reviewed and merged, the image deployed with the §2 variables, the key
-present, `RUN_ACCESS=off`, and `/api/health/ready` 200 with `qlooReady: true`.
+1. Private terminal, recording off, in a Northflank job or one-off command with the service's
+   runtime env: `node packages/db/dist/admin.mjs grant create --label final-acceptance --days 1
+   --runs 1 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
+2. Fresh browser → public URL → enter the code → create project **Spirited sound evenings** (Café).
+3. Brief: title *Spirited sound evenings*; challenge *"A 40-seat café wants a recurring monthly
+   weekday evening that brings animated-film lovers and film-score music fans together, to attract
+   new regular visitors on a quiet night."*; interests **Spirited Away** (Film), **Joe Hisaishi**
+   (Music artist); capacity 40; low budget; 90 minutes; goal *Attract new weekday regulars*.
+   **Interpret brief → Confirm & discover.**
+4. Entity selection: **Spirited Away (2001)** and **Joe Hisaishi** (Qloo's exact-name pick).
+   **Confirm choices.**
+5. Pool: accept the proposal (locally 93 candidates, 3 selected at τ = 0.5). **Generate hypotheses
+   with this pool.** If it stops as `POOL_TOO_SMALL`, stop there and record it. Do not retry
+   under this approval.
+6. Select the top supported hypothesis → **Compose blueprint** → **Recurring series** →
+   **Compose blueprint**.
+7. Immediately: `grant revoke <id>`, `RUN_ACCESS=off`, `spend today`, and compare with the Console
+   usage page.
 
-1. From a private terminal (recording off), in a Northflank job or one-off command against the
-   service's runtime env: `node packages/db/dist/admin.mjs grant create --label first-run --days 1
-   --runs 1 --usd 0.50`. Keep the code private, then set `RUN_ACCESS=invite`.
-2. In a fresh browser: open the public URL, enter the access code, create a project
-   *Spirited sound evenings* (Café).
-3. Brief, as in the local run: title *Spirited sound evenings*; challenge *"A 40-seat café wants
-   a recurring monthly weekday evening that brings animated-film lovers and film-score music fans
-   together, to attract new regular visitors on a quiet night."*; interests **Spirited Away**
-   (Film) and **Joe Hisaishi** (Music artist); capacity 40; low budget; 90 minutes; goal
-   *Attract new weekday regulars*. **Interpret brief → Confirm & discover.**
-4. Entity selection: **Spirited Away (2001)** (Miyazaki / Studio Ghibli) and **Joe Hisaishi**
-   (Qloo's exact-name pick). **Confirm choices.**
-5. Collision pool: accept the proposed pool (locally 93 candidates, 3 selected at τ = 0.5).
-   **Generate hypotheses with this pool.**
-6. Hypothesis lab: select the top supported hypothesis (locally "Which Ghibli Next? Café Vote").
-   **Compose blueprint**, choose format **Recurring series**, then **Compose blueprint** in the dialog.
-7. Immediately afterwards: `grant revoke <id>`, set `RUN_ACCESS=off`, then run `spend today`.
+**Stop conditions:** a refused reservation, provider auth/4xx error, unexpected model, more than 60
+Qloo calls, or `spend today` > $0.50. Revoke, set access off, record. Never retry under the same
+approval.
 
-**Stop conditions:** any failed reservation, provider auth or 4xx error, unexpected model, more than
-60 Qloo calls, or `spend today` > $0.50. On any of these, revoke the grant, set `RUN_ACCESS=off`,
-and record the outcome. Never retry under the same approval.
+**Pass criteria:** every stage completes; every LLM invocation is `VALID` (successful repairs
+allowed); all blueprint citations resolve with origin "Qloo (live)"; `spend today` ≤ $0.50 and
+agrees with the Console within rounding.
 
-**Pass criteria:** brief, entity selection, discovery, pool, hypotheses and blueprint complete;
-every LLM invocation `VALID` (repairs allowed if they succeed); blueprint citations all resolve,
-with origin "Qloo (live)"; `spend today` ≤ $0.50, matching the Console usage page within rounding.
+**Evidence (no secrets):** in the same private terminal, run
+`node packages/db/dist/admin.mjs report project <projectId>` (the id is in the project URL). It
+prints run states, per-call role/model/tokens/latency/estimated cost, Qloo call counts by method
+and origin, ledger totals, evidence stances and blueprint traceability, with no prompts, outputs,
+excerpts or Qloo payloads. Add `spend today`, the Console charge, and screenshots of the story page
+kept out of the repository ([rights review](DATA_RIGHTS_REVIEW.md)). Save the report as
+`docs/evidence/production-acceptance-<date>.json` with a short report. Keep it separate from the
+local subscription results.
 
-**Evidence to record (no secrets):** run IDs and states, per-call role/model/tokens/latency/
-estimated cost, Qloo call counts, `spend today`, the Console-reported charge, and screenshots of
-the blueprint traceability header and evidence appendix. Save as
-`docs/evidence/production-first-run-<date>.json` plus a short report. Keep production-validated
-results separate from the local subscription results.
+**Rollback:** `RUN_ACCESS=off`, budgets to `0`, remove `ANTHROPIC_API_KEY`, revoke grants. Stored
+results stay readable. Restoring `northflank.env.example` returns the service to zero budget.
 
-**Rollback:** `RUN_ACCESS=off`, budgets back to `0`, remove `ANTHROPIC_API_KEY`, revoke grants.
-Stored results stay readable. These are runtime variables, not image contents: restoring the
-values in `northflank.env.example` returns the service to its current zero-budget configuration.
+## 5. Public demo and judge access (after §4 passes)
 
-## 5. Public demo route and judge access
-
-- **Public read-only sample (no spend).** On the blueprint page choose **Share read-only** and set
-  an expiry that covers judging (the API allows 1–90 days, so pick 30+ to run past Nov 16). The
-  `shareLinkId` is in the creation response and in `GET /api/v1/projects/<projectId>/share-links`
-  from the owner's browser session. Feature it with `admin.mjs sample feature <shareLinkId>`.
-  Visitors then open it under **Demo samples**, with no workspace, code or model call. It is real
-  live-Qloo content, so the production fixture firewall stays unchanged. `sample unfeature`
-  withdraws it.
-- **Optional live judge access.** After reviewing the first run's real cost, issue one grant per
-  judging session (proposed `--days 7 --runs 2 --usd 0.40`, raised only with measured headroom).
-  Set the global/workspace/experiment caps to cover all active grants. Codes go only into
-  Devpost's private testing-instructions field.
-- Re-check `spend today` and the Console usage daily during judging. Revoke on suspected disclosure.
+- **Public read-only story (no spend).** On the blueprint page: **Share read-only → The whole
+  story**, expiry **30 days** (covers judging, Nov 2–5, 2026). Copy the **Link ID** shown in the
+  dialog, then `admin.mjs sample feature <Link ID>`. Visitors open it from **Demo samples**: brief,
+  Qloo discovery, tested hypotheses, the blueprint and its evidence, with no workspace, code or model
+  call. `sample unfeature` withdraws it.
+- **Live generation for judges.** The rules ask for a functional demo judges can test, with
+  credentials in the testing instructions if access is restricted. Issue one grant per judging
+  session after reviewing the final run's real cost. Proposed: `--days 7 --runs 2 --usd 0.40`;
+  raise the global/workspace/experiment caps to cover all active grants, for example $2.00 for
+  five grants. Codes go only in Devpost's testing-instructions field. Set `RUN_ACCESS=invite`.
+- During Nov 2–5, check `spend today` and the Console usage daily. Revoke on suspected disclosure.
 
 ## 6. Open owner decisions
 
-- Approve: merge PR #18, deploy, create the API key, apply §2, run §4 once.
-- Confirm Qloo-derived blueprint content may be shown publicly. The hackathon kit asks for
-  results to be presented with source and limits; raw retention stays off.
-- Decide whether judges get live generation (§5) or the read-only sample only.
+1. Merge and deploy this branch; make port `p01` public (§2.1). Free.
+2. Approve §3–§4: key, Console limit, one paid run of about $0.14 (≤ $0.50).
+3. Send the organizer clarification in [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md) (display
+   of Qloo-derived names and gradings).
+4. Choose judge access: read-only story only, or story plus capped live grants.

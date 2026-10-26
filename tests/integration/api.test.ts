@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   getRun as getRunApi,
+  getSystemStatus,
   getWorkspace,
   postCancel,
   postConfirmation,
@@ -208,6 +209,33 @@ describe("workspace, CSRF, and authorization", () => {
         )
       ).error?.code,
     ).toBe("WORKSPACE_REQUIRED");
+  });
+
+  it("says when generation is unconfigured instead of advertising a model", async () => {
+    const status = async (runConfig: unknown) => {
+      await handle.db.execute(sql`DELETE FROM worker_heartbeats`);
+      await beatWorker(handle.db, {
+        workerId: "status-worker",
+        qlooReady: true,
+        transport: "HARNESS_MCP",
+        runConfig,
+      });
+      return body(await getSystemStatus(s));
+    };
+    expect(await status({ ...RUN_CONFIG, llmConfigured: false })).toMatchObject(
+      { workerOnline: true, llmConfigured: false, llmModel: null },
+    );
+    expect(await status({ ...RUN_CONFIG, llmConfigured: true })).toMatchObject({
+      llmConfigured: true,
+      llmModel: RUN_CONFIG.llmModel,
+    });
+    // An older worker without the flag is reported as unknown, not ready.
+    expect(await status(RUN_CONFIG)).toMatchObject({ llmConfigured: null });
+    await handle.db.execute(sql`DELETE FROM worker_heartbeats`);
+    expect(await body(await getSystemStatus(s))).toMatchObject({
+      workerOnline: false,
+      llmConfigured: false,
+    });
   });
 
   it("hides other workspaces' projects and runs (404) and reports an offline worker (503)", async () => {

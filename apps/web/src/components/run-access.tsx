@@ -143,9 +143,13 @@ export function DemoSamples() {
   if (!items?.length) return null;
   return (
     <section aria-labelledby="samples-h" data-testid="demo-samples">
-      <h2 id="samples-h" className="mb-3 font-serif text-2xl">
+      <h2 id="samples-h" className="font-serif text-2xl">
         Demo samples
       </h2>
+      <p className="mb-3 mt-1 text-sm text-muted-foreground">
+        Finished experiments you can read end to end: the brief, Qloo discovery,
+        hypotheses tested against evidence, and the blueprint.
+      </p>
       <ul className="grid gap-3 sm:grid-cols-2">
         {items.map((s) => (
           <li key={s.id}>
@@ -158,7 +162,11 @@ export function DemoSamples() {
                 <p className="mt-1 text-xs font-semibold text-rust">
                   FIXTURE — not real Qloo data
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-warp">
+                  Real Qloo data
+                </p>
+              )}
               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Eye aria-hidden className="size-3.5" /> Read-only · no AI run
                 needed

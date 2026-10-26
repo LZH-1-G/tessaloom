@@ -8,6 +8,7 @@ import {
   revokeDemoGrant,
 } from "./repositories/cost";
 import { listSamples, setSampleFeatured } from "./repositories/blueprint";
+import { acceptanceReport } from "./repositories/ops";
 
 /**
  * Operator CLI (bundled to dist/admin.mjs; M10-A cost safety). It never deletes data, never
@@ -20,9 +21,10 @@ import { listSamples, setSampleFeatured } from "./repositories/blueprint";
  *   node packages/db/dist/admin.mjs sample feature|unfeature <shareLinkId>
  *   node packages/db/dist/admin.mjs sample list
  *   node packages/db/dist/admin.mjs spend today
+ *   node packages/db/dist/admin.mjs report project <projectId>   (acceptance evidence, metadata only)
  */
 const USAGE =
-  "usage: admin.mjs grant create --label L [--days 14] [--runs 10] [--usd 5] | grant list | grant revoke <id> | sample feature|unfeature|list [<shareLinkId>] | spend today";
+  "usage: admin.mjs grant create --label L [--days 14] [--runs 10] [--usd 5] | grant list | grant revoke <id> | sample feature|unfeature|list [<shareLinkId>] | spend today | report project <projectId>";
 
 class AdminInputError extends Error {}
 
@@ -95,6 +97,10 @@ async function main(argv: string[]) {
       out(await listSamples(handle.db));
     } else if (area === "spend" && action === "today") {
       out({ globalLlmUsdToday: await globalLlmSpendToday(handle.db) });
+    } else if (area === "report" && action === "project" && rest[0]) {
+      const report = await acceptanceReport(handle.db, rest[0]);
+      if (!report) throw new AdminInputError("Project not found");
+      out(report);
     } else {
       throw new AdminInputError(USAGE);
     }

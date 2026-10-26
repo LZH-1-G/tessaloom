@@ -37,6 +37,26 @@ test("prepared fixture samples are usable without generation or a workspace", as
         "Read-only demo sample",
       );
       await expectFixtureBanner(page);
+      if (sample.scope === "project") {
+        // Project samples tell the whole read-only story, not just counts.
+        for (const heading of [
+          "The creative brief",
+          "Interests confirmed with Qloo",
+          "Discovery across cultural worlds",
+          "Hypotheses tested against Qloo evidence",
+          "What this does not show",
+        ])
+          await expect(
+            page.getByRole("heading", { name: heading }),
+          ).toBeVisible();
+        await expect(page.getByText("Chosen for the blueprint")).toBeVisible();
+        await expect(page.getByTestId("evidence-appendix")).toContainText(
+          "E-1",
+        );
+        await expect(
+          page.getByRole("region", { name: "What this does not show" }),
+        ).toContainText("labelled synthetic fixtures, not Qloo data");
+      }
       if (sample.scope === "blueprint") {
         await expect(page.getByTestId("traceability-meter")).toContainText(
           "evidence-backed",

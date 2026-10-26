@@ -276,6 +276,8 @@ export interface SystemStatus {
   qlooTransport: string | null;
   qlooReady: boolean;
   harnessVersion: string | null;
+  /** null: the worker did not report it (older worker). */
+  llmConfigured: boolean | null;
   llmModel: string | null;
 }
 

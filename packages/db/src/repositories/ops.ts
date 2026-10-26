@@ -366,3 +366,63 @@ export async function revokeShareLink(
   if (!row) throw new NotFoundError("Share link not found");
   return row;
 }
+
+/**
+ * Acceptance evidence for one project: run outcomes, per-call model metrics, Qloo call counts,
+ * ledger totals, evidence stances and blueprint traceability. Metadata only: no prompts,
+ * outputs, excerpts, Qloo payloads, workspace ids or share tokens.
+ */
+export async function acceptanceReport(db: Executor, projectId: string) {
+  const rows = async <T extends Record<string, unknown>>(
+    query: ReturnType<typeof sql>,
+  ) => (await db.execute<T>(query)).rows;
+  const [project] = await rows<{ name: string }>(
+    sql`SELECT name FROM projects WHERE id = ${projectId}`,
+  );
+  if (!project) return null;
+  const runs = await rows(sql`
+    SELECT r.id AS "runId", r.kind, r.state, r.terminal_reason AS "terminalReason",
+           r.usage, r.started_at AS "startedAt", r.finished_at AS "finishedAt"
+    FROM agent_runs r JOIN experiments e ON e.id = r.experiment_id
+    WHERE e.project_id = ${projectId} ORDER BY r.created_at`);
+  const llmCalls = await rows(sql`
+    SELECT role, prompt_id AS "promptId", provider, model_id AS "model",
+           validation_status AS "validation", repair_of_id IS NOT NULL AS "repair",
+           stop_reason AS "stopReason", input_tokens AS "inputTokens",
+           cached_input_tokens AS "cachedInputTokens", output_tokens AS "outputTokens",
+           estimated_cost_usd::float AS "estimatedCostUsd", latency_ms AS "latencyMs",
+           created_at AS "at"
+    FROM llm_invocations WHERE project_id = ${projectId} ORDER BY created_at`);
+  const qlooCalls = await rows(sql`
+    SELECT method, envelope_status AS "status", data_origin AS "origin", count(*)::int AS calls
+    FROM tool_invocations WHERE project_id = ${projectId}
+    GROUP BY 1, 2, 3 ORDER BY 1, 2, 3`);
+  const [ledger] = await rows(sql`
+    SELECT count(*)::int AS reservations,
+           count(*) FILTER (WHERE s.status <> 'SETTLED')::int AS "unsettled",
+           coalesce(sum(s.reserved_micros), 0)::bigint::float / 1e6 AS "reservedUsd",
+           coalesce(sum(s.actual_micros), 0)::bigint::float / 1e6 AS "settledUsd",
+           coalesce(max(s.reserved_micros), 0)::bigint::float / 1e6 AS "maxReservationUsd"
+    FROM llm_spend_reservations s JOIN agent_runs r ON r.id = s.run_id
+    JOIN experiments e ON e.id = r.experiment_id WHERE e.project_id = ${projectId}`);
+  const evidence = await rows(sql`
+    SELECT ev.stance, ev.provenance_class AS "provenance", count(*)::int AS records
+    FROM evidence_records ev JOIN experiments e ON e.id = ev.experiment_id
+    WHERE e.project_id = ${projectId} GROUP BY 1, 2 ORDER BY 1, 2`);
+  const blueprints = await rows(sql`
+    SELECT b.format, b.status, rv.revision_number AS "revision",
+           rv.traceability_report AS "traceability"
+    FROM experience_blueprints b
+    LEFT JOIN blueprint_revisions rv ON rv.id = b.current_revision_id
+    WHERE b.project_id = ${projectId} ORDER BY b.updated_at DESC`);
+  return {
+    project: project.name,
+    generatedAt: new Date().toISOString(),
+    runs,
+    llmCalls,
+    qlooCalls,
+    ledger,
+    evidence,
+    blueprints,
+  };
+}

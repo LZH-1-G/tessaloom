@@ -31,7 +31,7 @@
 | F5 | A **public, open-source repository with a detectable license** is required | EXTERNALLY VERIFIED |
 | F6 | An **English project description** is required | EXTERNALLY VERIFIED |
 | F7 | A **demonstration video is not explicitly mandatory** in the formal submission requirements | EXTERNALLY VERIFIED |
-| F8 | **Judging runs November 2 – November 16, 2026** | EXTERNALLY VERIFIED |
+| F8 | **Judging runs November 2 – November 5, 2026** (rules re-read 2026-10-26; the 2026-10-24 reading said Nov 2–16) | EXTERNALLY VERIFIED 2026-10-26 |
 | F9 | Four **equally weighted** judging criteria: **Technological Implementation, Design, Potential Impact, Quality of the Idea** | EXTERNALLY VERIFIED |
 
 Anything not in §1.1, the kit, or the listing API is still **UNVERIFIED** (§3).
@@ -98,7 +98,7 @@ Legend: **Status** is `TODO` / `IN PROGRESS` / `DONE (evidence)` / `N/A`.
 | T2 | **Submission deadline** | **Oct 30, 2026, 11:45 PM** | EXTERNALLY VERIFIED (F1) |
 | T3 | Internal code freeze | Oct 30, 18:00 | Plan |
 | T4 | Target submission | Oct 30, 21:00 | Plan |
-| T5 | **Judging period** | **Nov 2 – Nov 16, 2026** | EXTERNALLY VERIFIED (F8) |
+| T5 | **Judging period** | **Nov 2 – Nov 5, 2026** (availability kept through Nov 16 as a buffer) | EXTERNALLY VERIFIED (F8, 2026-10-26) |
 | T6 | Demo must stay available | From submission through **at least Nov 16, 2026, 23:59 EST** (+ a 14-day buffer to Nov 30) | Plan derived from F4 + F8 |
 | T7 | Winners announcement | UNVERIFIED | — |
 

@@ -737,6 +737,11 @@ export const getSystemStatus = handle(async (s: Services) => {
     !!beat &&
     s.now().getTime() - beat.lastBeatAt.getTime() < s.heartbeatMaxAgeMs;
   const transport = beat?.transport ?? null;
+  const config = beat?.runConfig as
+    { llmModel?: string; llmConfigured?: boolean } | null | undefined;
+  // Older workers do not report the flag: unknown, never assumed ready.
+  const llmConfigured =
+    typeof config?.llmConfigured === "boolean" ? config.llmConfigured : null;
   return json({
     workerOnline: online,
     mode:
@@ -748,8 +753,9 @@ export const getSystemStatus = handle(async (s: Services) => {
     qlooTransport: transport,
     qlooReady: online && !!beat?.qlooReady,
     harnessVersion: beat?.harnessVersion ?? null,
-    llmModel:
-      (beat?.runConfig as { llmModel?: string } | null)?.llmModel ?? null,
+    llmConfigured: online ? llmConfigured : false,
+    // No model is advertised while generation cannot run.
+    llmModel: llmConfigured === false ? null : (config?.llmModel ?? null),
   });
 });
 
