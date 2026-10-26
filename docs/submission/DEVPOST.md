@@ -1,6 +1,6 @@
 # Tessaloom — Devpost copy-ready content
 
-Prepared 2026-10-24. Nothing has been submitted. Add the approved public demo and repository URLs in Devpost's link fields only after they actually work. The text below describes the current implementation and explicitly identifies the demonstration's data source.
+Prepared 2026-10-24, updated 2026-10-26. Nothing has been submitted. Add the approved public demo and repository URLs in Devpost's link fields only after they actually work. The text below describes the current implementation and explicitly identifies the demonstration's data source.
 
 ## Project name
 
@@ -12,7 +12,7 @@ Weave cultural connections into testable creative experiences.
 
 ## Short description
 
-Tessaloom helps small venues turn cross-cultural inspiration into evidence-aware experiments. Its agents discover connections, propose hypotheses, test claims, visualize provenance, compare dependency-aware What-if branches, and compose editable experience blueprints. The reproducible demonstration uses clearly labelled synthetic fixtures and scripted AI.
+Tessaloom helps small venues turn cross-cultural inspiration into evidence-aware experiments. Its agents discover connections, propose hypotheses, test claims, visualize provenance, compare dependency-aware What-if branches, and compose editable experience blueprints. Claude agents reason over live Qloo audience signals, and every blueprint statement is labelled as evidence, interpretation or speculation.
 
 ## Inspiration
 
@@ -34,7 +34,7 @@ The application uses TypeScript, Next.js, React, PostgreSQL, Drizzle and pg-boss
 
 Qloo integration uses the official Harness through supported workflows and typed adapters. Search and entity resolution establish the intended cultural inputs; recommendations, rankings, tags and audience comparisons supply evidence for cross-domain claims. The adapter normalizes different response shapes, records provenance, separates cache reuse from retrieval, and enforces bounded requests. Unsupported or inadequate evidence remains insufficient rather than being converted into a confident conclusion.
 
-A provider-independent LLM Gateway supports DeepSeek, Anthropic, Gemini and scripted AI. Strict schemas and semantic checks validate responses. Paid requests require access authorization and global spending reservations; DeepSeek additionally requires explicit CNY limits and conservative currency accounting. Web and worker processes use separate identities, and provider credentials stay outside the browser and web process.
+A provider-independent LLM Gateway runs the agent roles on Claude (Claude Sonnet 5.5 through the Anthropic API in deployment), and also supports DeepSeek, Gemini and scripted AI. Strict schemas and semantic checks validate responses. Paid requests require access authorization and global spending reservations; DeepSeek additionally requires explicit CNY limits and conservative currency accounting. Web and worker processes use separate identities, and provider credentials stay outside the browser and web process.
 
 ## What makes it original
 
@@ -50,9 +50,9 @@ We also found that a cache timestamp can accidentally imply fresh evidence. Pres
 
 Historical live Qloo checks verified supported Harness capabilities, with limitations documented in the repository. Separately, exactly two authorized DeepSeek V4 Pro calls using invented cultural inputs passed strict JSON/schema and semantic validation. These are distinct tests: a full real-Qloo-to-DeepSeek application run has not been validated. On 2026-10-26 the complete application workflow (brief, entity selection, live Qloo discovery and evidence, hypotheses, blueprint) ran locally with live Qloo data and Claude Sonnet, through the official Claude Agent SDK on the developer's own Claude subscription (local personal use, no API charge). All five model calls passed validation, and all seven blueprint citations resolve to stored live-Qloo evidence. The public deployment's Claude API path has not yet been exercised with real calls.
 
-The interactive judge demonstration uses synthetic cultural data and scripted AI, prominently labelled “FIXTURE — not real Qloo data.” It demonstrates the actual database, agent orchestration, graph, branching and composition behavior without consuming provider quota. Read-only samples use the same stored outputs. They are not evidence of real cultural affinity or commercial demand.
+A separate local demonstration mode uses synthetic cultural data and scripted AI, prominently labelled “FIXTURE — not real Qloo data.” It demonstrates the actual database, agent orchestration, graph, branching and composition behavior without consuming provider quota. Read-only samples use the same stored outputs. They are not evidence of real cultural affinity or commercial demand.
 
-Current event quota, credential expiry, retention/display rights and permission to share Qloo-derived facts with third-party models remain unverified. Live generation stays restricted. No causal, attendance or sales guarantee is made.
+Current event quota and credential expiry remain unverified. Raw Qloo responses are not retained. Live generation stays invitation-only behind spending caps. No causal, attendance or sales guarantee is made.
 
 ## What's next
 
@@ -60,17 +60,30 @@ Complete a separately authorized, tightly bounded live calibration when quota an
 
 ## Built with
 
-TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, pg-boss, Zod, Qloo Harness, DeepSeek, Vitest, Playwright, axe-core, Docker, Caddy.
+TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, pg-boss, Zod, Qloo Harness, Claude (Anthropic API), Claude Agent SDK (local development), DeepSeek, Vitest, Playwright, axe-core, Docker, Caddy.
 
 ## Testing instructions
 
-For the local interactive demonstration, follow the repository quick start, create a project and choose “Use the fixture example.” Confirm the brief, review the collision pool, generate hypotheses, open Evidence Graph, adjust scoring weights, compare the What-if branch and compose a blueprint. Edit and export it, then open a read-only share in a separate browser context. Every synthetic stage is labelled.
+> Fill the bracketed values only after the approved production first run
+> ([runbook](PRODUCTION_FIRST_RUN.md)) has succeeded. Until then, keep this section out of Devpost.
 
-Prepared read-only samples can be verified locally without starting model calls. Public deployment is pending: the current production firewall also rejects fixture reads. The production guard will remain unchanged. The owner must approve authorized nonfixture public content and an actual URL before supplying public testing instructions. A clearly labelled local synthetic walkthrough or recording can accompany that demo as supporting material; it cannot substitute for the working public application. Do not replace this disclosure with a claim that the local fixture sample already works publicly.
+**Public read-only result (no sign-in, no cost):** open [PUBLIC_URL], choose **Demo samples**, then
+open **Spirited sound evenings**. It is a real run from [RUN_DATE]: live Qloo data for *Spirited
+Away* and Joe Hisaishi, hypotheses tested against Qloo evidence, and a blueprint whose citations
+open the stored evidence. Use **Traceability** to filter speculative blocks, and the evidence
+appendix to see each claim's stance, rule and retrieval date.
+
+**Live generation (optional, private code):** enter the access code given in the private testing
+field, create a café project, add two cultural interests, and follow Brief → Discovery → Hypotheses
+→ Blueprint. Each code has a fixed expiry, run count and spending cap. Runs take a few minutes; a
+code that is used up or expired is refused with an explanation.
+
+**Local demonstration (no keys):** follow the repository quick start, create a project and choose
+“Use the fixture example.” Every synthetic stage is labelled “FIXTURE — not real Qloo data.”
 
 ## Owner-only fields and final actions
 
-- Insert the actual approved public demo URL and public repository URL; neither has been published by this work.
+- Run the approved production first run, feature its blueprint as a sample, then insert the actual public demo URL, run date and public repository URL; none exist yet.
 - Confirm the current Devpost form, eligibility, attribution and open-source requirements personally.
 - Upload the reviewed fixture-labelled screenshots; a short narrated video is optional under the previously owner-verified rules, subject to the current form.
 - Confirm that the offered demo satisfies the event's meaningful-Qloo-integration and public-working-demo requirements. A fixture demonstration alone must not be represented as live Qloo validation.
