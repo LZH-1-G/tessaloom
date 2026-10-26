@@ -149,7 +149,12 @@ reservation and the run stops early. It never overspends to finish.
 
 1. Private terminal, recording off, in a Northflank job or one-off command with the service's
    runtime env: `node packages/db/dist/admin.mjs grant create --label final-acceptance --days 1
-   --runs 2 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
+   --runs 2 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite` in the config group
+   `tessaloom-run-access` (it holds only this variable, so replacing its contents is safe:
+   `northflank update secret --project default --secretId tessaloom-run-access` with
+   `{"secrets":{"variables":{"RUN_ACCESS":"invite"}}}`). Restart the service, then check
+   `printenv RUN_ACCESS` with `northflank exec`. Never edit the service's own runtime environment
+   with a partial body: that endpoint replaces every variable.
 2. Fresh browser → public URL → enter the code → create project **Spirited sound evenings** (Café).
 3. Brief: title *Spirited sound evenings*; challenge *"A 40-seat café wants a recurring monthly
    weekday evening that brings animated-film lovers and film-score music fans together, to attract
@@ -163,7 +168,7 @@ reservation and the run stops early. It never overspends to finish.
    under this approval.
 6. Select the top supported hypothesis → **Compose blueprint** → **Recurring series** →
    **Compose blueprint**.
-7. Immediately: `grant revoke <id>`, `RUN_ACCESS=off`, `spend today`, and compare with the Console
+7. Immediately: `grant revoke <id>`, `RUN_ACCESS=off` (same config group), `spend today`, and compare with the Console
    usage page.
 
 **Stop conditions:** a refused reservation, provider auth/4xx error, unexpected model, more than 60
