@@ -89,7 +89,9 @@ export class LlmGateway {
         ? false
         : (options.retryTruncation ?? true);
     this.primaryModel = options.primaryModel;
-    this.fallbackModel = ["gemini", "deepseek"].includes(options.provider.name)
+    this.fallbackModel = ["gemini", "deepseek", "claude-subscription"].includes(
+      options.provider.name,
+    )
       ? null
       : (options.fallbackModel ?? null);
     this.mode = options.mode ?? "standard";
@@ -384,8 +386,10 @@ export class LlmGateway {
         ]);
       }
       const costUsd =
-        this.provider.name === "gemini" &&
-        this.provider.billing === "confirmed-free-tier"
+        (this.provider.name === "gemini" &&
+          this.provider.billing === "confirmed-free-tier") ||
+        (this.provider.name === "claude-subscription" &&
+          this.provider.billing === "claude-subscription")
           ? 0
           : estimateCostUsd(servedBy, response.usage, this.prices);
       await settle(costUsd);
@@ -419,6 +423,19 @@ export class LlmGateway {
             ...this.pricingContext,
             ...(response.usage.reasoningTokens !== undefined
               ? { reasoningTokens: response.usage.reasoningTokens }
+              : {}),
+            // Plan allowance, not an API charge: keep the list-price equivalent for reporting.
+            ...(this.provider.billing === "claude-subscription"
+              ? {
+                  billing: "claude-subscription",
+                  notionalApiListUsd: Number(
+                    estimateCostUsd(
+                      servedBy,
+                      response.usage,
+                      this.prices,
+                    ).toFixed(6),
+                  ),
+                }
               : {}),
           },
           output,

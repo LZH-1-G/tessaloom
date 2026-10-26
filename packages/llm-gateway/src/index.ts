@@ -3,6 +3,7 @@ export * from "./cost";
 export * from "./prompts";
 export * from "./gateway";
 export * from "./providers/anthropic";
+export * from "./providers/claude-subscription";
 export * from "./providers/scripted";
 export * from "./providers/gemini";
 export * from "./providers/deepseek";

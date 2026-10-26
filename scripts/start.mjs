@@ -62,6 +62,8 @@ const allowlists = {
     "GEMINI_DATA_SHARING_APPROVED",
     "GEMINI_MAX_REQUESTS",
     "GEMINI_TIMEOUT_MS",
+    "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED",
+    "CLAUDE_SUBSCRIPTION_MAX_REQUESTS",
     "LLM_PROVIDER",
     "LLM_MODEL",
     "LLM_FALLBACK_MODEL",
@@ -84,8 +86,24 @@ export function buildChildEnv(role, env) {
             (role === "worker" && /^GLOBAL_DAILY_[A-Z0-9_]+$/.test(key))),
       ),
     ),
+    // Local subscription mode: the Claude Code child finds the owner's own login via HOME.
+    ...(role === "worker" && localSubscriptionMode(env)
+      ? Object.fromEntries(
+          ["HOME", "USER", "LOGNAME", "TMPDIR"]
+            .filter((key) => env[key])
+            .map((key) => [key, env[key]]),
+        )
+      : {}),
     PATH: CHILD_PATH,
   };
+}
+
+/** @param {Environment} env */
+function localSubscriptionMode(env) {
+  return (
+    env.LLM_PROVIDER === "claude-subscription" &&
+    (env.APP_ENV === "development" || env.APP_ENV === "test")
+  );
 }
 
 /** @param {Environment} env @returns {ChildRole[]} */
@@ -99,6 +117,8 @@ export function validateSupervisorEnv(env) {
   ) {
     throw new Error("Invalid QLOO_MODE: fixtures are forbidden in production");
   }
+  if (env.LLM_PROVIDER === "claude-subscription" && !localSubscriptionMode(env))
+    throw new Error("Invalid LLM_PROVIDER: subscription mode is local only");
   if (env.APP_ENV === "production") {
     if (env.QLOO_MODE !== "live") throw new Error("Invalid QLOO_MODE");
     if (env.LLM_PROVIDER === "scripted")

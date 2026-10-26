@@ -169,8 +169,22 @@ export const workerEnvSchema = z
     WORKSPACE_DAILY_LLM_USD: z.coerce.number().nonnegative().default(3),
     EXPERIMENT_LLM_USD: z.coerce.number().nonnegative().default(5),
     LLM_PROVIDER: z
-      .enum(["anthropic", "scripted", "gemini", "deepseek"])
+      .enum([
+        "anthropic",
+        "scripted",
+        "gemini",
+        "deepseek",
+        "claude-subscription",
+      ])
       .default("anthropic"),
+    // Local personal use only: the owner's own Claude Code login, never a public deployment.
+    CLAUDE_SUBSCRIPTION_LOCAL_APPROVED: z.enum(["off", "on"]).default("off"),
+    CLAUDE_SUBSCRIPTION_MAX_REQUESTS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(30)
+      .default(0),
     LLM_MODEL: z.string().min(1).default("claude-opus-5-5"),
     LLM_FALLBACK_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
     // economy: every step uses LLM_FALLBACK_MODEL (ADR-018).
@@ -183,6 +197,22 @@ export const workerEnvSchema = z
         code: "custom",
         path: ["QLOO_MODE"],
         message: "Production requires live mode",
+      });
+    // Anthropic does not permit routing other users' requests through a personal plan.
+    if (
+      value.LLM_PROVIDER === "claude-subscription" &&
+      !["development", "test"].includes(value.APP_ENV)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["LLM_PROVIDER"],
+        message: "Claude subscription mode is local personal use only",
+      });
+    if (value.LLM_PROVIDER === "claude-subscription" && value.ANTHROPIC_API_KEY)
+      ctx.addIssue({
+        code: "custom",
+        path: ["ANTHROPIC_API_KEY"],
+        message: "Subscription mode must not run beside an API key",
       });
     // Scripted LLM output is test data; like fixtures it must never reach production users.
     if (value.APP_ENV === "production" && value.LLM_PROVIDER === "scripted") {
