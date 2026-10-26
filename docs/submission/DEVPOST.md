@@ -183,7 +183,7 @@ keys reach only the worker. PostgreSQL (Drizzle) stores experiments, evidence an
 - [ ] By Oct 29: final paid acceptance passed ([runbook](PRODUCTION_FIRST_RUN.md) §4); story sample featured (§5.1).
 - [ ] By Oct 29: four judge codes created, judging limits applied, `RUN_ACCESS=invite`, one code redeemed in a fresh browser (§5.2).
 - [ ] Fill `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_1–4]`, `[CODE_EXPIRY]`; paste the testing instructions into Devpost's testing field only.
-- [ ] Gallery: up to five screenshots (synthetic ones are in `docs/submission/gallery/`; real-data screenshots go on Devpost only). Video optional.
+- [x] Gallery: five real-data screenshots captured 2026-10-26 with captions ([DEMO_SCRIPT.md](DEMO_SCRIPT.md)); Qloo IDs redacted; delivered to the owner, not committed. **Owner:** upload them. Video optional; plan in the same file.
 - [ ] Built-with tags, team members, AI-assistance disclosure (Claude Code and Codex) reviewed.
 - [ ] On Oct 30 before 6 PM ET: rerun `node deploy/public-smoke.mjs <url>` and open the sample.
 - [ ] **Owner's final approval**, then submit before Oct 30, 11:45 PM ET.
@@ -191,6 +191,6 @@ keys reach only the worker. PostgreSQL (Drizzle) stores experiments, evidence an
 ## Owner-only fields and final actions
 
 - After the final acceptance run: fill https://p01--tessaloom--mpfcqkyl42yb.code.run, [RUN_DATE], [PRODUCTION_RESULT] and the access code(s), and add the public repository URL.
-- Gallery: up to five screenshots from [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Real-data screenshots are fine on Devpost but never in the repository ([rights review](DATA_RIGHTS_REVIEW.md)). A video is optional under the rules.
+- Gallery: the five captioned screenshots listed in [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Real-data screenshots are fine on Devpost but never in the repository ([rights review](DATA_RIGHTS_REVIEW.md)). A video is optional under the rules.
 - Confirm eligibility and the current Devpost form personally; review the AI-assistance disclosure (Claude Code and Codex).
 - Submit before **October 30, 2026, 11:45 PM ET** (October 31, 11:45 AM Beijing). Judging runs November 2–5.

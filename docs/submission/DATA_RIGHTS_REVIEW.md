@@ -24,7 +24,7 @@ This is an engineering reading of the published terms, not legal advice.
 | Hypotheses, premises, blueprint text, composite scores | **Clearly permitted** (Tessaloom/LLM output; Qloo-backed blocks cite evidence) | Shown, labelled interpretation/speculation |
 | Qloo popularity and affinity values, raw tag weights | **Unclear** (proprietary signals; display not addressed) | Excluded |
 | Qloo entity descriptions, images, external IDs, ISBNs, `akas`, snapshots | **Unclear**, likely Qloo or third-party content | Excluded |
-| Qloo entity and tag IDs | **Unclear**; not needed for display | Excluded |
+| Qloo entity and tag IDs | **Unclear**; not needed for display | Excluded from public pages; visible to signed-in users in the evidence trace (see below) |
 | Raw API responses | **Prohibited in a public repository**; not retained server-side either (`QLOO_RAW_RETENTION=off`) | Never stored or shown |
 | Pool relevance/novelty numbers | **Clearly permitted** (computed), but noise for readers | Excluded from the public story; shown in the studio |
 | Run IDs, workspace IDs, invocation IDs, tokens, costs, model traces | **Internal**, not Qloo data | Excluded (asserted by `tests/integration/m9-share-api.test.ts`) |
@@ -43,7 +43,8 @@ its limitations wording.
 | Qloo descriptions, disambiguation text, raw responses | Studio only: the entity-confirmation step shows Qloo's short description to the user choosing an entity | Never in the story, samples, share payloads or exports; raw responses never stored |
 | Qloo rankings as gradings ("ranked 1 of 6", "top quartile") | Evidence rationales | Shown as Tessaloom's rule outcome, with origin and date |
 | Qloo popularity and affinity values | Not displayed publicly | Excluded from every public payload and export (tests) |
-| Internal identifiers (Qloo IDs, run/workspace/invocation IDs) | Owner's private views only | Excluded from public payloads and **shared exports** (fixed 2026-10-26, test) |
+| Internal identifiers (run/workspace/invocation IDs) | Owner's private views only | Excluded from public payloads and **shared exports** (fixed 2026-10-26, test) |
+| Qloo entity IDs and tag URNs | Studio only (signed-in workspace, including judges with a code): the evidence drawer's fact pointer (`/results/0/entity_id = "…"`) and the trace dialog | Never in the story, samples, share payloads or exports. Disclosed in the [Qloo request](QLOO_PERMISSION_REQUEST.md); **redact in Devpost screenshots and video** (found 2026-10-26 while capturing the gallery) |
 | Third-party copyrighted media (cover art, posters, photos) | None | Not fetched or displayed; CSP `img-src 'self' data:` blocks external images |
 | Fonts | UI | Fraunces, Inter, IBM Plex Mono (SIL OFL), self-hosted at build |
 

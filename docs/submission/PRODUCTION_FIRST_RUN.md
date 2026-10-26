@@ -1,8 +1,9 @@
 # Production release and the final paid Claude acceptance
 
-**Status (2026-10-26): release and exposure done; paid steps prepared, not executed.** Production
-serves `51be618` on a public URL with `RUN_ACCESS=off`. No Anthropic key exists for this project,
-and no paid call has been made. Every step marked **OWNER** needs your explicit go-ahead. The paid
+**Status (2026-10-26): release, exposure and the zero-budget limits (§2.2) done; paid steps
+prepared, not executed.** Production serves `51be618` on a public URL with `RUN_ACCESS=off` and
+every LLM/Qloo budget pinned to `0`. No Anthropic key exists for this project, and no paid call
+has been made. Every step marked **OWNER** needs your explicit go-ahead. The paid
 Claude call is deliberately the **last** step.
 
 The local run on 2026-10-26 (live Qloo, Claude Sonnet 5.5 on the owner's subscription) proved the
@@ -21,8 +22,9 @@ public, read-only, real-data story sample.
 | Qloo readiness | `ready: true`, `endpointTrusted: true`, Harness `0.1.26` |
 | Public URL | **https://p01--tessaloom--mpfcqkyl42yb.code.run**, port `p01` public since ~12:24 UTC; public smoke 7/7 and Chromium/WebKit desktop/mobile checks pass |
 | Run access | **`off`**, from config group `tessaloom-run-access` (`printenv RUN_ACCESS` → `off`) |
-| LLM and budget variables | **All unset** (`printenv`, 2026-10-26): `LLM_PROVIDER`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_MODE`, every `*_LLM_USD`, `GLOBAL_DAILY_QLOO_CALLS`, `MAX_WORKING_RUNS`, `MAX_ACTIVE_RUNS_PER_WORKSPACE`, `WORKSPACE_DAILY_RUNS`. 0 variables named `ANTHROPIC*`/`CLAUDE_CODE*`. The code defaults therefore apply (next row) |
+| LLM and budget variables (before §2.2) | **All unset** (`printenv`, 2026-10-26): `LLM_PROVIDER`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_MODE`, every `*_LLM_USD`, `GLOBAL_DAILY_QLOO_CALLS`, `MAX_WORKING_RUNS`, `MAX_ACTIVE_RUNS_PER_WORKSPACE`, `WORKSPACE_DAILY_RUNS`. 0 variables named `ANTHROPIC*`/`CLAUDE_CODE*`. The code defaults therefore apply (next row) |
 | Code defaults that would apply | `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-opus-5-5`, `GLOBAL_DAILY_LLM_USD=15`, `WORKSPACE_DAILY_LLM_USD=3`, `EXPERIMENT_LLM_USD=5`, `GLOBAL_DAILY_QLOO_CALLS=300`, `MAX_WORKING_RUNS=6`, `MAX_ACTIVE_RUNS_PER_WORKSPACE=3`, `WORKSPACE_DAILY_RUNS=20` (`packages/config/env.ts`). Harmless while no key exists and run access is off, but **adding a key before the limits group (§2.2) would run Opus under $15/day caps** |
+| Limits group (§2.2) | **Applied 2026-10-26 12:54 UTC**: `tessaloom-llm-limits` (config, `tessaloom` only) = `llm-limits.closed.json`; restart completed 12:55 UTC on the same deployment (`51be618`). `printenv`: Sonnet 5.5 only, every `*_LLM_USD` = `0`, `GLOBAL_DAILY_QLOO_CALLS=0`, runs 1/1/1, `RUN_ACCESS=off`, 0 `ANTHROPIC*` names. `child_start`: the worker received the LLM/budget names, the web the run limits. New instance: Qloo `ready: true`, `llm: "unconfigured"`, 0 error lines; public smoke 7/7. The Qloo readiness probe does not use the daily quota, so `0` calls leaves it working |
 | Public samples | **0** |
 
 ## 1. What is verified before spending anything
@@ -110,9 +112,9 @@ All three pin `LLM_PROVIDER=anthropic`, `LLM_MODEL` = `LLM_FALLBACK_MODEL` = `cl
 `LLM_MODE=standard`, and turn subscription, DeepSeek and Gemini off explicitly. None holds a
 secret or `RUN_ACCESS`.
 
-1. Create the group with zero budgets:
+1. **Done 2026-10-26.** Create the group with zero budgets:
    `northflank create secret --project default --input "$(cat deploy/northflank-groups/llm-limits.closed.json)"`.
-2. Restart the service (Northflank → `tessaloom` → Restart), then verify without printing any
+2. **Done 2026-10-26.** Restart the service (Northflank → `tessaloom` → Restart, or `northflank restart service --project default --service tessaloom`), then verify without printing any
    secret: `northflank exec service --project default --service tessaloom --cmd "sh -c 'printenv LLM_MODEL GLOBAL_DAILY_LLM_USD RUN_ACCESS'"`
    → `claude-sonnet-5-5`, `0`, `off`. Status stays `llmConfigured: false`.
 3. To switch sets later, replace the group's variables (it holds only these, so a full
@@ -143,6 +145,18 @@ Precondition: §2.2 done, `printenv GLOBAL_DAILY_LLM_USD` → `0`.
    still `0` and `RUN_ACCESS` is still `off`, so nothing can spend yet.
 
 ## 4. Final paid acceptance (OWNER approves; run once, last)
+
+### Go / no-go gate (all must be true before step 1)
+
+- [x] §2.2 limits group exists with the closed set (verified 2026-10-26).
+- [ ] Console workspace `tessaloom` exists with a **$15/month** spend limit (owner).
+- [ ] Secret group `tessaloom-anthropic` (secret, `tessaloom` only) holds the key; after restart,
+      status `llmConfigured: true`, `llmModel: "claude-sonnet-5-5"`, and `printenv
+      GLOBAL_DAILY_LLM_USD` → `0` (§3 step 4).
+- [ ] Public smoke 7/7 and Qloo `ready: true` on the same day.
+- [ ] The owner's explicit written approval for **this one run** in chat, quoted in the evidence.
+
+Any unchecked box means no-go. Nothing in §4 runs without all five.
 
 ### The $0.50 guard, layer by layer
 
@@ -262,7 +276,7 @@ confirmed finished.
 1. ~~Merge, deploy, expose~~ (done: `51be618` public since 2026-10-26 ~12:24 UTC). ~~Make the
    repository public~~ (done 2026-10-26).
 2. Send the organizer question ([QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md)).
-3. Approve §2.2 (zero-budget limits group, free) and §3 (dedicated key, $15 Console limit).
+3. ~~Approve §2.2~~ (done 2026-10-26). Approve §3 (dedicated key, $15 Console limit).
 4. Approve §4: one paid acceptance (≈ $0.14, ≤ $0.50), **by Oct 29**.
 5. Approve §5.2 judge access, issued **by Oct 29** (before submission): 4 codes, $4/day app cap,
    $15 Console limit.

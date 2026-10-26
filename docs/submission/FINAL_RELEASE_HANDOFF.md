@@ -34,7 +34,10 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 | Judge access (interactive) | PREPARED | Runbook §5.2: 4 capped codes (14 days, 6 runs, $1 each) created **by Oct 29** so Devpost testing instructions work before the Oct 30 deadline and through Nov 5; `RUN_ACCESS=invite`, daily caps $4, Console limit $15 |
 | Qloo data rights | PREPARED / BLOCKED (organizer reply) | [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md): uncertain fields (popularity/affinity, descriptions, IDs, raw responses) absent from all public payloads and exports; question drafted |
 | GitHub publication | VERIFIED | **Public since 2026-10-26** after a final full-history audit ([PUBLIC_READINESS.md](PUBLIC_READINESS.md)): gitleaks clean, no PII or tokens, no Qloo payloads; one opaque Qloo-style fixture ID replaced in the tree. Logged-out 200, "MIT License" detected, homepage = demo URL, secret scanning and push protection on |
-| LLM and budget variables in production | VERIFIED unset → **fix prepared** | `printenv` shows every model/budget variable unset, so code defaults apply (Opus, $15/day, 20 runs/day). Harmless now (no key, `RUN_ACCESS=off`), but adding a key first would use them. Runbook §2.2 now pins limits with config group `tessaloom-llm-limits` **before** the key; payloads in `deploy/northflank-groups/`, checked by `tests/unit/northflank-groups.test.ts` |
+| LLM and budget variables in production | VERIFIED unset → **fixed: closed limits applied 12:54 UTC** | `printenv` shows every model/budget variable unset, so code defaults apply (Opus, $15/day, 20 runs/day). Harmless now (no key, `RUN_ACCESS=off`), but adding a key first would use them. Runbook §2.2 now pins limits with config group `tessaloom-llm-limits` **before** the key; payloads in `deploy/northflank-groups/`, checked by `tests/unit/northflank-groups.test.ts`. Applied: `printenv` shows Sonnet only, every budget `0`, Qloo calls `0`, `RUN_ACCESS=off`; restart on `51be618`, Qloo ready, 0 errors, public smoke 7/7 |
+| PR #21 | VERIFIED merged | `79d2d84` (merge commit) after 15/15 checks green on `71a1c9e`. Northflank built it (SUCCESS 12:59 UTC) but did not roll out: `deployedSHA` stays `51be618` (docs/tests only) |
+| Devpost gallery | PREPARED | Five real-data screenshots from the local run (web-only, no calls), Qloo IDs redacted, captions in [DEMO_SCRIPT.md](DEMO_SCRIPT.md); delivered to the owner, not committed |
+| In-app Qloo IDs | VERIFIED finding, disclosed | The studio evidence drawer and trace show the Qloo entity ID / tag URN behind each grading (signed-in users only; never in public payloads). Added to the Qloo request; redact in screenshots and video |
 | Devpost | PREPARED | [DEVPOST.md](DEVPOST.md): demo and repo links filled and verified; technical description; submission checklist; fallback testing text. Remaining placeholders `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_n]`, `[CODE_EXPIRY]`. Video optional; [script](DEMO_SCRIPT.md) ready |
 | Production inference config | VERIFIED unconfigured | No `LLM_PROVIDER`/key in the worker environment (`child_start` env names); status `llmConfigured:false` |
 | Paid model spending | VERIFIED **$0** | No Anthropic key exists for this project; no API calls made. Local acceptance used the owner's subscription ($0 API charge) |
@@ -44,7 +47,7 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 
 1. Send the Qloo request ([QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md)).
 2. ~~Make the GitHub repository public~~ (done 2026-10-26).
-3. Runbook §2.2: create `tessaloom-llm-limits` with zero budgets (free; one restart).
+3. ~~Runbook §2.2: zero-budget limits group~~ (done 2026-10-26 12:54 UTC, verified).
 4. Runbook §3: Console workspace, $15/month limit, key in secret group `tessaloom-anthropic`.
 5. **By Oct 29:** the single paid acceptance (§4). It creates the public story sample (§5.1).
 6. **By Oct 29:** the four judge codes, judging limits and `RUN_ACCESS=invite` (§5.2); redeem one.
