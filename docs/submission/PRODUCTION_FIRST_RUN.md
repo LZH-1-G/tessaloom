@@ -1,31 +1,29 @@
-# Production release and the final paid Claude acceptance (prepared, not executed)
+# Production release and the final paid Claude acceptance
 
-**Status: ready for owner approval. Nothing here has been executed in production.** No API key has
-been created, requested or configured, no production variable or port changed, and no paid call
-made. Every step marked **OWNER** needs your explicit go-ahead. The paid Claude call is
-deliberately the **last** step. Everything before it is free.
+**Status (2026-10-26): release and exposure done; paid steps prepared, not executed.** Production
+serves `51be618` on a public URL with `RUN_ACCESS=off`. No Anthropic key exists for this project,
+and no paid call has been made. Every step marked **OWNER** needs your explicit go-ahead. The paid
+Claude call is deliberately the **last** step.
 
 The local run on 2026-10-26 (live Qloo, Claude Sonnet 5.5 on the owner's subscription) proved the
 application path ([report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). Production repeats that
 scenario once through the official Anthropic API under a $0.50 ceiling. Its result becomes the
 public, read-only, real-data story sample.
 
-## 0. Production as verified (read-only, 2026-10-26 ~10:45 UTC)
+## 0. Production as verified (read-only, 2026-10-26)
 
 | Item | Observed (evidence) |
 | --- | --- |
-| Service | `default/tessaloom`, 1 instance, `nf-compute-20` (`northflank get service`) |
-| Deployed commit | **`a37afc6`** (PR #19 merge), deployment `6adf02088a11dc200a3ad9ee`, build SUCCESS, deployment COMPLETED 07:33 UTC |
-| Previous release (rollback) | `39c0fe5`, deployment `6aded5c0351e0f7052ed6dbd` |
-| Worker | `worker_queue_connection` verified (`databaseCreate: false`, `schemaCreate: false`), `worker_queues_started` with `llm: "unconfigured"`, `qlooMode: "live"` |
-| Qloo readiness | 39/39 probes 07:32–10:42 UTC: `ready: true`, `endpointTrusted: true`, Harness `0.1.26`, `probeFailure: null` |
-| Private smoke via port-forward (`--skipHostnames`) | `deploy/public-smoke.mjs` read-only checks **7/7 pass**; `/api/health/ready` 200; status `llmConfigured: false`, `llmModel: null`; HSTS, nonce CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies present; static assets 200 with immutable caching |
-| Public samples | **0** (`/api/v1/samples` → `{"items":[]}`) |
-| Run access | **`invite`**, not off: `RUN_ACCESS` is unset in the web environment, and `runAccessFor` defaults production to `invite`. Runs still cannot start without a redeemed, active grant, and with no key a run would stop at R1 (`LLM_NOT_CONFIGURED`) before any Qloo call. Set `RUN_ACCESS=off` explicitly before exposure (§2.1 step 6) |
-| Port `p01` (HTTP 3000) | **`public: false`** |
-
-**Remaining blockers for a public demo:** making port `p01` public (§2.1 steps 6–8), and the paid
-acceptance (§4), which creates the first real sample and allows judge access.
+| Service | `default/tessaloom`, 1 instance, `nf-compute-20` |
+| Deployed commit | **`51be618`** (PR #22 merge), manual rollout, deployment COMPLETED 12:22 UTC, `deployedSHA` = `buildSHA` |
+| Previous releases (rollback) | `a37afc6` (PR #19), and `39c0fe5`, deployment `6aded5c0351e0f7052ed6dbd` |
+| Worker | `worker_queue_connection` verified (`databaseCreate: false`), `worker_queues_started` with `llm: "unconfigured"`, `qlooMode: "live"` |
+| Qloo readiness | `ready: true`, `endpointTrusted: true`, Harness `0.1.26` |
+| Public URL | **https://p01--tessaloom--mpfcqkyl42yb.code.run**, port `p01` public since ~12:24 UTC; public smoke 7/7 and Chromium/WebKit desktop/mobile checks pass |
+| Run access | **`off`**, from config group `tessaloom-run-access` (`printenv RUN_ACCESS` → `off`) |
+| LLM and budget variables | **All unset** (`printenv`, 2026-10-26): `LLM_PROVIDER`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_MODE`, every `*_LLM_USD`, `GLOBAL_DAILY_QLOO_CALLS`, `MAX_WORKING_RUNS`, `MAX_ACTIVE_RUNS_PER_WORKSPACE`, `WORKSPACE_DAILY_RUNS`. 0 variables named `ANTHROPIC*`/`CLAUDE_CODE*`. The code defaults therefore apply (next row) |
+| Code defaults that would apply | `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-opus-5-5`, `GLOBAL_DAILY_LLM_USD=15`, `WORKSPACE_DAILY_LLM_USD=3`, `EXPERIMENT_LLM_USD=5`, `GLOBAL_DAILY_QLOO_CALLS=300`, `MAX_WORKING_RUNS=6`, `MAX_ACTIVE_RUNS_PER_WORKSPACE=3`, `WORKSPACE_DAILY_RUNS=20` (`packages/config/env.ts`). Harmless while no key exists and run access is off, but **adding a key before the limits group (§2.2) would run Opus under $15/day caps** |
+| Public samples | **0** |
 
 ## 1. What is verified before spending anything
 
@@ -92,35 +90,57 @@ starts 20/min). That's safe for cost and fine for judges, but one aggressive cli
 briefly throttle others. Raising it to `1` needs proof that Northflank's edge overwrites
 `X-Forwarded-For`; that's a post-exposure check, not a release blocker.
 
-### 2.2 Prepare the paid configuration without a key
+### 2.2 Pin the limits first, without a key (OWNER approves; free)
 
-Apply [`deploy/northflank.anthropic.env.example`](../../deploy/northflank.anthropic.env.example)
-with **`RUN_ACCESS=off`**. Without `ANTHROPIC_API_KEY` the gateway stays unconfigured, so this
-step still cannot spend. Differences from today's [`northflank.env.example`](../../deploy/northflank.env.example):
+Production sets none of the model or budget variables (§0), so this step must come **before**
+any key exists. Use a second config group, like `tessaloom-run-access`: it touches no existing
+variable, and deleting it is a clean rollback. Never edit the service's runtime environment
+through the API with a partial body: that endpoint replaces every variable.
 
-| Variable | Today | Final acceptance |
-| --- | --- | --- |
-| `LLM_PROVIDER` | `deepseek` | `anthropic` |
-| `LLM_MODEL` / `LLM_FALLBACK_MODEL` | (unset) | `claude-sonnet-5-5` / `claude-sonnet-5-5` |
-| `LLM_MODE` | `economy` | `standard` |
-| `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `0` | `0.50` |
-| `GLOBAL_DAILY_QLOO_CALLS` | `0` | `60` |
-| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `1` / `1` | unchanged |
-| `WORKSPACE_DAILY_RUNS` | `1` | **`2`**: exploration and blueprint composition are separate run admissions (with `1`, Compose is refused with `RUN_LIMIT`; tested) |
-| `RUN_ACCESS` | unset (= `invite` in production) | `off`; `invite` only during §4 and judging |
-| `CLAUDE_SUBSCRIPTION_LOCAL_APPROVED` / `_MAX_REQUESTS` | (unset) | `off` / `0`, explicit |
+Prepared payloads (validated against the real env schemas by
+`tests/unit/northflank-groups.test.ts`):
+
+| File | When | LLM $ global / workspace / experiment | Qloo calls/day | Working runs / active per workspace / runs per workspace per day |
+| --- | --- | --- | --- | --- |
+| [`llm-limits.closed.json`](../../deploy/northflank-groups/llm-limits.closed.json) | Before the key; after judging | 0 / 0 / 0 | 0 | 1 / 1 / 1 |
+| [`llm-limits.acceptance.json`](../../deploy/northflank-groups/llm-limits.acceptance.json) | §4, one paid run | 0.50 / 0.50 / 0.50 | 60 | 1 / 1 / 2 |
+| [`llm-limits.judging.json`](../../deploy/northflank-groups/llm-limits.judging.json) | §5.2, Oct 29 – Nov 5 | 4.00 / 1.00 / 1.00 | 400 | 2 / 1 / 6 |
+
+All three pin `LLM_PROVIDER=anthropic`, `LLM_MODEL` = `LLM_FALLBACK_MODEL` = `claude-sonnet-5-5`,
+`LLM_MODE=standard`, and turn subscription, DeepSeek and Gemini off explicitly. None holds a
+secret or `RUN_ACCESS`.
+
+1. Create the group with zero budgets:
+   `northflank create secret --project default --input "$(cat deploy/northflank-groups/llm-limits.closed.json)"`.
+2. Restart the service (Northflank → `tessaloom` → Restart), then verify without printing any
+   secret: `northflank exec service --project default --service tessaloom --cmd "sh -c 'printenv LLM_MODEL GLOBAL_DAILY_LLM_USD RUN_ACCESS'"`
+   → `claude-sonnet-5-5`, `0`, `off`. Status stays `llmConfigured: false`.
+3. To switch sets later, replace the group's variables (it holds only these, so a full
+   replacement is safe):
+   `node -e 'const g=require("./deploy/northflank-groups/llm-limits.acceptance.json");console.log(JSON.stringify({secrets:g.secrets}))' > /tmp/limits.json`,
+   then `northflank update secret --project default --secretId tessaloom-llm-limits --input "$(cat /tmp/limits.json)"`,
+   restart, and verify as in step 2.
 
 Keep `SESSION_SECRET` and `SHARE_TOKEN_PEPPER` unchanged; changing the pepper invalidates grants
-and shares.
+and shares. [`northflank.anthropic.env.example`](../../deploy/northflank.anthropic.env.example) shows
+the same values as a whole environment for reference; do not apply it as a runtime-env body.
 
-## 3. Anthropic Console (OWNER, only when approving the final step)
+## 3. Anthropic Console and key (OWNER, only when approving the final step)
 
-1. Create a **dedicated workspace** for Tessaloom and a key in it. The key is never pasted into
-   chat, the repo, build arguments, logs or a shared secret group.
-2. Set a **workspace spend limit** (for example $5/month) as an independent backstop. The
-   application ledger estimates cost; it is not a provider-side guarantee.
-3. Add the key as `ANTHROPIC_API_KEY` in this service's **restricted runtime secrets**, then
-   restart. Expect `llmConfigured: true` and `llmModel: claude-sonnet-5-5`, with no spend.
+Precondition: §2.2 done, `printenv GLOBAL_DAILY_LLM_USD` → `0`.
+
+1. In the [Claude Console](https://console.anthropic.com), create a **dedicated workspace**
+   `tessaloom` and one API key in it. The key is never pasted into chat, the repo, build
+   arguments, logs or a shared secret group.
+2. Set that workspace's **spend limit to $15/month** (Settings → Limits). It is the provider-side
+   ceiling above every application cap ($0.50 for §4, $4/day during judging). The application
+   ledger estimates cost; the Console limit is the independent guarantee.
+3. In Northflank → Secret groups → **Create**, type **Secret**, name `tessaloom-anthropic`,
+   restricted to the `tessaloom` service only, one variable `ANTHROPIC_API_KEY`. Paste the key
+   only in that UI field. Restart.
+4. Verify with zero spend: status `llmConfigured: true` and `llmModel: "claude-sonnet-5-5"`
+   (`curl -s https://p01--tessaloom--mpfcqkyl42yb.code.run/api/v1/system/status`). Budgets are
+   still `0` and `RUN_ACCESS` is still `off`, so nothing can spend yet.
 
 ## 4. Final paid acceptance (OWNER approves; run once, last)
 
@@ -149,7 +169,8 @@ reservation and the run stops early. It never overspends to finish.
 
 1. Private terminal, recording off, in a Northflank job or one-off command with the service's
    runtime env: `node packages/db/dist/admin.mjs grant create --label final-acceptance --days 1
-   --runs 2 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite` in the config group
+   --runs 2 --usd 0.50`. Keep the code private. Switch `tessaloom-llm-limits` to
+   `llm-limits.acceptance.json` (§2.2 step 3). Set `RUN_ACCESS=invite` in the config group
    `tessaloom-run-access` (it holds only this variable, so replacing its contents is safe:
    `northflank update secret --project default --secretId tessaloom-run-access` with
    `{"secrets":{"variables":{"RUN_ACCESS":"invite"}}}`). Restart the service, then check
@@ -168,7 +189,8 @@ reservation and the run stops early. It never overspends to finish.
    under this approval.
 6. Select the top supported hypothesis → **Compose blueprint** → **Recurring series** →
    **Compose blueprint**.
-7. Immediately: `grant revoke <id>`, `RUN_ACCESS=off` (same config group), `spend today`, and compare with the Console
+7. Immediately: `grant revoke <id>`, `RUN_ACCESS=off` (same config group), switch the limits
+   back to `llm-limits.closed.json`, restart, then `spend today` and compare with the Console
    usage page.
 
 **Stop conditions:** a refused reservation, provider auth/4xx error, unexpected model, more than 60
@@ -188,8 +210,10 @@ kept out of the repository ([rights review](DATA_RIGHTS_REVIEW.md)). Save the re
 `docs/evidence/production-acceptance-<date>.json` with a short report. Keep it separate from the
 local subscription results.
 
-**Rollback:** `RUN_ACCESS=off`, budgets to `0`, remove `ANTHROPIC_API_KEY`, revoke grants. Stored
-results stay readable. Restoring `northflank.env.example` returns the service to zero budget.
+**Rollback:** `RUN_ACCESS=off` (config group), limits back to `llm-limits.closed.json`, revoke
+grants (`admin.mjs grant revoke <id>`), and delete the `tessaloom-anthropic` group (or revoke the
+key in the Console, which takes effect even if Northflank is unreachable). Restart. Stored results
+stay readable.
 
 ## 5. Public demo and judge access (after §4 passes)
 
@@ -212,10 +236,10 @@ ET)** and stay valid **through Nov 5** with margin.
 
 | When | Action |
 | --- | --- |
-| By **Oct 29** | §4 final acceptance passed and reviewed (the key must exist for codes to work). Create the 4 codes below with `--days 14` (valid until about Nov 12). Set `RUN_ACCESS=invite` and the caps below. In a fresh browser, **redeem one code** on the home page and confirm "Demo access active". Redemption starts no run and costs nothing. |
+| By **Oct 29** | §4 final acceptance passed and reviewed (the key must exist for codes to work). Create the 4 codes below with `--days 14` (valid until about Nov 12). Switch `tessaloom-llm-limits` to `llm-limits.judging.json` (§2.2 step 3), set `RUN_ACCESS=invite`, restart, and verify with `printenv`. In a fresh browser, **redeem one code** on the home page and confirm "Demo access active". Redemption starts no run and costs nothing. |
 | By **Oct 30, 6 PM ET** | Put the codes, their expiry and the steps in Devpost's testing instructions. Recheck the public smoke and the sample. Submit before **11:45 PM ET**. |
 | **Nov 2–5** (judging) | Daily: `spend today`, `grant list`, Console usage, `/api/health/ready`, Qloo readiness. Revoke and replace a code that spends abnormally (update Devpost if the form still allows edits; otherwise rely on the caps). |
-| After judging | Revoke all codes, `RUN_ACCESS=off`, budgets `0`, remove the key. The read-only story sample can stay featured. |
+| After judging | Revoke all codes, `RUN_ACCESS=off`, limits back to `llm-limits.closed.json`, delete `tessaloom-anthropic` and revoke the key in the Console. The read-only story sample can stay featured. |
 
 | Setting | Value | Why |
 | --- | --- | --- |
@@ -235,8 +259,11 @@ confirmed finished.
 
 ## 6. Open owner decisions
 
-1. ~~Merge and deploy~~ (done: production runs `a37afc6`). Make port `p01` public (§2.1, steps 6–8).
-2. Approve §3–§4: dedicated key, Console limit, one paid acceptance (≈ $0.14, ≤ $0.50).
-3. Send the organizer clarification in [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md).
-4. Approve §5.2 judge access, issued **by Oct 29** (before submission), with up to $4/day and $15 total at the Console limit.
-5. Make the GitHub repository public; submit on Devpost before Oct 30, 11:45 PM ET.
+1. ~~Merge, deploy, expose~~ (done: `51be618` public since 2026-10-26 ~12:24 UTC). ~~Make the
+   repository public~~ (done 2026-10-26).
+2. Send the organizer question ([QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md)).
+3. Approve §2.2 (zero-budget limits group, free) and §3 (dedicated key, $15 Console limit).
+4. Approve §4: one paid acceptance (≈ $0.14, ≤ $0.50), **by Oct 29**.
+5. Approve §5.2 judge access, issued **by Oct 29** (before submission): 4 codes, $4/day app cap,
+   $15 Console limit.
+6. Fill the Devpost placeholders and approve submission before Oct 30, 11:45 PM ET.

@@ -53,7 +53,10 @@ follows the same rule: no raw responses are retained.
 
 ## Repository audit (going public)
 
-- No real Qloo entity IDs are tracked. The search for Qloo-style uppercase UUIDs found none.
+- No real Qloo entity IDs are tracked. The 2026-10-26 full-history search for uppercase UUIDs found
+  only synthetic values, plus one opaque Qloo-style ID in an early test fixture (commit `408c148`).
+  It was replaced in the tree with `AAAAAAAA-…`. History keeps the bare string with no name, score
+  or other response field attached; it is not rewritten.
 - Tag URNs in tests are format examples (`genre:media:mystery`, `genre:music:pop`), not response data.
 - `docs/research/QLOO_V1_VALIDATION.md` records API behaviour: shapes, counts, one query input and
   qualitative outcomes. No payloads, IDs, scores or descriptions. **Low risk; keep.**

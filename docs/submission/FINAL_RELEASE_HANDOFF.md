@@ -1,4 +1,4 @@
-# Final release handoff — 2026-10-26 (updated ~12:30 UTC)
+# Final release handoff — 2026-10-26 (updated after repository publication)
 
 Legend: **VERIFIED** (observed, with evidence) · **PREPARED** (ready, not executed) · **BLOCKED**
 (needs an approval or an external action) · **NOT EXECUTED** (deliberately not run).
@@ -10,7 +10,7 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| Git: `main` | VERIFIED | `51be618` = PR #22 merge commit (merged 12:18 UTC, pinned to verified head `0ef7b4e`). PR #21 (docs only) open, not merged |
+| Git: `main` | VERIFIED | `51be618` = PR #22 merge commit (merged 12:18 UTC, pinned to verified head `0ef7b4e`). PR #21 carries docs, one test fixture change, a new unit test and the prepared limit groups; no runtime code, so merging needs no rollout |
 | CI on PR #22 | VERIFIED | Head `0ef7b4e`: push run all success; pull_request run attempt 1 hung in `playwright install` for 30 min before any test, was cancelled and re-run, and attempt 2 passed every job (e2e, integration, docker, lint-typecheck, unit, security; CodeQL skipped while private). Zero non-green checks at merge |
 | Northflank build | VERIFIED | Build `spotted-self-1077` for `51be618` SUCCESS 12:20 UTC |
 | Production deployment | VERIFIED: **`51be618`** | Manual rollout of exactly `51be618` (`update service deployment`, `buildSHA` pinned); deployment COMPLETED 12:22 UTC; `deployedSHA` = `buildSHA` = `51be618` |
@@ -33,28 +33,31 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 | Public story sample | PREPARED / BLOCKED | Feature built and tested (Chromium + WebKit). Production has **0 samples**; the first comes from the paid acceptance run |
 | Judge access (interactive) | PREPARED | Runbook §5.2: 4 capped codes (14 days, 6 runs, $1 each) created **by Oct 29** so Devpost testing instructions work before the Oct 30 deadline and through Nov 5; `RUN_ACCESS=invite`, daily caps $4, Console limit $15 |
 | Qloo data rights | PREPARED / BLOCKED (organizer reply) | [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md): uncertain fields (popularity/affinity, descriptions, IDs, raw responses) absent from all public payloads and exports; question drafted |
-| GitHub publication | PREPARED | [PUBLIC_READINESS.md](PUBLIC_READINESS.md): history clean, no secrets/PII/Qloo data, MIT detected. Visibility change awaits approval |
-| Devpost | PREPARED | [DEVPOST.md](DEVPOST.md) with compliance matrix; placeholders `[PUBLIC_URL]`, `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_n]`, `[CODE_EXPIRY]`. Video optional; [script](DEMO_SCRIPT.md) ready |
+| GitHub publication | VERIFIED | **Public since 2026-10-26** after a final full-history audit ([PUBLIC_READINESS.md](PUBLIC_READINESS.md)): gitleaks clean, no PII or tokens, no Qloo payloads; one opaque Qloo-style fixture ID replaced in the tree. Logged-out 200, "MIT License" detected, homepage = demo URL, secret scanning and push protection on |
+| LLM and budget variables in production | VERIFIED unset → **fix prepared** | `printenv` shows every model/budget variable unset, so code defaults apply (Opus, $15/day, 20 runs/day). Harmless now (no key, `RUN_ACCESS=off`), but adding a key first would use them. Runbook §2.2 now pins limits with config group `tessaloom-llm-limits` **before** the key; payloads in `deploy/northflank-groups/`, checked by `tests/unit/northflank-groups.test.ts` |
+| Devpost | PREPARED | [DEVPOST.md](DEVPOST.md): demo and repo links filled and verified; technical description; submission checklist; fallback testing text. Remaining placeholders `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_n]`, `[CODE_EXPIRY]`. Video optional; [script](DEMO_SCRIPT.md) ready |
 | Production inference config | VERIFIED unconfigured | No `LLM_PROVIDER`/key in the worker environment (`child_start` env names); status `llmConfigured:false` |
 | Paid model spending | VERIFIED **$0** | No Anthropic key exists for this project; no API calls made. Local acceptance used the owner's subscription ($0 API charge) |
-| Final paid acceptance | NOT EXECUTED | Runbook §3–§4: dedicated Console workspace + key, $15 limit, one Spirited Away + Joe Hisaishi run, ≈ $0.14 expected, ≤ $0.50 ledger, evidence via `admin.mjs report project` |
+| Final paid acceptance | NOT EXECUTED | Runbook §2.2–§4: zero-budget limits group, then dedicated Console workspace + key with a $15 limit, then one Spirited Away + Joe Hisaishi run, ≈ $0.14 expected, ≤ $0.50 ledger, evidence via `admin.mjs report project` |
 
 ## Approvals needed, in order
 
 1. Send the Qloo request ([QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md)).
-2. Make the GitHub repository public.
-3. **By Oct 29:** dedicated Anthropic key with a Console spend limit, then the single paid
-   acceptance (runbook §3–§4, with `RUN_ACCESS=invite` only during the run). This creates the
-   public story sample (§5.1).
-4. **By Oct 29:** the four judge codes, `RUN_ACCESS=invite` and caps (§5.2); verify one redemption.
-5. **By Oct 30, 11:45 PM ET:** fill the Devpost placeholders and submit.
-6. Merge PR #21 (docs only) when convenient; rollouts stay manual.
+2. ~~Make the GitHub repository public~~ (done 2026-10-26).
+3. Runbook §2.2: create `tessaloom-llm-limits` with zero budgets (free; one restart).
+4. Runbook §3: Console workspace, $15/month limit, key in secret group `tessaloom-anthropic`.
+5. **By Oct 29:** the single paid acceptance (§4). It creates the public story sample (§5.1).
+6. **By Oct 29:** the four judge codes, judging limits and `RUN_ACCESS=invite` (§5.2); redeem one.
+7. **By Oct 30, 11:45 PM ET:** fill the Devpost placeholders, then final approval to submit.
 
 ## Rollback
 
 - **Code:** revert the merge commit on `main` (`git revert -m 1 <sha>`), or redeploy deployment
   `6aded5c0351e0f7052ed6dbd` (`39c0fe5`) from the Northflank UI. No migrations since `39c0fe5`.
 - **Exposure:** set port `p01` back to private (`update service ports` with `public:false`, same port definition).
-- **Run access:** delete config group `tessaloom-run-access` to return to the unset default (`invite`), or change its value.
-- **Spending:** `RUN_ACCESS=off`, budgets `0`, revoke grants (`admin.mjs grant revoke`), remove
-  `ANTHROPIC_API_KEY`, and check `spend today` against the Console.
+- **Run access:** set `RUN_ACCESS=off` in config group `tessaloom-run-access`. Do not delete the group: unset means `invite` in production.
+- **Spending:** `RUN_ACCESS=off`, `tessaloom-llm-limits` back to `llm-limits.closed.json`, revoke
+  grants (`admin.mjs grant revoke`), delete secret group `tessaloom-anthropic` and revoke the key
+  in the Console, restart, then check `spend today` against the Console.
+- **Repository:** `gh repo edit LZH-1-G/tessaloom --visibility private --accept-visibility-change-consequences`
+  (stars and forks are lost; forks made while public stay public).

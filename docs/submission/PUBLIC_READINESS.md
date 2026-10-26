@@ -1,6 +1,6 @@
 # Public repository readiness audit
 
-Audit date: 2026-10-24. Repository visibility has not been changed. Public release still requires owner approval and review of historical documentation/data rights.
+Audit date: 2026-10-24; final full-history audit 2026-10-26. **The repository is public since 2026-10-26** (owner-approved after the audit below passed).
 
 ## Source and evidence integrity
 
@@ -43,5 +43,6 @@ The MIT license covers Tessaloom's original source. Keep dependency notices in i
 - [x] No debug artifacts tracked (`test-results/`, `coverage/`, logs, dumps, `.env` files ignored).
 - [x] MIT `LICENSE` at the root; GitHub already detects "MIT License" (verified via `gh repo view`).
 - [x] README describes the verified state, setup from a clean checkout (fixture mode, no keys), live-mode variables, and the verification commands. CI covers lint/typecheck, unit, integration, Chromium/WebKit E2E, security (audit, gitleaks, osv-scanner, bundle scan) and the Docker image smoke on Linux AMD64. `main` at `a37afc6` is fully green.
-- [ ] **Owner:** make the repository public, then confirm the License appears in the About section for a logged-out visitor and that README links resolve. CodeQL starts automatically once public.
+- [x] Final audit 2026-10-26 (all refs): gitleaks clean; no emails, tokens or private keys; the only uppercase UUIDs are synthetic (`1111…`, `AAAA…`) plus one opaque Qloo-style ID in an old test fixture (`408c148`, replaced in the tree by a synthetic value; no name, score or other response data attached; history not rewritten). Installed licenses: MIT 426, Apache-2.0 32, ISC 28, BSD 14, MPL-2.0 6, plus single LGPL-3.0 (sharp's libvips binary, not vendored), CC-BY-4.0, Python-2.0, 0BSD, BlueOak, Unlicense, CC0; the Claude Agent SDK (Anthropic terms) is a local-only dev dependency, not in the image.
+- [x] **Made public 2026-10-26.** Logged-out view returns 200; GitHub detects "MIT License"; homepage set to the demo URL; secret scanning and push protection enabled. CodeQL runs on the next push.
 - [ ] Review final deployment-image dependency notices if distributing that image publicly (not required for source publication).

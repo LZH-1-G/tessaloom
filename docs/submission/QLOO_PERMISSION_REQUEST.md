@@ -41,7 +41,9 @@ access codes, which makes Qloo calls with our event key. Is that within the key'
 and quota?
 
 Thank you!
-— LZH-1-G (Tessaloom; public repository and demo links to follow)
+— LZH-1-G (Tessaloom)
+Demo: https://p01--tessaloom--mpfcqkyl42yb.code.run
+Code: https://github.com/LZH-1-G/tessaloom
 
 ---
 
