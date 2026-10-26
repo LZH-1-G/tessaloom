@@ -881,6 +881,174 @@ export async function setSampleFeatured(
   return rows.length > 0;
 }
 
+/** Public projection of one blueprint: no invocation ids (the trace needs a workspace). */
+async function sharedBlueprint(
+  db: Executor,
+  bp: typeof experienceBlueprints.$inferSelect,
+) {
+  const d = await blueprintDetail(db, bp);
+  return {
+    format: d.blueprint.format,
+    status: d.blueprint.status,
+    hypotheses: d.hypotheses.map((h) => ({
+      title: h!.title,
+      status: h!.status,
+    })),
+    revision: d.current
+      ? {
+          revisionNumber: d.current.revisionNumber,
+          author: d.current.author,
+          createdAt: d.current.createdAt,
+          content: d.current.content,
+          traceabilityReport: d.current.traceabilityReport,
+        }
+      : null,
+    appendix: d.appendix.map((a) => {
+      const shared: Partial<typeof a> = { ...a };
+      delete shared.toolInvocationId;
+      return shared;
+    }),
+  };
+}
+
+/**
+ * The read-only story of a project's main experiment for project shares and demo samples:
+ * brief → selected interests → discovery → bridges → hypotheses with evidence → blueprint.
+ * Public fields only. Excluded on purpose: Qloo ids, entity descriptions/snapshots, Qloo
+ * popularity/affinity values, pool scores, locality and notes, run/usage/cost/invocation
+ * metadata and workspace identifiers. Evidence rationales are Tessaloom's deterministic
+ * gradings of Qloo results and keep their origin and retrieval date.
+ */
+async function projectStory(
+  db: Executor,
+  workspaceId: string,
+  exps: { id: string; kind: string; createdAt: Date }[],
+  bps: { id: string; experimentId: string; updatedAt: Date | string }[],
+) {
+  // Tell the story of the experiment behind the latest blueprint (a What-if branch keeps its
+  // own copy of the discovery); without a blueprint, the latest root experiment.
+  const storyBlueprint = bps[0];
+  const root =
+    (storyBlueprint &&
+      exps.find((e) => e.id === storyBlueprint.experimentId)) ??
+    [...exps].reverse().find((e) => e.kind === "ROOT");
+  if (!root) return null;
+  const view = await experimentView(db, workspaceId, root.id);
+  const brief = view.brief?.content as
+    | {
+        title: string;
+        challenge: string;
+        interests: { text: string; domainHint?: string }[];
+        venue: { type: string; capacity?: number };
+        constraints: { budgetBand?: string; durationMinutes?: number };
+        goals: string[];
+      }
+    | undefined;
+  const byId = new Map(view.entities.map((e) => [e.id, e]));
+  const entity = (id: string) => {
+    const e = byId.get(id);
+    return e ? { name: e.name, domain: e.domain ?? e.kind } : null;
+  };
+  const threads = view.relations.filter((r) => r.kind === "THREAD");
+  const threadDomains = new Map<string, number>();
+  const seedsOf = new Map<string, Set<string>>();
+  for (const t of threads) {
+    const domain = byId.get(t.toEntityId)?.domain ?? "other";
+    threadDomains.set(domain, (threadDomains.get(domain) ?? 0) + 1);
+    const seeds = seedsOf.get(t.toEntityId) ?? new Set<string>();
+    seeds.add(t.fromEntityId);
+    seedsOf.set(t.toEntityId, seeds);
+  }
+  const [bpRow] = storyBlueprint
+    ? await db
+        .select()
+        .from(experienceBlueprints)
+        .where(eq(experienceBlueprints.id, storyBlueprint.id))
+    : [];
+  const carried = new Set(bpRow?.hypothesisIds ?? []);
+  const origins = new Set(
+    view.hypotheses.flatMap((h) =>
+      h.evidence.map((e) => e.dataOrigin).filter(Boolean),
+    ),
+  );
+  return {
+    fromBranch: root.kind === "BRANCH",
+    // Synthetic data is decided by the experiment's mode, never by the cache origin of reuse.
+    fixture:
+      view.experiment.mode === "fixture" ||
+      view.hypotheses.some((h) =>
+        h.evidence.some((e) => e.provenanceClass === "DEVELOPMENT_FIXTURE"),
+      ),
+    brief: brief
+      ? {
+          title: brief.title,
+          challenge: brief.challenge,
+          interests: brief.interests.map((i) => i.text),
+          venue: { type: brief.venue.type, capacity: brief.venue.capacity },
+          budgetBand: brief.constraints.budgetBand ?? null,
+          durationMinutes: brief.constraints.durationMinutes ?? null,
+          goals: brief.goals,
+        }
+      : null,
+    seeds: view.seeds
+      .map((s) => entity(s.entityId))
+      .filter((e): e is { name: string; domain: string } => e !== null),
+    discovery: {
+      threadResults: threads.length,
+      byDomain: [...threadDomains].map(([domain, count]) => ({
+        domain,
+        count,
+      })),
+      inMultipleThreads: [...seedsOf.values()].filter((s) => s.size > 1).length,
+      bridgeCandidates: view.pool.length,
+      bridges: view.pool
+        .filter((c) => c.selected)
+        .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+        .map((c) =>
+          c.elementEntityIds
+            .map(entity)
+            .filter((e): e is { name: string; domain: string } => e !== null),
+        ),
+    },
+    // The chosen hypothesis leads, then the rest by composite score.
+    hypotheses: view.hypotheses
+      .filter((h) => !h.retired)
+      .sort(
+        (a, b) =>
+          Number(carried.has(b.id)) - Number(carried.has(a.id)) ||
+          (b.compositeScore ?? -1) - (a.compositeScore ?? -1),
+      )
+      .map((h) => ({
+        title: h.title,
+        premise: h.premise,
+        status: h.status,
+        compositeScore: h.compositeScore,
+        carriedToBlueprint: carried.has(h.id),
+        elements: h.elements
+          .map((el) => entity(el.entityId))
+          .filter((e): e is { name: string; domain: string } => e !== null),
+        claims: h.claims.map((c) => {
+          const ev = [...h.evidence].reverse().find((e) => e.claimId === c.id);
+          return {
+            statement: c.statement,
+            stance: c.currentStance,
+            evidence: ev
+              ? {
+                  stance: ev.stance,
+                  rationale: ev.rationale,
+                  provenanceClass: ev.provenanceClass,
+                  dataOrigin: ev.dataOrigin,
+                  retrievedAt: ev.retrievedAt,
+                }
+              : null,
+          };
+        }),
+      })),
+    dataOrigins: [...origins],
+    blueprint: bpRow ? await sharedBlueprint(db, bpRow) : null,
+  };
+}
+
 async function sharedViewOfLink(
   db: Executor,
   link: typeof shareLinks.$inferSelect,
@@ -904,33 +1072,7 @@ async function sharedViewOfLink(
       .from(experienceBlueprints)
       .where(eq(experienceBlueprints.id, link.targetId));
     if (!bp) return null;
-    const d = await blueprintDetail(db, bp);
-    return {
-      ...base,
-      blueprint: {
-        format: d.blueprint.format,
-        status: d.blueprint.status,
-        hypotheses: d.hypotheses.map((h) => ({
-          title: h!.title,
-          status: h!.status,
-        })),
-        revision: d.current
-          ? {
-              revisionNumber: d.current.revisionNumber,
-              author: d.current.author,
-              createdAt: d.current.createdAt,
-              content: d.current.content,
-              traceabilityReport: d.current.traceabilityReport,
-            }
-          : null,
-        // Shared payloads carry no invocation ids (the trace needs a workspace).
-        appendix: d.appendix.map((a) => {
-          const shared: Partial<typeof a> = { ...a };
-          delete shared.toolInvocationId;
-          return shared;
-        }),
-      },
-    };
+    return { ...base, blueprint: await sharedBlueprint(db, bp) };
   }
   if (link.scope === "experiment") {
     const [e] = await db
@@ -995,6 +1137,7 @@ async function sharedViewOfLink(
   ]);
   return {
     ...base,
+    story: await projectStory(db, project!.workspaceId, exps, bps),
     overview: {
       // Overview payloads omit individual evidence; retain the fixture marker so
       // the reader banner and production firewall cannot lose it in projection.

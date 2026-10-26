@@ -279,6 +279,56 @@ describe("M9 share links (SECURITY §4.3, TEST_PLAN §9)", () => {
     expect(await unknown.text()).toContain("This link is no longer active.");
   });
 
+  it("serves project shares as a read-only story without ids or raw Qloo values", async () => {
+    const { c, projectId, experimentId, blueprintId } =
+      await composedBlueprint();
+    const created = await postShareLink(
+      s,
+      c.post(`/api/v1/projects/${projectId}/share-links`, {
+        scope: "project",
+        targetId: projectId,
+        expiresInDays: 30,
+      }),
+      { projectId },
+    );
+    expect(created.status).toBe(201);
+    const token = (await json<{ url: string }>(created)).url.split("/").at(-1)!;
+    const payload = await json<{
+      story: {
+        fixture: boolean;
+        brief: { title: string; interests: string[] } | null;
+        seeds: { name: string; domain: string }[];
+        discovery: { threadResults: number; bridges: unknown[][] };
+        hypotheses: {
+          carriedToBlueprint: boolean;
+          claims: { evidence: { provenanceClass: string } | null }[];
+        }[];
+        blueprint: { revision: unknown } | null;
+      };
+    }>(await getShared(s, shareReq(token), { token }));
+    const { story } = payload;
+    expect(story.brief?.interests.length).toBeGreaterThanOrEqual(2);
+    expect(story.seeds.length).toBeGreaterThanOrEqual(2);
+    expect(story.discovery.threadResults).toBeGreaterThan(0);
+    expect(story.discovery.bridges.length).toBeGreaterThan(0);
+    expect(story.hypotheses[0]!.carriedToBlueprint).toBe(true);
+    expect(
+      story.hypotheses.flatMap((h) => h.claims).some((cl) => cl.evidence),
+    ).toBe(true);
+    expect(story.blueprint?.revision).toBeTruthy();
+    // Fixture-derived content keeps its marker for the banner and the production firewall.
+    expect(JSON.stringify(story)).toContain("DEVELOPMENT_FIXTURE");
+    expect(story.fixture).toBe(true);
+
+    const text = JSON.stringify(payload);
+    for (const id of [c.workspaceId, projectId, experimentId, blueprintId])
+      expect(text).not.toContain(id);
+    // No identifier, raw Qloo value or usage field appears as a key anywhere in the payload.
+    expect(text).not.toMatch(
+      /"(toolInvocationId|runId|workspaceId|projectId|experimentId|qlooId|snapshot|popularity|affinity|disambiguation|localityText|notes|costUsd|inputTokens|outputTokens)":/,
+    );
+  });
+
   it("expires links, scopes experiment links, and rate-limits lookups", async () => {
     const { c, projectId, experimentId } = await composedBlueprint();
     const created = await json<{ shareLinkId: string; url: string }>(
