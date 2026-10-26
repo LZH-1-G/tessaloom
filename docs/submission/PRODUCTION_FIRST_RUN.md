@@ -193,12 +193,22 @@ today, so this sample only exists after §4.
 ### 5.2 Interactive judge access, Nov 2–5, 2026 (required by the rules)
 
 The rules require a functional demo that judges can test, with credentials in the testing
-instructions if access is restricted. The read-only story alone is **not** enough. Plan, to apply
-on Nov 1 after §4 passes and its real cost is reviewed:
+instructions if access is restricted. The read-only story alone is **not** enough. The codes and
+testing instructions must be **ready and working before the submission deadline (Oct 30, 11:45 PM
+ET)** and stay valid **through Nov 5** with margin.
+
+**Schedule**
+
+| When | Action |
+| --- | --- |
+| By **Oct 29** | §4 final acceptance passed and reviewed (the key must exist for codes to work). Create the 4 codes below with `--days 14` (valid until about Nov 12). Set `RUN_ACCESS=invite` and the caps below. In a fresh browser, **redeem one code** on the home page and confirm "Demo access active". Redemption starts no run and costs nothing. |
+| By **Oct 30, 6 PM ET** | Put the codes, their expiry and the steps in Devpost's testing instructions. Recheck the public smoke and the sample. Submit before **11:45 PM ET**. |
+| **Nov 2–5** (judging) | Daily: `spend today`, `grant list`, Console usage, `/api/health/ready`, Qloo readiness. Revoke and replace a code that spends abnormally (update Devpost if the form still allows edits; otherwise rely on the caps). |
+| After judging | Revoke all codes, `RUN_ACCESS=off`, budgets `0`, remove the key. The read-only story sample can stay featured. |
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Grants | **4 codes** (`judge-1` … `judge-4`): `--days 7 --runs 6 --usd 1.00` | 6 runs = 3 full workflows (exploration + composition each), ~$0.14 each at measured tokens. 7 days from Nov 1 covers Nov 2–5 with margin. Each code is capped for its lifetime |
+| Grants | **4 codes** (`judge-1` … `judge-4`): `--days 14 --runs 6 --usd 1.00`, created by Oct 29 | 6 runs = 3 full workflows (exploration + composition each), ~$0.14 each at measured tokens. 14 days from Oct 29 covers submission, judging (Nov 2–5) and delays. Each code is capped for its whole lifetime, and a copied code shares that cap |
 | `RUN_ACCESS` | `invite` | Anonymous visitors can read samples but cannot start runs |
 | `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `4.00` / `1.00` / `1.00` | All four grants fit in one UTC day; one experiment cannot exceed a grant |
 | `WORKSPACE_DAILY_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `6` / `1` | Matches the grant; one active run per judge |
@@ -217,5 +227,5 @@ confirmed finished.
 1. ~~Merge and deploy~~ (done: production runs `a37afc6`). Make port `p01` public (§2.1, steps 6–8).
 2. Approve §3–§4: dedicated key, Console limit, one paid acceptance (≈ $0.14, ≤ $0.50).
 3. Send the organizer clarification in [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md).
-4. Approve §5.2 judge access, with up to $4/day and $15 total at the Console limit.
+4. Approve §5.2 judge access, issued **by Oct 29** (before submission), with up to $4/day and $15 total at the Console limit.
 5. Make the GitHub repository public; submit on Devpost before Oct 30, 11:45 PM ET.

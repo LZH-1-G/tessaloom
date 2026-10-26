@@ -70,7 +70,11 @@ but the guide's "public repository" rule shows Qloo is sensitive to bulk redistr
 screenshots of the in-app story, which already exclude every **Unclear** field. Do not add
 data exports or raw JSON.
 
-## Organizer clarification (send on Discord #api-help, or email via Devpost)
+## Organizer clarification
+
+The final, ready-to-send version is [QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md). The earlier short draft below is kept for reference.
+
+### Earlier draft
 
 > Hi — Tessaloom (Qloo Agentic Hackathon). Our public demo shows a read-only example produced by
 > the app: entity names and types returned by Qloo, our own rule-based gradings of Qloo results

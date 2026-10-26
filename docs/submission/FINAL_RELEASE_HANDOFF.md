@@ -24,7 +24,7 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 | Full-workflow run admissions | VERIFIED defect, FIXED in runbook | Composition is a second run admission; `WORKSPACE_DAILY_RUNS=1` / `--runs 1` would refuse Compose (`429 RUN_LIMIT`, test). Runbook and template now use 2 |
 | Real Qloo + Claude workflow | VERIFIED locally only | 2026-10-26 local run (subscription, $0 API): [report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md). **Not** a production result |
 | Public story sample | PREPARED / BLOCKED | Feature built and tested (Chromium + WebKit). Production has **0 samples**; the first comes from the paid acceptance run |
-| Judge access (interactive) | PREPARED | Runbook §5.2: 4 capped codes (7 days, 6 runs, $1 each), `RUN_ACCESS=invite`, daily caps $4, Console limit $15 |
+| Judge access (interactive) | PREPARED | Runbook §5.2: 4 capped codes (14 days, 6 runs, $1 each) created **by Oct 29** so Devpost testing instructions work before the Oct 30 deadline and through Nov 5; `RUN_ACCESS=invite`, daily caps $4, Console limit $15 |
 | Qloo data rights | PREPARED / BLOCKED (organizer reply) | [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md): uncertain fields (popularity/affinity, descriptions, IDs, raw responses) absent from all public payloads and exports; question drafted |
 | GitHub publication | PREPARED | [PUBLIC_READINESS.md](PUBLIC_READINESS.md): history clean, no secrets/PII/Qloo data, MIT detected. Visibility change awaits approval |
 | Devpost | PREPARED | [DEVPOST.md](DEVPOST.md) with compliance matrix; placeholders `[PUBLIC_URL]`, `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_n]`, `[CODE_EXPIRY]`. Video optional; [script](DEMO_SCRIPT.md) ready |
@@ -39,7 +39,7 @@ Deadline: **Oct 30, 2026, 11:45 PM ET** (Oct 31, 11:45 AM Beijing). Judging: **N
 3. Make the GitHub repository public.
 4. Create the dedicated Anthropic key with a Console spend limit, then run the single paid
    acceptance (§3–§4). This also creates the public story sample (§5.1).
-5. Issue the judge codes and set `RUN_ACCESS=invite` (§5.2), around Nov 1.
+5. Issue the judge codes and set `RUN_ACCESS=invite` (§5.2) **by Oct 29**, verify one redemption, and put them in the Devpost testing instructions before submitting.
 6. Send the organizer data-rights question; fill Devpost placeholders; submit by Oct 30 ET.
 
 ## Rollback
