@@ -271,6 +271,20 @@ describe("ClaudeSubscriptionProvider", () => {
     expect(sdk.calls).toHaveLength(1);
   });
 
+  it("holds the cap for concurrent calls", async () => {
+    const sdk = fakeSdk();
+    const p = provider(sdk, { maxRequests: 1 });
+    const results = await Promise.allSettled([
+      p.generate(request),
+      p.generate(request),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(sdk.calls).toHaveLength(1);
+  });
+
   it("rejects unapproved models without sending", async () => {
     const sdk = fakeSdk();
     await expect(

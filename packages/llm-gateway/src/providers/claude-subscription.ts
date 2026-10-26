@@ -170,8 +170,9 @@ export class ClaudeSubscriptionProvider implements LlmProvider {
         undefined,
         false,
       );
-    const query = await this.loadQuery();
+    // Take the slot before any await so concurrent calls cannot both pass the cap.
     this.requests += 1;
+    const query = await this.loadQuery();
 
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const signal = request.signal
