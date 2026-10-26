@@ -4,6 +4,7 @@ import { GitBranch, GitCommitHorizontal } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { describeRunStop } from "@/lib/run-outcome";
 import type { BranchItem, ComparisonRow, EntityView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useProject } from "../project-context";
@@ -377,8 +378,11 @@ export function WhatIfLab() {
               {focusRun && ["CANCELLED", "FAILED"].includes(focusRun.state) ? (
                 <p className="flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-sm">
                   <StatusPill status={focusRun.state} /> This branch did not
-                  finish:{" "}
-                  {focusRun.terminalReason?.replace(/_/g, " ").toLowerCase()}.
+                  finish.{" "}
+                  {focusRun.state === "CANCELLED"
+                    ? "It was cancelled."
+                    : describeRunStop(focusRun.terminalReason).title}
+                  .
                 </p>
               ) : null}
               {focusRun?.state === "COMPLETED" && focusView ? (

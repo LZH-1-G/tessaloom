@@ -1,13 +1,15 @@
 "use client";
 
-import { LayoutGrid, List, MapPin, Search, X } from "lucide-react";
+import { CircleAlert, LayoutGrid, List, MapPin, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import {
   buildDiscoveryGraph,
   laneItems,
   type GraphEntity,
 } from "@/lib/discovery-graph";
+import { describeRunStop, POOL_TOO_SMALL_TIPS } from "@/lib/run-outcome";
 import type { EntityView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { EntityConfirmation } from "./entity-confirmation";
@@ -149,7 +151,7 @@ export function Inspector({
 }
 
 export function DiscoveryPage() {
-  const { view, run, refresh, loading } = useProject();
+  const { projectId, view, run, refresh, loading } = useProject();
   const [chosenMode, setMode] = useState<"canvas" | "list" | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [trace, setTrace] = useState<string | null>(null);
@@ -226,6 +228,12 @@ export function DiscoveryPage() {
   ) : null;
   const discovering =
     run && ["RESOLVING_ENTITIES", "DISCOVERING"].includes(run.state);
+  // Live Qloo data can legitimately yield too few bridges; explain it and offer a next step.
+  const insufficient =
+    run?.state === "FAILED" &&
+    ["POOL_TOO_SMALL", "NO_DISCOVERY_DATA"].includes(run.terminalReason ?? "")
+      ? describeRunStop(run.terminalReason)
+      : null;
 
   return (
     <div className="space-y-6">
@@ -315,6 +323,40 @@ export function DiscoveryPage() {
             ? "Resolving your interests with Qloo…"
             : "Threading your seeds into other worlds…"}
         </p>
+      ) : null}
+
+      {insufficient ? (
+        <section
+          aria-labelledby="insufficient-heading"
+          className="rounded-lg border-2 border-saffron bg-saffron-tint p-4 text-sm"
+        >
+          <h2
+            id="insufficient-heading"
+            className="flex items-center gap-1.5 font-semibold"
+          >
+            <CircleAlert aria-hidden className="size-4" />
+            {insufficient.title}
+          </h2>
+          <p className="mt-1">{insufficient.detail}</p>
+          {graph.threads.length ? (
+            <p className="mt-1 text-muted-foreground">
+              This run found {graph.threads.length} thread results across{" "}
+              {graph.lanes.length} world{graph.lanes.length === 1 ? "" : "s"};
+              they are shown below and stay saved.
+            </p>
+          ) : null}
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {POOL_TOO_SMALL_TIPS.map((tip) => (
+              <li key={tip}>{tip}</li>
+            ))}
+          </ul>
+          <Link
+            href={`/projects/${projectId}/brief`}
+            className="mt-3 inline-block font-medium text-warp underline underline-offset-2"
+          >
+            Revise the brief and try again
+          </Link>
+        </section>
       ) : null}
 
       {graph.threads.length ? (
