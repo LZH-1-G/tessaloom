@@ -17,7 +17,13 @@ import {
 } from "../../apps/web/src/server/blueprints";
 import { RateLimiter } from "../../apps/web/src/server/http";
 import type { Services } from "../../apps/web/src/server/services";
-import { QUEUES, sql, type DbHandle, type PgBoss } from "../../packages/db/src";
+import {
+  QUEUES,
+  acceptanceReport,
+  sql,
+  type DbHandle,
+  type PgBoss,
+} from "../../packages/db/src";
 import { ORIGIN, apiClient, json, makeServices } from "./helpers/api-client";
 import { startBoss } from "./helpers/exploration";
 import { syntheticHarness } from "./helpers/synthetic";
@@ -327,6 +333,24 @@ describe("M9 share links (SECURITY §4.3, TEST_PLAN §9)", () => {
     expect(text).not.toMatch(
       /"(toolInvocationId|runId|workspaceId|projectId|experimentId|qlooId|snapshot|popularity|affinity|disambiguation|localityText|notes|costUsd|inputTokens|outputTokens)":/,
     );
+  });
+
+  it("reports acceptance evidence as metadata only", async () => {
+    const { c, projectId } = await composedBlueprint();
+    const report = (await acceptanceReport(handle.db, projectId))!;
+    expect(report.runs.map((r) => r.state)).toContain("COMPLETED");
+    expect(report.llmCalls.length).toBeGreaterThan(0);
+    expect(report.llmCalls[0]).toHaveProperty("outputTokens");
+    expect(report.qlooCalls.length).toBeGreaterThan(0);
+    expect(report.ledger).toHaveProperty("settledUsd");
+    expect(report.evidence.length).toBeGreaterThan(0);
+    expect(report.blueprints[0]).toHaveProperty("traceability");
+    const text = JSON.stringify(report);
+    expect(text).not.toContain(c.workspaceId);
+    expect(text).not.toMatch(
+      /"(input_excerpt|inputExcerpt|output|content|premise|argsRedacted|args_redacted|tokenHash)":/,
+    );
+    expect(await acceptanceReport(handle.db, c.workspaceId)).toBeNull();
   });
 
   it("expires links, scopes experiment links, and rate-limits lookups", async () => {

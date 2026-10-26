@@ -129,11 +129,14 @@ approval.
 allowed); all blueprint citations resolve with origin "Qloo (live)"; `spend today` ≤ $0.50 and
 agrees with the Console within rounding.
 
-**Evidence (no secrets):** run IDs and states, per-call role/model/tokens/latency/estimated cost,
-Qloo call counts, `spend today`, the Console charge, and screenshots of the story page, kept out of
-the repository ([rights review](DATA_RIGHTS_REVIEW.md)). Write
-`docs/evidence/production-acceptance-<date>.json` (metadata only) and a short report. Keep it
-separate from the local subscription results.
+**Evidence (no secrets):** in the same private terminal, run
+`node packages/db/dist/admin.mjs report project <projectId>` (the id is in the project URL). It
+prints run states, per-call role/model/tokens/latency/estimated cost, Qloo call counts by method
+and origin, ledger totals, evidence stances and blueprint traceability, with no prompts, outputs,
+excerpts or Qloo payloads. Add `spend today`, the Console charge, and screenshots of the story page
+kept out of the repository ([rights review](DATA_RIGHTS_REVIEW.md)). Save the report as
+`docs/evidence/production-acceptance-<date>.json` with a short report. Keep it separate from the
+local subscription results.
 
 **Rollback:** `RUN_ACCESS=off`, budgets to `0`, remove `ANTHROPIC_API_KEY`, revoke grants. Stored
 results stay readable. Restoring `northflank.env.example` returns the service to zero budget.
