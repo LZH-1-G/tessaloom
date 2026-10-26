@@ -448,6 +448,29 @@ describe("cancellation, expiry, and budgets (TEST_PLAN §4 items 9–10, §8)", 
     expect(await drain(deps)).toEqual([]);
   });
 
+  it("stops safely as LLM_NOT_CONFIGURED when the worker has no gateway (production default)", async () => {
+    const r = await startRun();
+    const deps = makeDeps(handle, boss, lib, scriptedExplorationLlm());
+    await drain({ ...deps, ports: { ...deps.ports, llm: null } });
+    const run = await getRun(handle.db, r.runId);
+    expect(run).toMatchObject({
+      state: "FAILED",
+      terminalReason: "LLM_NOT_CONFIGURED",
+    });
+    // No provider was attempted, nothing was recorded or reserved.
+    expect(run.usage).toMatchObject({ llmCalls: 0, estimatedCostUsd: 0 });
+    expect(
+      await count(
+        sql`select count(*) as n from llm_invocations where run_id = ${r.runId}`,
+      ),
+    ).toBe(0);
+    expect(
+      await count(
+        sql`select count(*) as n from llm_spend_reservations where run_id = ${r.runId}`,
+      ),
+    ).toBe(0);
+  });
+
   it("expires a run paused for more than 24 hours", async () => {
     const r = await startRun();
     await drain(makeDeps(handle, boss, lib, scriptedExplorationLlm()));
