@@ -92,7 +92,11 @@ and shares.
 2. **Grant:** `--days 1 --runs 1 --usd 0.50`. One run admission, revocable at once.
 3. **Serial:** one working run, one active run per workspace, one run per workspace per day.
 4. **Run budget:** exploration ≤ 14 LLM / 40 Qloo calls; composition ≤ 3 LLM / 4 Qloo calls.
-5. **Provider:** no SDK retries, no server-side fallback, approved model only.
+5. **Provider and retries:** no SDK retries, no server-side fallback, approved model only. A
+   transient error (429/5xx) gets at most one same-model gateway retry, and the step is retried
+   at most twice by the queue (`retryLimit: 2`). Every attempt reserves first, so rate limits
+   or outages end in `LLM_UNAVAILABLE`/`STEP_RETRIES_EXHAUSTED`, never in unbounded spend. A
+   Tier 1 Anthropic workspace's rate limits are far above this serial workload.
 6. **Console spend limit**, outside the application.
 
 Expected cost **≈ $0.14** for the full workflow (local measurement at API list prices: R1 $0.007
