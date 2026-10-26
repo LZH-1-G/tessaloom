@@ -131,7 +131,7 @@ Precondition: §2.2 done, `printenv GLOBAL_DAILY_LLM_USD` → `0`.
 
 1. In the [Claude Console](https://console.anthropic.com), create a **dedicated workspace**
    `tessaloom` and one API key in it. The key is never pasted into chat, the repo, build
-   arguments, logs or a shared secret group.
+   arguments, logs, or a secret group that other services can read.
 2. Set that workspace's **spend limit to $15/month** (Settings → Limits). It is the provider-side
    ceiling above every application cap ($0.50 for §4, $4/day during judging). The application
    ledger estimates cost; the Console limit is the independent guarantee.
