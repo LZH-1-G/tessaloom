@@ -247,6 +247,25 @@ describe("M9 share links (SECURITY §4.3, TEST_PLAN §9)", () => {
     expect((await getSharedExport(s, shareReq(token), { token })).status).toBe(
       200,
     );
+    // Public exports carry no internal identifiers, like the shared page.
+    for (const format of ["json", "md"]) {
+      const exported = await getSharedExport(
+        s,
+        new Request(`${ORIGIN}/api/v1/share/${token}/export?format=${format}`, {
+          headers: { "x-forwarded-for": "203.0.113.7" },
+        }),
+        { token },
+      );
+      expect(exported.status).toBe(200);
+      const body = await exported.text();
+      expect(body).toContain("E-1");
+      expect(body).not.toContain(blueprintId);
+      expect(body).not.toMatch(/"toolInvocationId":\s*"/);
+      const ids = await handle.db.execute<{ id: string }>(
+        sql`SELECT tool_invocation_id AS id FROM evidence_records WHERE tool_invocation_id IS NOT NULL LIMIT 20`,
+      );
+      for (const { id } of ids.rows) expect(body).not.toContain(id);
+    }
 
     // A target outside the project is refused.
     const other = await composedBlueprint();

@@ -667,6 +667,11 @@ export async function exportBlueprint(
     throw new StateConflictError("The blueprint has no revision yet.");
   const content = detail.current.content as BlueprintContentT;
   const report = detail.current.traceabilityReport as TraceabilityReport;
+  // A shared export is public: like the shared page, it carries no internal identifiers.
+  const shared = "shareBlueprintId" in scope;
+  const appendix = shared
+    ? detail.appendix.map((a) => ({ ...a, toolInvocationId: null }))
+    : detail.appendix;
   const meta = {
     revisionNumber: detail.current.revisionNumber,
     createdAt: detail.current.createdAt.toISOString().slice(0, 10),
@@ -685,7 +690,7 @@ export async function exportBlueprint(
       contentType: "text/markdown; charset=utf-8",
       body: blueprintMarkdown({
         content,
-        appendix: detail.appendix,
+        appendix,
         report,
         ...meta,
       }),
@@ -696,10 +701,14 @@ export async function exportBlueprint(
     body: JSON.stringify(
       {
         format: "tessaloom.blueprint.v1",
-        blueprint: { id: bp.id, status: bp.status, ...meta },
+        blueprint: {
+          ...(shared ? {} : { id: bp.id }),
+          status: bp.status,
+          ...meta,
+        },
         traceabilityReport: report,
         content,
-        evidenceAppendix: detail.appendix,
+        evidenceAppendix: appendix,
       },
       null,
       2,
