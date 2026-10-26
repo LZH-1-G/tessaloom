@@ -222,7 +222,7 @@ try {
       container,
       "node",
       "-e",
-      `const fs=require('node:fs');function denied(p){try{fs.readFileSync(p);return false}catch(e){return ['EACCES','EPERM'].includes(e.code)}}console.log(JSON.stringify({keyAbsent:!process.env.DEEPSEEK_API_KEY,fileDenied:denied('/run/worker-private/deepseek.env'),procDenied:denied('/proc/${state.workerPid}/environ'),hostAbsent:!fs.existsSync('/Users/lzh/.config/tessaloom')}))`,
+      `const fs=require('node:fs');function denied(p){try{fs.readFileSync(p);return false}catch(e){return ['EACCES','EPERM'].includes(e.code)}}console.log(JSON.stringify({keyAbsent:!process.env.DEEPSEEK_API_KEY,fileDenied:denied('/run/worker-private/deepseek.env'),procDenied:denied('/proc/${state.workerPid}/environ'),hostAbsent:!fs.existsSync(${JSON.stringify(`${homedir()}/.config/tessaloom`)})}))`,
     ),
   );
   assert(Object.values(web).every((v) => v === true));

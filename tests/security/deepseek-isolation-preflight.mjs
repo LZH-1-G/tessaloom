@@ -163,7 +163,7 @@ try {
     function denied(p){try{fs.readFileSync(p);return false;}catch(e){return ['EACCES','EPERM'].includes(e.code);}}
     const status={webUid:process.getuid(),webCredentialAbsent:!process.env.DEEPSEEK_API_KEY,
       secretFileDenied:denied('/run/worker-private/deepseek.env'),workerEnvironmentDenied:denied('/proc/${state.workerPid}/environ'),
-      hostPrivateDirectoryAbsent:!fs.existsSync('/Users/lzh/.config/tessaloom')};
+      hostPrivateDirectoryAbsent:!fs.existsSync(${JSON.stringify(`${homedir()}/.config/tessaloom`)})};
     console.log(JSON.stringify(status));
   `,
     ),

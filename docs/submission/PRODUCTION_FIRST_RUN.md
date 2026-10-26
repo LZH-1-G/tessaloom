@@ -10,17 +10,22 @@ application path ([report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). Product
 scenario once through the official Anthropic API under a $0.50 ceiling. Its result becomes the
 public, read-only, real-data story sample.
 
-## 0. Production as inspected (read-only, 2026-10-26)
+## 0. Production as verified (read-only, 2026-10-26 ~10:45 UTC)
 
-| Item | Observed |
+| Item | Observed (evidence) |
 | --- | --- |
-| Service | `default/tessaloom`, 1 instance, plan `nf-compute-20` (build `nf-compute-400-16`) |
-| Deployed commit | `39c0fe5` (PR #18 merged), build SUCCESS, deployment COMPLETED |
-| Readiness probe | HTTP `/api/health/ready` on port 3000, every 20 s |
-| Port `p01` (HTTP 3000) | **`public: false`**. `p01--tessaloom--mpfcqkyl42yb.code.run` does not answer from outside |
-| LLM | `unconfigured` (no provider key). Runs would stop as `LLM_NOT_CONFIGURED` (tested) |
+| Service | `default/tessaloom`, 1 instance, `nf-compute-20` (`northflank get service`) |
+| Deployed commit | **`a37afc6`** (PR #19 merge), deployment `6adf02088a11dc200a3ad9ee`, build SUCCESS, deployment COMPLETED 07:33 UTC |
+| Previous release (rollback) | `39c0fe5`, deployment `6aded5c0351e0f7052ed6dbd` |
+| Worker | `worker_queue_connection` verified (`databaseCreate: false`, `schemaCreate: false`), `worker_queues_started` with `llm: "unconfigured"`, `qlooMode: "live"` |
+| Qloo readiness | 39/39 probes 07:32–10:42 UTC: `ready: true`, `endpointTrusted: true`, Harness `0.1.26`, `probeFailure: null` |
+| Private smoke via port-forward (`--skipHostnames`) | `deploy/public-smoke.mjs` read-only checks **7/7 pass**; `/api/health/ready` 200; status `llmConfigured: false`, `llmModel: null`; HSTS, nonce CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies present; static assets 200 with immutable caching |
+| Public samples | **0** (`/api/v1/samples` → `{"items":[]}`) |
+| Run access | Fail-closed default (`RUN_ACCESS` unset in production → off) |
+| Port `p01` (HTTP 3000) | **`public: false`** |
 
-**Blocker for any public demo:** port `p01` must be made public (OWNER, §2.1).
+**Remaining blockers for a public demo:** making port `p01` public (§2.1 steps 6–8), and the paid
+acceptance (§4), which creates the first real sample and allows judge access.
 
 ## 1. What is verified before spending anything
 
@@ -47,6 +52,9 @@ Northflank behaviour with a key present. The final step measures exactly these.
 builds and deploys it automatically. The readiness probe gates traffic, but the port is private
 anyway. Rollback target: commit **`39c0fe5`**, deployment **`6aded5c0351e0f7052ed6dbd`**
 (2026-10-26 04:23 UTC).
+
+Steps 1–4 were completed on 2026-10-26: PR #19 merged as `a37afc6` with CI fully green on
+`main`, it was auto-deployed, and the private smoke passed (§0). Keep them for future releases.
 
 1. **Gate.** PR #19's latest head is fully green in CI, including `docker` and `e2e`.
 2. **Record the rollback target.** In Northflank → `tessaloom` → Deployments, note that
@@ -91,7 +99,8 @@ step still cannot spend. Differences from today's [`northflank.env.example`](../
 | `LLM_MODE` | `economy` | `standard` |
 | `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `0` | `0.50` |
 | `GLOBAL_DAILY_QLOO_CALLS` | `0` | `60` |
-| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` / `WORKSPACE_DAILY_RUNS` | `1` / `1` / `1` | unchanged |
+| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `1` / `1` | unchanged |
+| `WORKSPACE_DAILY_RUNS` | `1` | **`2`**: exploration and blueprint composition are separate run admissions (with `1`, Compose is refused with `RUN_LIMIT`; tested) |
 | `RUN_ACCESS` | `off` | `off`; `invite` only during §4 |
 | `CLAUDE_SUBSCRIPTION_LOCAL_APPROVED` / `_MAX_REQUESTS` | (unset) | `off` / `0`, explicit |
 
@@ -115,7 +124,7 @@ and shares.
    reserves the call's upper bound against the global-daily, workspace-daily and experiment caps
    ($0.50 each) and the grant cap ($0.50). If it does not fit, the call is never sent. Unknown
    outcomes keep the full reservation.
-2. **Grant:** `--days 1 --runs 1 --usd 0.50`. One run admission, revocable at once.
+2. **Grant:** `--days 1 --runs 2 --usd 0.50`: two run admissions (exploration + composition) for one workflow, one $0.50 cap, revocable at once.
 3. **Serial:** one working run, one active run per workspace, one run per workspace per day.
 4. **Run budget:** exploration ≤ 14 LLM / 40 Qloo calls; composition ≤ 3 LLM / 4 Qloo calls.
 5. **Provider and retries:** no SDK retries, no server-side fallback, approved model only. A
@@ -134,7 +143,7 @@ reservation and the run stops early. It never overspends to finish.
 
 1. Private terminal, recording off, in a Northflank job or one-off command with the service's
    runtime env: `node packages/db/dist/admin.mjs grant create --label final-acceptance --days 1
-   --runs 1 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
+   --runs 2 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
 2. Fresh browser → public URL → enter the code → create project **Spirited sound evenings** (Café).
 3. Brief: title *Spirited sound evenings*; challenge *"A 40-seat café wants a recurring monthly
    weekday evening that brings animated-film lovers and film-score music fans together, to attract
@@ -173,22 +182,40 @@ results stay readable. Restoring `northflank.env.example` returns the service to
 
 ## 5. Public demo and judge access (after §4 passes)
 
-- **Public read-only story (no spend).** On the blueprint page: **Share read-only → The whole
-  story**, expiry **30 days** (covers judging, Nov 2–5, 2026). Copy the **Link ID** shown in the
-  dialog, then `admin.mjs sample feature <Link ID>`. Visitors open it from **Demo samples**: brief,
-  Qloo discovery, tested hypotheses, the blueprint and its evidence, with no workspace, code or model
-  call. `sample unfeature` withdraws it.
-- **Live generation for judges.** The rules ask for a functional demo judges can test, with
-  credentials in the testing instructions if access is restricted. Issue one grant per judging
-  session after reviewing the final run's real cost. Proposed: `--days 7 --runs 2 --usd 0.40`;
-  raise the global/workspace/experiment caps to cover all active grants, for example $2.00 for
-  five grants. Codes go only in Devpost's testing-instructions field. Set `RUN_ACCESS=invite`.
-- During Nov 2–5, check `spend today` and the Console usage daily. Revoke on suspected disclosure.
+### 5.1 Read-only story (no spend)
+
+On the blueprint page: **Share read-only → The whole story**, expiry **30 days**. Copy the
+**Link ID** from the dialog, then run `admin.mjs sample feature <Link ID>`. Visitors open it from
+**Demo samples**: brief, Qloo discovery, tested hypotheses, the blueprint and its evidence, with
+no workspace, code or model call. `sample unfeature` withdraws it. Production has **0 samples**
+today, so this sample only exists after §4.
+
+### 5.2 Interactive judge access, Nov 2–5, 2026 (required by the rules)
+
+The rules require a functional demo that judges can test, with credentials in the testing
+instructions if access is restricted. The read-only story alone is **not** enough. Plan, to apply
+on Nov 1 after §4 passes and its real cost is reviewed:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Grants | **4 codes** (`judge-1` … `judge-4`): `--days 7 --runs 6 --usd 1.00` | 6 runs = 3 full workflows (exploration + composition each), ~$0.14 each at measured tokens. 7 days from Nov 1 covers Nov 2–5 with margin. Each code is capped for its lifetime |
+| `RUN_ACCESS` | `invite` | Anonymous visitors can read samples but cannot start runs |
+| `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `4.00` / `1.00` / `1.00` | All four grants fit in one UTC day; one experiment cannot exceed a grant |
+| `WORKSPACE_DAILY_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `6` / `1` | Matches the grant; one active run per judge |
+| `MAX_WORKING_RUNS` | `2` | Two judges can run at once (runs paused at confirmation gates don't count); others see "The studio is busy" |
+| `GLOBAL_DAILY_QLOO_CALLS` | `400` | About 10 explorations per day at ≤ 40 calls each, within Qloo's per-key quota (the hackathon guide says limits are raised on request) |
+| Anthropic Console | workspace spend limit **$15/month** | Independent ceiling above all grants together ($4) |
+
+The codes go only in Devpost's testing-instructions field. Assume that text may be seen beyond
+the judges: each code is capped, revocable and expires. Check `spend today`, `grant list` and
+the Console every day of judging. Revoke any code that is spending abnormally. After Nov 5:
+revoke all grants, set `RUN_ACCESS=off` and budgets to `0`, and remove the key once judging is
+confirmed finished.
 
 ## 6. Open owner decisions
 
-1. Merge and deploy this branch; make port `p01` public (§2.1). Free.
-2. Approve §3–§4: key, Console limit, one paid run of about $0.14 (≤ $0.50).
-3. Send the organizer clarification in [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md) (display
-   of Qloo-derived names and gradings).
-4. Choose judge access: read-only story only, or story plus capped live grants.
+1. ~~Merge and deploy~~ (done: production runs `a37afc6`). Make port `p01` public (§2.1, steps 6–8).
+2. Approve §3–§4: dedicated key, Console limit, one paid acceptance (≈ $0.14, ≤ $0.50).
+3. Send the organizer clarification in [DATA_RIGHTS_REVIEW.md](DATA_RIGHTS_REVIEW.md).
+4. Approve §5.2 judge access, with up to $4/day and $15 total at the Console limit.
+5. Make the GitHub repository public; submit on Devpost before Oct 30, 11:45 PM ET.

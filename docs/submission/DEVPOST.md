@@ -28,6 +28,13 @@ The Evidence Graph connects cultural entities, hypotheses, claims and evidence. 
 
 The What-if engine changes one variable while holding the rest of the experiment explicit. It computes dependencies before running work: unaffected evidence is reused, affected queries are recomputed, and a weights-only change rescales the comparison without requesting new cultural data. Users can then compose an experience blueprint with practical constraints, traceable references, editable blocks, revision history, Markdown export and revocable read-only sharing.
 
+## Who it's for
+
+Owners and programmers of small cafés, bookstores, libraries, galleries and community venues
+who want a new recurring event their audience will actually come to. They know what their
+regulars love but have no data team. Typical uses: a monthly themed evening, a pop-up pairing
+two fan communities, or a quiet-night series that needs a reason to return.
+
 ## How we built it
 
 The application uses TypeScript, Next.js, React, PostgreSQL, Drizzle and pg-boss. A persistent worker executes a recoverable state machine with six specialized roles: intent analysis, cultural discovery, hypothesis generation, evidence criticism, counterfactual explanation and blueprint composition. Human confirmation gates control important transitions. Typed evidence plans and deterministic evaluators constrain what an LLM can claim.
@@ -39,6 +46,22 @@ Five Claude roles (intent, hypothesis generation, evidence critic, What-if narra
 ## What makes it original
 
 The contribution is the complete creative hypothesis loop, not simply combining two recommendation lists. A cultural connection becomes a testable claim, enters an inspectable evidence graph, survives a controlled counterfactual comparison, and becomes a practical blueprint whose assumptions remain visible. Dependency-aware reuse makes the experiment cheaper and more explainable at the same time.
+
+## Why Qloo matters (not just an LLM)
+
+An LLM alone can invent a plausible pairing, but it can't tell you whether the audiences
+actually overlap. Tessaloom uses Qloo for exactly what a language model can't supply:
+
+- Resolving "Spirited Away" to one cultural entity.
+- Recommending what fans of each interest also like across books, music, film and places.
+- Ranking a shortlist for an audience.
+- Comparing two audiences.
+- Reading taste themes.
+
+Every claim the agents make is turned into one of those queries and graded by fixed rules. The
+blueprint therefore separates "Qloo shows this" from "the AI suggests this". In the recorded run, all 93 cross-world bridges came from Qloo's recommendation threads for
+the two interests: pairs of items from different worlds that connect both interests through
+Qloo's own results, not through the model's guesses.
 
 ## Challenges and what we learned
 
@@ -64,23 +87,40 @@ TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, p
 
 ## Testing instructions
 
-> Fill the bracketed values only after the approved production first run
-> ([runbook](PRODUCTION_FIRST_RUN.md)) has succeeded. Until then, keep this section out of Devpost.
+> Fill the bracketed values only after the public URL and the final acceptance run are verified
+> ([runbook](PRODUCTION_FIRST_RUN.md) §2.1 and §4–§5). Until then, keep this section out of Devpost.
 
-**Public read-only result (no sign-in, no cost):** open [PUBLIC_URL], choose **Demo samples**, then
-open **Spirited sound evenings**. The page walks through the whole story: brief, Qloo discovery,
-tested hypotheses, blueprint and limitations. It is a real run from [RUN_DATE]: live Qloo data for *Spirited
-Away* and Joe Hisaishi, hypotheses tested against Qloo evidence, and a blueprint whose citations
-open the stored evidence. Use **Traceability** to filter speculative blocks, and the evidence
-appendix to see each claim's stance, rule and retrieval date.
+**1. Read a finished experiment (no code, no cost).** Open [PUBLIC_URL] → **Demo samples** →
+**Spirited sound evenings** (recorded [RUN_DATE] with live Qloo data and Claude). The page walks
+through the brief, the Qloo discovery, the cultural bridges, the hypotheses with each claim's
+Qloo evidence, the blueprint with citations, and the limitations.
 
-**Live generation (optional, private code):** enter the access code given in the private testing
-field, create a café project, add two cultural interests, and follow Brief → Discovery → Hypotheses
-→ Blueprint. Each code has a fixed expiry, run count and spending cap. Runs take a few minutes; a
-code that is used up or expired is refused with an explanation.
+**2. Run the agent yourself (access code).** On the home page enter one access code:
+[JUDGE_CODE_1] · [JUDGE_CODE_2] · [JUDGE_CODE_3] · [JUDGE_CODE_4]. Each code allows three full
+workflows until [CODE_EXPIRY] and has its own spending cap. Then:
 
-**Local demonstration (no keys):** follow the repository quick start, create a project and choose
-“Use the fixture example.” Every synthetic stage is labelled “FIXTURE — not real Qloo data.”
+1. Create a café project and write a brief with two or three interests, such as a film and a
+   musician.
+2. Interpret the brief, then confirm it.
+3. Pick the intended entities if asked, then generate hypotheses from the collision pool.
+4. Open a claim's evidence, then compose a blueprint.
+
+Each stage takes from a few seconds to about a minute; the activity panel shows progress. If an
+interest pair yields too few cross-world bridges, the app says so and suggests adding a third
+interest. If another judge's run is in progress, you may see "The studio is busy": try again
+shortly.
+
+**3. Reproduce locally (no keys).** See the repository README quick start; synthetic data is
+labelled "FIXTURE — not real Qloo data".
+
+## Tools and attribution
+
+- **Cultural data:** Qloo (Insights API through the official Qloo Harness).
+- **AI agents:** Anthropic Claude: Claude Sonnet 5.5 via the Claude API in deployment, and the
+  official Claude Agent SDK on the developer's own Claude subscription for local development
+  only.
+- **Development:** assisted by Claude Code and Codex. All code is the entrant's project and is
+  MIT licensed; dependencies keep their own licenses.
 
 ## Rules compliance check (official rules, read 2026-10-26)
 

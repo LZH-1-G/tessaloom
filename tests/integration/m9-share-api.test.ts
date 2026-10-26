@@ -354,6 +354,78 @@ describe("M9 share links (SECURITY §4.3, TEST_PLAN §9)", () => {
     );
   });
 
+  it("a full workflow needs two run admissions: composition counts against the daily allowance", async () => {
+    const c = await apiClient(s);
+    const project = await json<{ id: string }>(
+      await postProject(
+        s,
+        c.post("/api/v1/projects", { name: "Allowance", useCase: "cafe" }),
+      ),
+    );
+    const brief = await json<{ id: string }>(
+      await postBrief(
+        s,
+        c.post(`/api/v1/projects/${project.id}/briefs`, {
+          title: "Allowance check",
+          challenge: "A 40-seat café wants a monthly night for two fan groups.",
+          interests: [
+            { text: "Stardew Harvest Tales", domainHint: "videogame" },
+            { text: "Paper Atlas Stories", domainHint: "book" },
+          ],
+          venue: { type: "cafe", capacity: 40 },
+          goals: ["Attract new weekday visitors"],
+        }),
+        { projectId: project.id },
+      ),
+    );
+    // Production run limits: one active run per workspace, N runs per workspace per day.
+    const production = (dailyRunsPerWorkspace: number): Services => ({
+      ...s,
+      limiter: new RateLimiter(),
+      admission: {
+        ...s.admission,
+        maxActivePerWorkspace: 1,
+        maxWorkingGlobal: 1,
+        dailyRunsPerWorkspace,
+      },
+    });
+    const started = await json<{ experimentId: string; runId: string }>(
+      await startExperiment(
+        production(1),
+        c.post(`/api/v1/projects/${project.id}/experiments`, {
+          briefVersionId: brief.id,
+          mode: "live",
+        }),
+        { projectId: project.id },
+      ),
+    );
+    await harness.driveToEnd(
+      harness.deps("off"),
+      { workspaceId: c.workspaceId, ...started },
+      { tension: 0.6, select: true },
+    );
+    const hyp = await handle.db.execute<{ id: string }>(
+      sql`SELECT id FROM hypotheses WHERE experiment_id = ${started.experimentId} AND NOT retired ORDER BY composite_score DESC LIMIT 1`,
+    );
+    const compose = (svc: Services) =>
+      postBlueprint(
+        svc,
+        c.post(`/api/v1/experiments/${started.experimentId}/blueprints`, {
+          hypothesisIds: [hyp.rows[0]!.id],
+          format: "series",
+        }),
+        { experimentId: started.experimentId },
+      );
+    // WORKSPACE_DAILY_RUNS=1 admits the exploration but refuses the blueprint.
+    const refused = await compose(production(1));
+    expect(refused.status).toBe(429);
+    expect((await json<{ error: { code: string } }>(refused)).error.code).toBe(
+      "RUN_LIMIT",
+    );
+    // Two daily runs let the same journey finish; the paused exploration does not block it.
+    expect((await compose(production(2))).status).toBe(202);
+  });
+
   it("reports acceptance evidence as metadata only", async () => {
     const { c, projectId } = await composedBlueprint();
     const report = (await acceptanceReport(handle.db, projectId))!;
