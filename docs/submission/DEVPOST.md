@@ -82,6 +82,19 @@ code that is used up or expired is refused with an explanation.
 **Local demonstration (no keys):** follow the repository quick start, create a project and choose
 “Use the fixture example.” Every synthetic stage is labelled “FIXTURE — not real Qloo data.”
 
+## Rules compliance check (official rules, read 2026-10-26)
+
+| Requirement | How Tessaloom meets it | Status |
+| --- | --- | --- |
+| Working app integrating the Qloo API as an agentic tool | Qloo Harness workflows drive resolution, discovery and every claim test inside a multi-role Claude agent loop | Verified locally with live Qloo + Claude; production run pending |
+| Link to a **functional demo application** | Public `code.run` URL | **Blocked**: port `p01` is private until approved |
+| Judges can test it free of charge until judging ends (Nov 2–5); credentials in testing instructions if access is restricted | A read-only story sample needs no code. **Interactive** runs need a capped access code, which goes in Devpost's testing instructions. The story alone is **not** enough: judges must be able to run the agent themselves | **Prepared**: needs the paid acceptance run, then judge grants with a judging budget |
+| Public repository with a detectable open-source license in the About section | MIT `LICENSE`; GitHub already detects MIT (repository currently private) | **Pending owner**: make public, then check the About section |
+| English text description | README and this draft | Ready, with placeholders for production results |
+| Third-party APIs used within their terms | Anthropic API key (Commercial Terms) for public inference; the personal subscription is local-only and refused in production; Qloo data stays server-side, not in the repo | Verified in code and docs |
+| Original work; open-source dependencies respected | License inventory in [PUBLIC_READINESS.md](PUBLIC_READINESS.md) | Ready |
+| Video | Optional; script in [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | Optional |
+
 ## Owner-only fields and final actions
 
 - After the final acceptance run: fill [PUBLIC_URL], [RUN_DATE], [PRODUCTION_RESULT] and the access code(s), and add the public repository URL.

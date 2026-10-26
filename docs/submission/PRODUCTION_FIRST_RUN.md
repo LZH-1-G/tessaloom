@@ -41,16 +41,42 @@ Northflank behaviour with a key present. The final step measures exactly these.
 
 ## 2. Free production steps (OWNER approves each)
 
-### 2.1 Release the reviewed code and open the public URL
+### 2.1 Release, verify privately, then expose (exact sequence)
 
-1. Review and merge the readiness PR (this branch). Northflank builds `main` and deploys it.
-2. Check `/api/health/ready` = 200 and `/api/v1/system/status` shows `qlooReady: true` and
-   `llmConfigured: false`.
-3. In Northflank → service `tessaloom` → Networking, set port `p01` (HTTP 3000) to **Public**. Keep
-   the Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0`: per-IP limits then
-   apply to the edge address, which is conservative for judging traffic.
-4. From an outside network: `https://p01--tessaloom--mpfcqkyl42yb.code.run/` loads,
-   `/api/health/ready` is 200, `RUN_ACCESS=off` shows "New AI runs are paused", and nothing spends.
+**Merging is deploying.** Northflank CI is enabled on `main` (`disabledCI: false`), so merging PR #19
+builds and deploys it automatically. The readiness probe gates traffic, but the port is private
+anyway. Rollback target: commit **`39c0fe5`**, deployment **`6aded5c0351e0f7052ed6dbd`**
+(2026-10-26 04:23 UTC).
+
+1. **Gate.** PR #19's latest head is fully green in CI, including `docker` and `e2e`.
+2. **Record the rollback target.** In Northflank → `tessaloom` → Deployments, note that
+   `6aded5c0…` serves `39c0fe5`. Do not delete old builds.
+3. **Merge** PR #19 with a merge commit, not a squash, so it can be reverted with
+   `git revert -m 1`. Wait for build SUCCESS and deployment COMPLETED, then confirm the new SHA.
+4. **Private smoke, port still private.** From your machine:
+   `northflank forward service --project default --service tessaloom`, then, in another terminal,
+   `node deploy/public-smoke.mjs http://<forwarded-host:port> --local`. All read-only checks must
+   pass, including `llmConfigured: false`. Check the logs for `worker_qloo_readiness ready=true`
+   and no errors. Stop the forward (`northflank forward cleanup-hosts` if it edited hosts).
+5. **Rollback if any check fails.** Revert the merge commit on `main`
+   (`git revert -m 1 <merge-sha>`, then push). CI rebuilds a tree identical to `39c0fe5` and
+   deploys it. A faster path is redeploying deployment `6aded5c…` from the Northflank UI.
+   Stored data is unaffected; this release has no migrations.
+6. **Expose.** Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with the
+   Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0` and
+   `RUN_ACCESS=off`.
+7. **Public smoke.** From an outside network:
+   `node deploy/public-smoke.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run`, then once with
+   `--write-probe`. It creates one anonymous workspace/project/brief and must get
+   `PAID_RUNS_DISABLED` with no run created.
+8. **Un-expose immediately** (port back to private) if the public smoke fails. Then fix or
+   roll back as in step 5.
+
+Known residual risk once public: with `TRUSTED_PROXY_HOPS=0`, every visitor shares one
+rate-limit bucket (workspace creation 20/min, sample reads 60/min, share lookups 30/min, run
+starts 20/min). That's safe for cost and fine for judges, but one aggressive client could
+briefly throttle others. Raising it to `1` needs proof that Northflank's edge overwrites
+`X-Forwarded-For`; that's a post-exposure check, not a release blocker.
 
 ### 2.2 Prepare the paid configuration without a key
 
