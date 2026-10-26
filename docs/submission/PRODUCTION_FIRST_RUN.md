@@ -21,7 +21,7 @@ public, read-only, real-data story sample.
 | Qloo readiness | 39/39 probes 07:32–10:42 UTC: `ready: true`, `endpointTrusted: true`, Harness `0.1.26`, `probeFailure: null` |
 | Private smoke via port-forward (`--skipHostnames`) | `deploy/public-smoke.mjs` read-only checks **7/7 pass**; `/api/health/ready` 200; status `llmConfigured: false`, `llmModel: null`; HSTS, nonce CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies present; static assets 200 with immutable caching |
 | Public samples | **0** (`/api/v1/samples` → `{"items":[]}`) |
-| Run access | Fail-closed default (`RUN_ACCESS` unset in production → off) |
+| Run access | **`invite`**, not off: `RUN_ACCESS` is unset in the web environment, and `runAccessFor` defaults production to `invite`. Runs still cannot start without a redeemed, active grant, and with no key a run would stop at R1 (`LLM_NOT_CONFIGURED`) before any Qloo call. Set `RUN_ACCESS=off` explicitly before exposure (§2.1 step 6) |
 | Port `p01` (HTTP 3000) | **`public: false`** |
 
 **Remaining blockers for a public demo:** making port `p01` public (§2.1 steps 6–8), and the paid
@@ -70,9 +70,10 @@ Steps 1–4 were completed on 2026-10-26: PR #19 merged as `a37afc6` with CI ful
    (`git revert -m 1 <merge-sha>`, then push). CI rebuilds a tree identical to `39c0fe5` and
    deploys it. A faster path is redeploying deployment `6aded5c…` from the Northflank UI.
    Stored data is unaffected; this release has no migrations.
-6. **Expose.** Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with the
-   Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0` and
-   `RUN_ACCESS=off`.
+6. **Expose.** First set `RUN_ACCESS=off` in the service's runtime variables. It is unset today,
+   which production treats as `invite`. Wait for the restart and confirm the home page says "New
+   AI runs are paused". Then Northflank → Networking → port `p01` (HTTP 3000) → **Public**, with
+   the Northflank-managed `code.run` domain and TLS. Keep `TRUSTED_PROXY_HOPS=0`.
 7. **Public smoke.** From an outside network:
    `node deploy/public-smoke.mjs https://p01--tessaloom--mpfcqkyl42yb.code.run`, then once with
    `--write-probe`. It creates one anonymous workspace/project/brief and must get
@@ -101,7 +102,7 @@ step still cannot spend. Differences from today's [`northflank.env.example`](../
 | `GLOBAL_DAILY_QLOO_CALLS` | `0` | `60` |
 | `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `1` / `1` | unchanged |
 | `WORKSPACE_DAILY_RUNS` | `1` | **`2`**: exploration and blueprint composition are separate run admissions (with `1`, Compose is refused with `RUN_LIMIT`; tested) |
-| `RUN_ACCESS` | `off` | `off`; `invite` only during §4 |
+| `RUN_ACCESS` | unset (= `invite` in production) | `off`; `invite` only during §4 and judging |
 | `CLAUDE_SUBSCRIPTION_LOCAL_APPROVED` / `_MAX_REQUESTS` | (unset) | `off` / `0`, explicit |
 
 Keep `SESSION_SECRET` and `SHARE_TOKEN_PEPPER` unchanged; changing the pepper invalidates grants
