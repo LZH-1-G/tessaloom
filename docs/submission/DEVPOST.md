@@ -34,7 +34,7 @@ The application uses TypeScript, Next.js, React, PostgreSQL, Drizzle and pg-boss
 
 Qloo integration uses the official Harness through supported workflows and typed adapters. Search and entity resolution establish the intended cultural inputs; recommendations, rankings, tags and audience comparisons supply evidence for cross-domain claims. The adapter normalizes different response shapes, records provenance, separates cache reuse from retrieval, and enforces bounded requests. Unsupported or inadequate evidence remains insufficient rather than being converted into a confident conclusion.
 
-A provider-independent LLM Gateway runs the agent roles on Claude (Claude Sonnet 5.5 through the Anthropic API in deployment), and also supports DeepSeek, Gemini and scripted AI. Strict schemas and semantic checks validate responses. Paid requests require access authorization and global spending reservations; DeepSeek additionally requires explicit CNY limits and conservative currency accounting. Web and worker processes use separate identities, and provider credentials stay outside the browser and web process.
+Five Claude roles (intent, hypothesis generation, evidence critic, What-if narrator, blueprint composer) run through an LLM gateway that enforces JSON Schema structured output, semantic validators (grounded entities, no causal or individual-level claims, no sensitive traits), at most one repair, and a spending reservation before every call. Deployment uses Claude Sonnet 5.5 through the Anthropic API; local development can use the official Claude Agent SDK on the developer's own subscription, which the production configuration refuses. Web and worker processes run as separate identities, and provider credentials never reach the browser or the web process.
 
 ## What makes it original
 
@@ -48,19 +48,19 @@ We also found that a cache timestamp can accidentally imply fresh evidence. Pres
 
 ## Validation and current limitations
 
-Historical live Qloo checks verified supported Harness capabilities, with limitations documented in the repository. Separately, exactly two authorized DeepSeek V4 Pro calls using invented cultural inputs passed strict JSON/schema and semantic validation. These are distinct tests: a full real-Qloo-to-DeepSeek application run has not been validated. On 2026-10-26 the complete application workflow (brief, entity selection, live Qloo discovery and evidence, hypotheses, blueprint) ran locally with live Qloo data and Claude Sonnet, through the official Claude Agent SDK on the developer's own Claude subscription (local personal use, no API charge). All five model calls passed validation, and all seven blueprint citations resolve to stored live-Qloo evidence. The public deployment's Claude API path has not yet been exercised with real calls.
+On 2026-10-26 the complete workflow (brief, entity selection, live Qloo discovery and evidence, hypotheses, blueprint) ran end to end with live Qloo data and Claude Sonnet 5.5. All five Claude calls passed schema and semantic validation on the first attempt. Qloo produced 93 cross-world bridges, five hypotheses were graded against live Qloo evidence, and all seven blueprint citations resolve to stored evidence. That run used the official Claude Agent SDK on the developer's own Claude subscription, locally (personal use, no API charge). [PRODUCTION_RESULT: the same scenario through the Anthropic API on the public deployment, with date and cost.]
 
-A separate local demonstration mode uses synthetic cultural data and scripted AI, prominently labelled “FIXTURE — not real Qloo data.” It demonstrates the actual database, agent orchestration, graph, branching and composition behavior without consuming provider quota. Read-only samples use the same stored outputs. They are not evidence of real cultural affinity or commercial demand.
+A second live pair (*Norwegian Wood* + Nujabes) produced too few cross-world bridges. The app now explains this outcome and suggests adding or broadening interests instead of failing silently. A separate local demo mode uses synthetic data and scripted AI, labelled “FIXTURE — not real Qloo data”; production refuses fixture data.
 
-Current event quota and credential expiry remain unverified. Raw Qloo responses are not retained. Live generation stays invitation-only behind spending caps. No causal, attendance or sales guarantee is made.
+Qloo values are aggregate taste signals: no attendance, sales, causal or individual-level claims are made. Raw Qloo responses are not retained, and no Qloo response data is stored in the public repository. Paid generation is invitation-only behind per-run, per-grant and daily spending caps.
 
 ## What's next
 
-Complete a separately authorized, tightly bounded live calibration when quota and data-use prerequisites are established, measure quality across more briefs, and refine evaluator thresholds using genuine provider responses. The existing uncertainty and provenance safeguards remain part of that work.
+Calibrate evaluator thresholds across many more live briefs, add a guided third-interest suggestion when bridges are scarce, and let venues compare real attendance against the blueprint's measurement plan.
 
 ## Built with
 
-TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, pg-boss, Zod, Qloo Harness, Claude (Anthropic API), Claude Agent SDK (local development), DeepSeek, Vitest, Playwright, axe-core, Docker, Caddy.
+TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, pg-boss, Zod, Qloo Harness, Claude Sonnet 5.5 (Anthropic API), Claude Agent SDK (local development), Vitest, Playwright, axe-core, Docker, Caddy.
 
 ## Testing instructions
 
@@ -68,7 +68,8 @@ TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, p
 > ([runbook](PRODUCTION_FIRST_RUN.md)) has succeeded. Until then, keep this section out of Devpost.
 
 **Public read-only result (no sign-in, no cost):** open [PUBLIC_URL], choose **Demo samples**, then
-open **Spirited sound evenings**. It is a real run from [RUN_DATE]: live Qloo data for *Spirited
+open **Spirited sound evenings**. The page walks through the whole story: brief, Qloo discovery,
+tested hypotheses, blueprint and limitations. It is a real run from [RUN_DATE]: live Qloo data for *Spirited
 Away* and Joe Hisaishi, hypotheses tested against Qloo evidence, and a blueprint whose citations
 open the stored evidence. Use **Traceability** to filter speculative blocks, and the evidence
 appendix to see each claim's stance, rule and retrieval date.
@@ -83,8 +84,7 @@ code that is used up or expired is refused with an explanation.
 
 ## Owner-only fields and final actions
 
-- Run the approved production first run, feature its blueprint as a sample, then insert the actual public demo URL, run date and public repository URL; none exist yet.
-- Confirm the current Devpost form, eligibility, attribution and open-source requirements personally.
-- Upload the reviewed fixture-labelled screenshots; a short narrated video is optional under the previously owner-verified rules, subject to the current form.
-- Confirm that the offered demo satisfies the event's meaningful-Qloo-integration and public-working-demo requirements. A fixture demonstration alone must not be represented as live Qloo validation.
-- Review AI-assistance disclosure and then submit before October 31, 2026, 11:45 AM Beijing time. No organizer inquiry is required for the independent preparation tasks above.
+- After the final acceptance run: fill [PUBLIC_URL], [RUN_DATE], [PRODUCTION_RESULT] and the access code(s), and add the public repository URL.
+- Gallery: up to five screenshots from [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Real-data screenshots are fine on Devpost but never in the repository ([rights review](DATA_RIGHTS_REVIEW.md)). A video is optional under the rules.
+- Confirm eligibility and the current Devpost form personally; review the AI-assistance disclosure (Claude Code and Codex).
+- Submit before **October 30, 2026, 11:45 PM ET** (October 31, 11:45 AM Beijing). Judging runs November 2–5.
