@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "@/lib/api";
+import { api, publicGet } from "@/lib/api";
 import type {
   ExperimentViewData,
   ProjectOverview,
@@ -63,7 +63,7 @@ export function ProjectProvider({
       try {
         const [o, s] = await Promise.all([
           api.get<ProjectOverview>(`/api/v1/projects/${projectId}`),
-          api.get<SystemStatus>("/api/v1/system/status"),
+          publicGet<SystemStatus>("/api/v1/system/status"),
         ]);
         setOverview(o);
         setStatus(s);
@@ -97,8 +97,7 @@ export function ProjectProvider({
   useEffect(() => {
     void refresh();
     const timer = setInterval(() => {
-      void api
-        .get<SystemStatus>("/api/v1/system/status")
+      void publicGet<SystemStatus>("/api/v1/system/status")
         .then(setStatus)
         .catch(() => {});
     }, 15_000);
