@@ -48,7 +48,7 @@ We also found that a cache timestamp can accidentally imply fresh evidence. Pres
 
 ## Validation and current limitations
 
-Historical live Qloo checks verified supported Harness capabilities, with limitations documented in the repository. Separately, exactly two authorized DeepSeek V4 Pro calls using invented cultural inputs passed strict JSON/schema and semantic validation. These are distinct tests: a full real-Qloo-to-DeepSeek application run has not been validated.
+Historical live Qloo checks verified supported Harness capabilities, with limitations documented in the repository. Separately, exactly two authorized DeepSeek V4 Pro calls using invented cultural inputs passed strict JSON/schema and semantic validation. These are distinct tests: a full real-Qloo-to-DeepSeek application run has not been validated. On 2026-10-26 the complete application workflow (brief, entity selection, live Qloo discovery and evidence, hypotheses, blueprint) ran locally with live Qloo data and Claude Sonnet, through the official Claude Agent SDK on the developer's own Claude subscription (local personal use, no API charge). All five model calls passed validation, and all seven blueprint citations resolve to stored live-Qloo evidence. The public deployment's Claude API path has not yet been exercised with real calls.
 
 The interactive judge demonstration uses synthetic cultural data and scripted AI, prominently labelled “FIXTURE — not real Qloo data.” It demonstrates the actual database, agent orchestration, graph, branching and composition behavior without consuming provider quota. Read-only samples use the same stored outputs. They are not evidence of real cultural affinity or commercial demand.
 
