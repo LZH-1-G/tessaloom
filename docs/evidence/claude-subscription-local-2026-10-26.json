@@ -1,0 +1,205 @@
+{
+  "description": "Local personal-use acceptance of the real Qloo + Claude workflow through the owner's Claude Pro subscription (Agent SDK). Safe metadata only: no prompts, raw Qloo payloads, credentials or reasoning.",
+  "date": "2026-10-26",
+  "environment": {
+    "scope": "LOCAL_ONLY (APP_ENV=development, web bound to 127.0.0.1, dedicated database tessaloom_e2e_subscription)",
+    "baseCommit": "e609a87 plus uncommitted working tree",
+    "llmProvider": "claude-subscription",
+    "model": "claude-sonnet-5-5",
+    "agentSdk": "@anthropic-ai/claude-agent-sdk@0.3.296 (bundled, unmodified Claude Code 2.1.296)",
+    "qlooMode": "live",
+    "qlooHarness": "0.1.26",
+    "qlooEndpointTrusted": true,
+    "qlooRawRetention": "off"
+  },
+  "authentication": {
+    "claudeAuthStatus": {
+      "authMethod": "claude.ai",
+      "apiProvider": "firstParty",
+      "subscriptionType": "pro"
+    },
+    "sdkAccountInfo": {
+      "subscriptionType": "Claude Pro",
+      "apiProvider": "firstParty",
+      "apiKeySourceField": "absent"
+    },
+    "sdkInitApiKeySource": "none",
+    "anthropicApiKeyPresent": false,
+    "paidExtraUsage": {
+      "overageStatus": "rejected",
+      "overageDisabledReason": "org_level_disabled",
+      "isUsingOverage": false
+    },
+    "subscriptionUtilizationObservedBeforeWorkflow": {
+      "fiveHour": 0.29,
+      "sevenDay": 0.07
+    }
+  },
+  "providerSmokeCalls": [
+    {
+      "purpose": "account gate exercised, failed closed before send",
+      "result": "auth refusal, requestSent=false (gate expected 'pro'; SDK reports 'Claude Pro'; gate fixed)"
+    },
+    {
+      "purpose": "first provider call",
+      "result": "valid JSON; rejected as unexpected model because the CLI added an auxiliary claude-haiku-5-5 call"
+    },
+    {
+      "purpose": "raw SDK diagnostics x2",
+      "result": "identified auxiliary call; CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 leaves claude-sonnet-5-5 only"
+    },
+    {
+      "purpose": "final provider smoke",
+      "result": "valid JSON, modelId claude-sonnet-5-5, 4995 ms"
+    }
+  ],
+  "runs": [
+    {
+      "runId": "01a175ba-51f3-75b5-853f-f0e541b27949",
+      "seeds": ["Norwegian Wood (book, 1987)", "Nujabes (artist)"],
+      "kind": "EXPLORATION",
+      "state": "FAILED",
+      "terminalReason": "POOL_TOO_SMALL",
+      "usage": {
+        "llmCalls": 1,
+        "qlooCalls": 19,
+        "llmInputTokens": 2951,
+        "llmOutputTokens": 439
+      },
+      "finding": "All Qloo calls OK (discovery 6x10 results), but no cross-seed, cross-domain pair shared a tag: only place-place tags overlapped and only 8 of 60 thread items were tag-enriched (MAX_TAG_ENRICHMENT=8)."
+    },
+    {
+      "runId": "01a175be-7c75-77a4-a72b-1595b9d08933",
+      "seeds": ["Spirited Away (film, 2001)", "Joe Hisaishi (artist)"],
+      "kind": "EXPLORATION",
+      "state": "COMPLETED",
+      "usage": {
+        "llmCalls": 3,
+        "qlooCalls": 27,
+        "llmInputTokens": 17518,
+        "llmOutputTokens": 6545
+      },
+      "collisionPool": {
+        "candidates": 93,
+        "selected": 3,
+        "reducedInputs": 77,
+        "tension": 0.5
+      },
+      "hypotheses": 5,
+      "claims": 10,
+      "wallClockIncludesHumanConfirmation": true
+    },
+    {
+      "runId": "01a175cb-adaa-70a5-b8c8-ecbcbc3d9506",
+      "kind": "COMPOSITION",
+      "state": "COMPLETED",
+      "usage": {
+        "llmCalls": 1,
+        "qlooCalls": 0,
+        "llmInputTokens": 4050,
+        "llmOutputTokens": 2200
+      },
+      "blueprint": {
+        "blocks": 15,
+        "citations": 7,
+        "citationsResolved": 7,
+        "evidenceBackedShare": 0.13,
+        "aiInterpretationShare": 0.53,
+        "speculationShare": 0.33
+      }
+    }
+  ],
+  "llmInvocations": [
+    {
+      "role": "R1",
+      "promptId": "r1.intent",
+      "validation": "VALID",
+      "inputTokens": 2951,
+      "cachedInputTokens": 0,
+      "outputTokens": 439,
+      "apiChargeUsd": 0,
+      "notionalApiListUsd": 0.011766,
+      "latencyMs": 5170
+    },
+    {
+      "role": "R1",
+      "promptId": "r1.intent",
+      "validation": "VALID",
+      "inputTokens": 1063,
+      "cachedInputTokens": 1885,
+      "outputTokens": 383,
+      "apiChargeUsd": 0,
+      "notionalApiListUsd": 0.006675,
+      "latencyMs": 6816
+    },
+    {
+      "role": "R3",
+      "promptId": "r3.generate",
+      "validation": "VALID",
+      "inputTokens": 9894,
+      "cachedInputTokens": 0,
+      "outputTokens": 4885,
+      "apiChargeUsd": 0,
+      "notionalApiListUsd": 0.073584,
+      "latencyMs": 31967
+    },
+    {
+      "role": "R4",
+      "promptId": "r4.critique",
+      "validation": "VALID",
+      "inputTokens": 4676,
+      "cachedInputTokens": 0,
+      "outputTokens": 1277,
+      "apiChargeUsd": 0,
+      "notionalApiListUsd": 0.024459,
+      "latencyMs": 10189
+    },
+    {
+      "role": "R6",
+      "promptId": "r6.compose",
+      "validation": "VALID",
+      "inputTokens": 4050,
+      "cachedInputTokens": 0,
+      "outputTokens": 2200,
+      "apiChargeUsd": 0,
+      "notionalApiListUsd": 0.032124,
+      "latencyMs": 19423
+    }
+  ],
+  "repairsOrRetries": 0,
+  "spendLedger": {
+    "reservations": 5,
+    "status": "SETTLED",
+    "reservedUsdMicros": 501947,
+    "maxSingleReservationUsdMicros": 176428,
+    "settledUsdMicros": 0
+  },
+  "qlooToolInvocations": {
+    "total": 46,
+    "ok": 45,
+    "byMethod": {
+      "entityTags": 21,
+      "recommend": 15,
+      "describeEntity": 4,
+      "compareAudiences": 2,
+      "searchEntities": 1,
+      "audienceDemographics": 1,
+      "rank": 1,
+      "trends": 1
+    },
+    "snapshots": 46,
+    "rawRetained": 0,
+    "fixtures": 0
+  },
+  "evidenceStances": {
+    "SUPPORTS": 7,
+    "CONTRADICTS": 1,
+    "NEUTRAL": 1,
+    "INSUFFICIENT": 1
+  },
+  "runEvents": 125,
+  "secretScan": {
+    "stackLogsCredentialPatternMatches": 0,
+    "sdkTranscriptsPersisted": false
+  }
+}

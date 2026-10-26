@@ -814,6 +814,7 @@ describe("readiness (local, no Qloo call)", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "tl-doctor-"));
     const file = path.join(dir, "qloo");
     const doctor = JSON.stringify({
+      versions: { harness: "0.1.26" },
       checks: [
         { id: "qloo-auth", status: authStatus, message: "m" },
         { id: "qloo-endpoint-trust", status: "ok", message: trustMessage },

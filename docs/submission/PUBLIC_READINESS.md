@@ -35,9 +35,10 @@ The MIT license covers Tessaloom's original source. Keep dependency notices in i
 
 ## Remaining publication checklist
 
-- [ ] Owner approves push and repository publication; no such action was taken.
+- [ ] Owner approves repository publication (the PR branch was pushed on 2026-10-26; visibility unchanged).
 - [ ] Review historical Qloo-derived descriptions/screenshots for permitted redistribution, or exclude them from the public release until rights are clear.
 - [ ] Confirm author attribution, eligibility and AI-assistance disclosure against current submission requirements.
-- [ ] Run remote CI/CodeQL after an approved push; local tests do not imply those jobs passed.
+- [ ] Remote CI on Linux AMD64: PR #18 runs lint/typecheck, unit, integration, Chromium/WebKit E2E, security (audit, gitleaks, osv-scanner, bundle scan) and the Docker image smoke. CodeQL runs only once the repository is public.
+- [x] Full-history gitleaks (2026-10-26, offline v8.30.0): no leaks; branch diff contains only test sentinels.
 - [ ] Confirm GitHub displays MIT after publication and that links resolve for a logged-out visitor.
 - [ ] Review final deployment image dependency notices if distributing that image publicly.

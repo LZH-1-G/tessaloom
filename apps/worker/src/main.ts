@@ -102,6 +102,8 @@ async function refreshReadiness() {
     reason: readiness.reason ?? null,
     endpointTrusted: readiness.endpointTrusted,
     harnessVersion: readiness.harnessVersion,
+    probeDurationMs: readiness.probeDurationMs,
+    probeFailure: readiness.probeFailure ?? null,
   });
 }
 

@@ -138,6 +138,8 @@ SQL
     APP_ENV: "production",
     NODE_ENV: "production",
     QLOO_MODE: "live",
+    // Local doctor only: this is deliberately not a usable key; network is private.
+    QLOO_API_KEY: "test-only",
     RUN_ACCESS: "off",
     GLOBAL_DAILY_LLM_USD: "0",
     GLOBAL_DAILY_QLOO_CALLS: "0",
@@ -251,6 +253,33 @@ SQL
     startupAndMigrationMs: Date.now() - started,
     diagnostic,
   });
+  phase = "worker_local_harness_readiness";
+  // Exercise the application's actual probe at 0.2 CPU, not just an interactive CLI.
+  await until(() =>
+    docker("logs", container).includes("worker_qloo_readiness"),
+  );
+  const readiness = docker("logs", container)
+    .split("\n")
+    .map((line) => {
+      try {
+        const entry = JSON.parse(line);
+        // The supervisor wraps and redacts each worker line as child_log.message.
+        return entry.event === "child_log" && entry.role === "worker"
+          ? JSON.parse(entry.message)
+          : null;
+      } catch {
+        return null;
+      }
+    })
+    .findLast((event) => event?.event === "worker_qloo_readiness");
+  assert.equal(readiness?.ready, true);
+  assert.equal(readiness.endpointTrusted, true);
+  assert.equal(readiness.harnessVersion, "0.1.26");
+  assert.equal(readiness.probeFailure, null);
+  log("northflank_worker_local_harness_passed", {
+    probeDurationMs: readiness.probeDurationMs,
+    liveApiVerified: false,
+  });
   phase = "bounded_request_load";
   docker(
     "exec",
@@ -312,6 +341,7 @@ SQL
     vars.SESSION_SECRET,
     vars.SHARE_TOKEN_PEPPER,
     url.toString(),
+    vars.QLOO_API_KEY,
   ])
     assert(!logs.includes(value));
   assert(!logs.includes("SecurityWarning"));

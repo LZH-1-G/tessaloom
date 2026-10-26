@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
+  BlueprintDraft,
+  ComparisonNarrative,
   CritiqueReport,
   EvidencePlan,
   HypothesisBatch,
@@ -402,20 +404,45 @@ describe("prompts and untrusted input", () => {
       HypothesisRevision,
       EvidencePlan,
       CritiqueReport,
+      ComparisonNarrative,
+      BlueprintDraft,
     ]) {
       const json = toStructuredSchema(schema);
       const objects: Record<string, unknown>[] = [];
+      const keywords = new Set<string>();
       const walk = (node: unknown) => {
         if (Array.isArray(node)) node.forEach(walk);
         else if (node && typeof node === "object") {
           const o = node as Record<string, unknown>;
           if (o.type === "object") objects.push(o);
-          Object.values(o).forEach(walk);
+          for (const [key, value] of Object.entries(o)) {
+            // `properties` maps field names, which are not schema keywords.
+            if (key === "properties" && value && typeof value === "object")
+              Object.values(value).forEach(walk);
+            else {
+              keywords.add(key);
+              if (key === "minItems") expect([0, 1]).toContain(value);
+              walk(value);
+            }
+          }
         }
       };
       walk(json);
       expect(objects.length).toBeGreaterThan(0);
       for (const o of objects) expect(o.additionalProperties).toBe(false);
+      // Constraints the Messages API rejects in output_config.format (validated client-side).
+      for (const unsupported of [
+        "minLength",
+        "maxLength",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "maxItems",
+        "uniqueItems",
+      ])
+        expect(keywords.has(unsupported), unsupported).toBe(false);
     }
     const claimParams = JSON.stringify(toStructuredSchema(HypothesisBatch));
     expect(claimParams).toContain("signalEntityIds");

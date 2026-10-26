@@ -67,8 +67,11 @@ export class ProviderError extends Error {
 
 export interface LlmProvider {
   readonly name: string;
-  /** Explicit account attestation; reservations still use conservative published paid rates. */
-  readonly billing?: "confirmed-free-tier";
+  /**
+   * Explicit account attestation; reservations still use conservative published paid rates.
+   * "claude-subscription": the owner's own plan allowance (local personal use), no API charge.
+   */
+  readonly billing?: "confirmed-free-tier" | "claude-subscription";
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 

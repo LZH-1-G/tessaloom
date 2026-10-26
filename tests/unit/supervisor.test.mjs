@@ -169,6 +169,32 @@ describe("child environment", () => {
   });
 });
 
+describe("local Claude subscription mode", () => {
+  it("supervisor refuses deployed subscription mode and passes HOME only locally", () => {
+    expect(() =>
+      validateSupervisorEnv({
+        APP_ENV: "production",
+        LLM_PROVIDER: "claude-subscription",
+        QLOO_MODE: "live",
+      }),
+    ).toThrow("subscription mode is local only");
+    const env = {
+      APP_ENV: "development",
+      LLM_PROVIDER: "claude-subscription",
+      HOME: "/home/owner",
+      USER: "owner",
+    };
+    expect(buildChildEnv("worker", env)).toMatchObject({
+      HOME: "/home/owner",
+      USER: "owner",
+    });
+    expect(buildChildEnv("web", env)).not.toHaveProperty("HOME");
+    expect(
+      buildChildEnv("worker", { ...env, LLM_PROVIDER: "anthropic" }),
+    ).not.toHaveProperty("HOME");
+  });
+});
+
 describe("supervisor lifecycle", () => {
   let children, spawnChild, log, exit, signalChild;
   beforeEach(() => {

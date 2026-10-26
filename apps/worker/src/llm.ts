@@ -8,6 +8,8 @@ import {
 } from "@tessaloom/db";
 import {
   AnthropicProvider,
+  ClaudeSubscriptionProvider,
+  CLAUDE_SUBSCRIPTION_MODELS,
   GeminiProvider,
   GEMINI_MODELS,
   DeepSeekProvider,
@@ -86,11 +88,15 @@ export function createDbLlmRecorder(db: Executor): LlmInvocationRecorder {
 }
 
 export interface LlmSettings {
-  LLM_PROVIDER: "anthropic" | "scripted" | "gemini" | "deepseek";
+  LLM_PROVIDER:
+    "anthropic" | "scripted" | "gemini" | "deepseek" | "claude-subscription";
+  APP_ENV?: "development" | "test" | "staging" | "production";
   LLM_MODEL: string;
   LLM_FALLBACK_MODEL: string;
   LLM_MODE: "standard" | "economy";
   ANTHROPIC_API_KEY?: string;
+  CLAUDE_SUBSCRIPTION_LOCAL_APPROVED?: "off" | "on";
+  CLAUDE_SUBSCRIPTION_MAX_REQUESTS?: number;
   DEEPSEEK_API_KEY?: string;
   DEEPSEEK_LIVE_APPROVED?: "off" | "on";
   DEEPSEEK_MAX_REQUESTS?: number;
@@ -126,10 +132,11 @@ export function effectiveModels(settings: LlmSettings) {
     ? { primary: SCRIPTED_MODELS.primary, fallback: SCRIPTED_MODELS.fallback }
     : {
         primary: settings.LLM_MODEL,
-        fallback:
-          settings.LLM_PROVIDER === "gemini"
-            ? settings.LLM_MODEL
-            : settings.LLM_FALLBACK_MODEL,
+        fallback: ["gemini", "claude-subscription"].includes(
+          settings.LLM_PROVIDER,
+        )
+          ? settings.LLM_MODEL
+          : settings.LLM_FALLBACK_MODEL,
       };
 }
 
@@ -207,6 +214,22 @@ export function createLlmGateway(
         maxRequests: settings.GEMINI_MAX_REQUESTS,
         timeoutMs: settings.GEMINI_TIMEOUT_MS,
       });
+    } else if (settings.LLM_PROVIDER === "claude-subscription") {
+      // Local personal use of the owner's own Claude Code login; never a deployed service.
+      if (
+        !["development", "test"].includes(settings.APP_ENV ?? "") ||
+        settings.ANTHROPIC_API_KEY ||
+        settings.CLAUDE_SUBSCRIPTION_LOCAL_APPROVED !== "on" ||
+        !settings.CLAUDE_SUBSCRIPTION_MAX_REQUESTS ||
+        !(CLAUDE_SUBSCRIPTION_MODELS as readonly string[]).includes(
+          settings.LLM_MODEL,
+        )
+      )
+        return null;
+      resolved = new ClaudeSubscriptionProvider({
+        localPersonalUseApproved: true,
+        maxRequests: settings.CLAUDE_SUBSCRIPTION_MAX_REQUESTS,
+      });
     } else if (settings.ANTHROPIC_API_KEY)
       resolved = new AnthropicProvider({ apiKey: settings.ANTHROPIC_API_KEY });
     else return null;
@@ -214,7 +237,9 @@ export function createLlmGateway(
   return new LlmGateway({
     provider: resolved,
     primaryModel: models.primary,
-    fallbackModel: ["gemini", "deepseek"].includes(settings.LLM_PROVIDER)
+    fallbackModel: ["gemini", "deepseek", "claude-subscription"].includes(
+      settings.LLM_PROVIDER,
+    )
       ? null
       : models.fallback,
     prices,

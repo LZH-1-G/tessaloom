@@ -13,6 +13,7 @@ M0–M10-B are implemented. This branch preserves DeepSeek integration (`6e210c2
 - **Interactive demonstration:** synthetic cultural fixtures plus scripted AI, visibly labelled **FIXTURE — not real Qloo data**. These are functioning workflows backed by PostgreSQL, not static mockups or live Qloo claims.
 - **Historical Qloo validation:** the [V1 report](docs/research/QLOO_V1_VALIDATION.md) records successful supported Harness workflows and their limitations. Current credential quota/expiry and permitted retention/sharing remain unverified; no new live calls were made during submission preparation.
 - **Real AI validation:** exactly two synthetic-input `deepseek-v4-pro` calls passed strict JSON/schema and semantic checks. See the [trial report](docs/DEEPSEEK_LIVE_TRIAL_2026-10-23.md). This does **not** establish a successful real-Qloo-to-DeepSeek end-to-end run.
+- **Real Qloo + Claude validation (local):** on 2026-10-26 the full workflow ran with live Qloo data and Claude Sonnet 5.5 on the developer's own Claude subscription (local personal use only; [report](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). The production Anthropic API path is prepared but not yet exercised ([first-run runbook](docs/submission/PRODUCTION_FIRST_RUN.md)).
 - **Public demo:** not deployed. Production generation remains off or invitation-controlled, with independent provider spending limits. Precomputed fixture-labelled samples work read-only in the local demo. The production firewall also blocks fixture reads; selecting an approved public-demo mode remains a release gate.
 
 ## Try the complete local demo
@@ -98,8 +99,9 @@ Tests use disposable local databases; do not point them at production. Live-prov
 - [Current Northflank deployment and recovery](docs/NORTHFLANK_RUNBOOK.md)
 - [Public-repository and license audit](docs/submission/PUBLIC_READINESS.md)
 - [Acceptance report and owner checklist](docs/submission/ACCEPTANCE.md)
+- [Production first run with Claude (prepared, needs approval)](docs/submission/PRODUCTION_FIRST_RUN.md)
 - [Architecture](docs/ARCHITECTURE.md), [agent workflow](docs/AGENT_WORKFLOW.md), [API contracts](docs/API_CONTRACTS.md), [security](docs/SECURITY.md), [test plan](docs/TEST_PLAN.md)
 
 ## License and attribution
 
-Tessaloom's source is [MIT licensed](LICENSE), copyright 2026 LZH-1-G. Dependencies retain their own licenses; see the [public readiness audit](docs/submission/PUBLIC_READINESS.md). Qloo data is not relicensed by this repository's MIT license. Synthetic demonstration titles and numbers are invented. Development used AI coding assistants; this does not imply that scripted demo output came from a live model.
+Tessaloom's source is [MIT licensed](LICENSE), copyright 2026 LZH-1-G. Dependencies retain their own licenses; see the [public readiness audit](docs/submission/PUBLIC_READINESS.md). Qloo data is not relicensed by this repository's MIT license. Synthetic demonstration titles and numbers are invented. Development used AI coding assistants (Claude Code and Codex); this does not imply that scripted demo output came from a live model.
