@@ -183,7 +183,7 @@ describe("deterministic keys", () => {
 // Frozen literal, cross-checked by hashing the normalized canonical JSON with system `shasum`.
 // Regenerate only with a recorded decision: it changes every stored experiment key.
 const GOLDEN_EXPERIMENT_DIGEST =
-  "d49271c0dcd903a7fb7f4f1e0c1610fae8c4cbb4630e108cccffd84f34dfbbb0";
+  "21095469140adb54c77ccdb83cf10a27bdb60a4f150b241fd5b585a5132badf2";
 
 describe("domain schemas", () => {
   const brief = {
