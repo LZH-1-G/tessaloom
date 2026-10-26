@@ -33,6 +33,24 @@ The rules for these fields live in `projectStory` in `packages/db/src/repositori
 and are enforced by the integration test above. The browser test checks the rendered story and
 its limitations wording.
 
+## By content type (updated 2026-10-26)
+
+| Content | Where it appears | Public treatment |
+| --- | --- | --- |
+| App-generated original text (UI copy, rule rationales, limitations) | Everywhere | Ours; shown |
+| Generated hypotheses and blueprints (Claude output, labelled interpretation/speculation) | Studio, story, exports | Ours; shown, labelled; Qloo-backed blocks cite evidence |
+| Qloo-derived entity names and types | Studio, story, exports, blueprint text | Shown with "Qloo data" / "Cultural data: Qloo" attribution (permitted with attribution, pending organizer confirmation) |
+| Qloo descriptions, disambiguation text, raw responses | Studio only: the entity-confirmation step shows Qloo's short description to the user choosing an entity | Never in the story, samples, share payloads or exports; raw responses never stored |
+| Qloo rankings as gradings ("ranked 1 of 6", "top quartile") | Evidence rationales | Shown as Tessaloom's rule outcome, with origin and date |
+| Qloo popularity and affinity values | Not displayed publicly | Excluded from every public payload and export (tests) |
+| Internal identifiers (Qloo IDs, run/workspace/invocation IDs) | Owner's private views only | Excluded from public payloads and **shared exports** (fixed 2026-10-26, test) |
+| Third-party copyrighted media (cover art, posters, photos) | None | Not fetched or displayed; CSP `img-src 'self' data:` blocks external images |
+| Fonts | UI | Fraunces, Inter, IBM Plex Mono (SIL OFL), self-hosted at build |
+
+Interactive use by a judge or visitor shows Qloo results to that person in the course of the
+app's own function. That is the product use the kit describes, not redistribution. It still
+follows the same rule: no raw responses are retained.
+
 ## Repository audit (going public)
 
 - No real Qloo entity IDs are tracked. The search for Qloo-style uppercase UUIDs found none.
