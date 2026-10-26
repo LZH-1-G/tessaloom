@@ -23,12 +23,21 @@ export function ensureWorkspace(): Promise<void> {
         throw new ApiRequestError(
           res.status,
           "WORKSPACE",
-          "Could not open your workspace.",
+          res.status === 429
+            ? "Lots of new visitors right now. Wait a minute, then reload the page."
+            : "Could not open your workspace.",
         );
     })
     .catch((error: unknown) => {
       bootstrap = null;
-      throw error;
+      // Browsers report network failures with raw text ("Load failed", "Failed to fetch").
+      throw error instanceof ApiRequestError
+        ? error
+        : new ApiRequestError(
+            0,
+            "NETWORK",
+            "Could not reach Tessaloom. Check your connection and reload.",
+          );
     });
   return bootstrap;
 }
@@ -77,6 +86,17 @@ async function request<T>(
     );
   }
   return data as T;
+}
+
+/**
+ * Public read-only endpoints (system status): no workspace bootstrap, so they still answer
+ * when creating a workspace is throttled or fails.
+ */
+export async function publicGet<T>(path: string): Promise<T> {
+  const res = await fetch(path, { credentials: "omit" });
+  if (!res.ok)
+    throw new ApiRequestError(res.status, "PUBLIC", "Status unavailable.");
+  return (await res.json()) as T;
 }
 
 export const api = {

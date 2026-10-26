@@ -4,7 +4,7 @@ import { ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, ApiRequestError } from "@/lib/api";
+import { api, ApiRequestError, publicGet } from "@/lib/api";
 import type { RunView, SystemStatus } from "@/lib/types";
 import { ModeBanner, TopBar } from "./app-shell";
 import { DemoSamples, RunAccessNotice } from "./run-access";
@@ -45,8 +45,7 @@ export function Dashboard() {
       .get<{ items: ProjectSummary[] }>("/api/v1/projects")
       .then((r) => setProjects(r.items))
       .catch((e: Error) => setError(e.message));
-    void api
-      .get<SystemStatus>("/api/v1/system/status")
+    void publicGet<SystemStatus>("/api/v1/system/status")
       .then(setStatus)
       .catch(() => {});
   }, []);
