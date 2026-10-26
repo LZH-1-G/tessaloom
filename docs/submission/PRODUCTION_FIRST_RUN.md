@@ -91,7 +91,8 @@ step still cannot spend. Differences from today's [`northflank.env.example`](../
 | `LLM_MODE` | `economy` | `standard` |
 | `GLOBAL_DAILY_LLM_USD` / `WORKSPACE_DAILY_LLM_USD` / `EXPERIMENT_LLM_USD` | `0` | `0.50` |
 | `GLOBAL_DAILY_QLOO_CALLS` | `0` | `60` |
-| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` / `WORKSPACE_DAILY_RUNS` | `1` / `1` / `1` | unchanged |
+| `MAX_WORKING_RUNS` / `MAX_ACTIVE_RUNS_PER_WORKSPACE` | `1` / `1` | unchanged |
+| `WORKSPACE_DAILY_RUNS` | `1` | **`2`**: exploration and blueprint composition are separate run admissions (with `1`, Compose is refused with `RUN_LIMIT`; tested) |
 | `RUN_ACCESS` | `off` | `off`; `invite` only during §4 |
 | `CLAUDE_SUBSCRIPTION_LOCAL_APPROVED` / `_MAX_REQUESTS` | (unset) | `off` / `0`, explicit |
 
@@ -115,7 +116,7 @@ and shares.
    reserves the call's upper bound against the global-daily, workspace-daily and experiment caps
    ($0.50 each) and the grant cap ($0.50). If it does not fit, the call is never sent. Unknown
    outcomes keep the full reservation.
-2. **Grant:** `--days 1 --runs 1 --usd 0.50`. One run admission, revocable at once.
+2. **Grant:** `--days 1 --runs 2 --usd 0.50`: two run admissions (exploration + composition) for one workflow, one $0.50 cap, revocable at once.
 3. **Serial:** one working run, one active run per workspace, one run per workspace per day.
 4. **Run budget:** exploration ≤ 14 LLM / 40 Qloo calls; composition ≤ 3 LLM / 4 Qloo calls.
 5. **Provider and retries:** no SDK retries, no server-side fallback, approved model only. A
@@ -134,7 +135,7 @@ reservation and the run stops early. It never overspends to finish.
 
 1. Private terminal, recording off, in a Northflank job or one-off command with the service's
    runtime env: `node packages/db/dist/admin.mjs grant create --label final-acceptance --days 1
-   --runs 1 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
+   --runs 2 --usd 0.50`. Keep the code private. Set `RUN_ACCESS=invite`.
 2. Fresh browser → public URL → enter the code → create project **Spirited sound evenings** (Café).
 3. Brief: title *Spirited sound evenings*; challenge *"A 40-seat café wants a recurring monthly
    weekday evening that brings animated-film lovers and film-score music fans together, to attract
