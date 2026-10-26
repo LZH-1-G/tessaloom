@@ -33,13 +33,15 @@ Observed licenses include MIT, Apache-2.0, ISC, BSD, MPL-2.0, LGPL-3.0-or-later,
 
 The MIT license covers Tessaloom's original source. Keep dependency notices in installed distributions; do not label bundled third-party software or provider data as exclusively MIT. Before publishing a downloadable image, complete an image-specific SBOM/notice review. Source publication and public demo hosting do not require publishing the image itself.
 
-## Remaining publication checklist (updated 2026-10-26)
+## Publication checklist (updated 2026-10-26, release branch `claude/release-validation`)
 
-- [x] Full-history gitleaks (offline v8.30.0, all refs): no leaks. Working-tree scan: findings only in gitignored `apps/web/.next` build output (Next.js per-build preview/action keys and env-schema source in the webpack cache); no CI sentinel reached any build output.
-- [x] No Qloo response data tracked in the repository ([data-rights review](DATA_RIGHTS_REVIEW.md)): no Qloo entity IDs, payloads, scores or descriptions; test tag URNs are format examples.
-- [x] Production dependency audit: no known vulnerabilities. Browser bundle secret check: 674 files passed.
-- [x] Local verification on the release branch: lint, typecheck, 466 unit, 91 integration, 16 runtime, 30 Chromium/WebKit E2E, 2 invite E2E, 2 prepared-sample browser tests.
-- [ ] Remote CI on Linux AMD64 for the release PR (lint/typecheck, unit, integration, E2E, security incl. osv-scanner, Docker image smoke). CodeQL runs only once the repository is public.
-- [ ] Owner approves making the repository public; afterwards confirm GitHub shows the MIT license in the About section (a rules requirement) and that links resolve logged out.
-- [ ] Never commit real-data screenshots or exports; they belong on Devpost only.
-- [ ] Review final deployment image dependency notices if distributing that image publicly.
+- [x] Full-history gitleaks (offline v8.30.0, all refs): no leaks. Working tree: findings only in gitignored `apps/web/.next` build output.
+- [x] No provider tokens, application secrets or private database URLs tracked. The only credential-shaped URLs are `u:p@local` test strings and documented local placeholders. Environment examples (`.env.example`, `deploy/.env.example`, `deploy/northflank*.env.example`) contain placeholders and zero budgets only.
+- [x] No personal identifiers tracked. Hardcoded local home paths were removed from tracked files; older commits still contain them (low sensitivity, history not rewritten).
+- [x] No Qloo response data tracked ([data-rights review](DATA_RIGHTS_REVIEW.md)); real-data screenshots and exports are kept out of the repository.
+- [x] Media: only our own synthetic-fixture screenshots. Fonts are SIL OFL, self-hosted at build.
+- [x] No debug artifacts tracked (`test-results/`, `coverage/`, logs, dumps, `.env` files ignored).
+- [x] MIT `LICENSE` at the root; GitHub already detects "MIT License" (verified via `gh repo view`).
+- [x] README describes the verified state, setup from a clean checkout (fixture mode, no keys), live-mode variables, and the verification commands. CI covers lint/typecheck, unit, integration, Chromium/WebKit E2E, security (audit, gitleaks, osv-scanner, bundle scan) and the Docker image smoke on Linux AMD64. `main` at `a37afc6` is fully green.
+- [ ] **Owner:** make the repository public, then confirm the License appears in the About section for a logged-out visitor and that README links resolve. CodeQL starts automatically once public.
+- [ ] Review final deployment-image dependency notices if distributing that image publicly (not required for source publication).
