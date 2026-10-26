@@ -53,7 +53,10 @@ follows the same rule: no raw responses are retained.
 
 ## Repository audit (going public)
 
-- No real Qloo entity IDs are tracked. The search for Qloo-style uppercase UUIDs found none.
+- No real Qloo entity IDs are tracked. The 2026-10-26 full-history search for uppercase UUIDs found
+  only synthetic values, plus one opaque Qloo-style ID in an early test fixture (commit `408c148`).
+  It was replaced in the tree with `AAAAAAAA-…`. History keeps the bare string with no name, score
+  or other response field attached; it is not rewritten.
 - Tag URNs in tests are format examples (`genre:media:mystery`, `genre:music:pop`), not response data.
 - `docs/research/QLOO_V1_VALIDATION.md` records API behaviour: shapes, counts, one query input and
   qualitative outcomes. No payloads, IDs, scores or descriptions. **Low risk; keep.**
@@ -70,7 +73,11 @@ but the guide's "public repository" rule shows Qloo is sensitive to bulk redistr
 screenshots of the in-app story, which already exclude every **Unclear** field. Do not add
 data exports or raw JSON.
 
-## Organizer clarification (send on Discord #api-help, or email via Devpost)
+## Organizer clarification
+
+The final, ready-to-send version is [QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md). The earlier short draft below is kept for reference.
+
+### Earlier draft
 
 > Hi — Tessaloom (Qloo Agentic Hackathon). Our public demo shows a read-only example produced by
 > the app: entity names and types returned by Qloo, our own rule-based gradings of Qloo results

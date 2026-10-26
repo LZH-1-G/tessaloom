@@ -1,6 +1,11 @@
 # Tessaloom — Devpost copy-ready content
 
-Prepared 2026-10-24, updated 2026-10-26. Nothing has been submitted. Add the approved public demo and repository URLs in Devpost's link fields only after they actually work. The text below describes the current implementation and explicitly identifies the demonstration's data source.
+Prepared 2026-10-24, updated 2026-10-26. **Nothing has been submitted.** The text below describes the current implementation and explicitly identifies the demonstration's data source.
+
+## Links (verified 2026-10-26)
+
+- **Demo:** https://p01--tessaloom--mpfcqkyl42yb.code.run (public, HTTPS; health and security checks pass)
+- **Repository:** https://github.com/LZH-1-G/tessaloom (public, MIT license detected by GitHub)
 
 ## Project name
 
@@ -87,10 +92,11 @@ TypeScript, Next.js, React, Tailwind CSS, React Flow, PostgreSQL, Drizzle ORM, p
 
 ## Testing instructions
 
-> Fill the bracketed values only after the public URL and the final acceptance run are verified
-> ([runbook](PRODUCTION_FIRST_RUN.md) §2.1 and §4–§5). Until then, keep this section out of Devpost.
+> The URL is verified. Fill `[RUN_DATE]`, the codes and `[CODE_EXPIRY]` only after the final
+> acceptance run and one code redemption are verified ([runbook](PRODUCTION_FIRST_RUN.md) §4–§5).
+> If the paid run cannot happen in time, use the fallback version below instead.
 
-**1. Read a finished experiment (no code, no cost).** Open [PUBLIC_URL] → **Demo samples** →
+**1. Read a finished experiment (no code, no cost).** Open https://p01--tessaloom--mpfcqkyl42yb.code.run → **Demo samples** →
 **Spirited sound evenings** (recorded [RUN_DATE] with live Qloo data and Claude). The page walks
 through the brief, the Qloo discovery, the cultural bridges, the hypotheses with each claim's
 Qloo evidence, the blueprint with citations, and the limitations.
@@ -110,8 +116,18 @@ interest pair yields too few cross-world bridges, the app says so and suggests a
 interest. If another judge's run is in progress, you may see "The studio is busy": try again
 shortly.
 
-**3. Reproduce locally (no keys).** See the repository README quick start; synthetic data is
+**3. Reproduce locally (no keys).** See the [README](https://github.com/LZH-1-G/tessaloom#readme) quick start; synthetic data is
 labelled "FIXTURE — not real Qloo data".
+
+### Fallback testing instructions (only if the paid run and codes are not ready)
+
+> Use only if §4 has not passed by Oct 30. This does **not** fully meet the rule that judges can
+> test the agent themselves, so prefer finishing §4–§5.2.
+
+Open https://p01--tessaloom--mpfcqkyl42yb.code.run to see the studio and its health. Interactive runs are switched off on the public site
+while the final production check is pending. To run the complete workflow, follow the
+[README](https://github.com/LZH-1-G/tessaloom#readme) quick start (Docker; synthetic fixture data, no keys). Contact the entrant
+through Devpost for an access code.
 
 ## Tools and attribution
 
@@ -127,17 +143,54 @@ labelled "FIXTURE — not real Qloo data".
 | Requirement | How Tessaloom meets it | Status |
 | --- | --- | --- |
 | Working app integrating the Qloo API as an agentic tool | Qloo Harness workflows drive resolution, discovery and every claim test inside a multi-role Claude agent loop | Verified locally with live Qloo + Claude; production run pending |
-| Link to a **functional demo application** | Public `code.run` URL | **Blocked**: port `p01` is private until approved |
+| Link to a **functional demo application** | https://p01--tessaloom--mpfcqkyl42yb.code.run | **Verified** 2026-10-26: public smoke 7/7, Chromium/WebKit desktop and mobile |
 | Judges can test it free of charge until judging ends (Nov 2–5); credentials in testing instructions if access is restricted | A read-only story sample needs no code. **Interactive** runs need a capped access code, which goes in Devpost's testing instructions. The story alone is **not** enough: judges must be able to run the agent themselves | **Prepared**: needs the paid acceptance run, then judge grants with a judging budget |
-| Public repository with a detectable open-source license in the About section | MIT `LICENSE`; GitHub already detects MIT (repository currently private) | **Pending owner**: make public, then check the About section |
+| Public repository with a detectable open-source license in the About section | https://github.com/LZH-1-G/tessaloom, MIT `LICENSE` | **Verified** 2026-10-26: public, GitHub detects "MIT License" |
 | English text description | README and this draft | Ready, with placeholders for production results |
 | Third-party APIs used within their terms | Anthropic API key (Commercial Terms) for public inference; the personal subscription is local-only and refused in production; Qloo data stays server-side, not in the repo | Verified in code and docs |
 | Original work; open-source dependencies respected | License inventory in [PUBLIC_READINESS.md](PUBLIC_READINESS.md) | Ready |
 | Video | Optional; script in [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | Optional |
 
+## Technical description (for the "How it works" / technical field)
+
+Tessaloom is a TypeScript monorepo deployed as one Northflank service: a Next.js web process and a
+pg-boss worker supervised by one entrypoint with separate environment allowlists, so provider
+keys reach only the worker. PostgreSQL (Drizzle) stores experiments, evidence and the spend ledger.
+
+- **Agent loop.** A recoverable state machine runs six roles: intent analysis, cultural
+  discovery, hypothesis generation, evidence criticism, What-if explanation and blueprint
+  composition. Human confirmation gates sit between stages. Five roles call Claude Sonnet 5.5
+  through an LLM gateway: JSON Schema structured output, semantic validators (grounded entities,
+  no causal or individual-level claims), at most one repair, and a cost reservation before every
+  attempt.
+- **Qloo as the agent's tool.** The worker calls the Qloo Insights API through the official Qloo
+  Harness (0.1.26): search for entity resolution, then recommendations across domains, entity
+  tags, rankings and audience comparisons. Each hypothesis claim compiles to a typed Qloo query
+  and a deterministic evaluator grades the result as supports, contradicts or insufficient.
+  Origin and retrieval date travel with every piece of evidence.
+- **Safety and cost.** Paid runs need an invitation code with its own cap; global, workspace and
+  experiment caps apply per day; Qloo calls are counted against a daily limit; raw Qloo responses
+  are not retained, and public pages show only names, types and Tessaloom's own gradings.
+- **Quality.** CI runs lint and typecheck, 469 unit tests, integration tests on PostgreSQL,
+  Chromium and WebKit end-to-end tests with axe accessibility checks, dependency and secret
+  scanning, CodeQL, and a Docker image smoke test.
+
+## Submission checklist (owner)
+
+- [x] Public demo URL works over HTTPS (verified 2026-10-26).
+- [x] Public repository with MIT license detected (verified 2026-10-26).
+- [ ] Qloo permission question sent ([QLOO_PERMISSION_REQUEST.md](QLOO_PERMISSION_REQUEST.md)); apply its answer table.
+- [ ] By Oct 29: final paid acceptance passed ([runbook](PRODUCTION_FIRST_RUN.md) §4); story sample featured (§5.1).
+- [ ] By Oct 29: four judge codes created, judging limits applied, `RUN_ACCESS=invite`, one code redeemed in a fresh browser (§5.2).
+- [ ] Fill `[RUN_DATE]`, `[PRODUCTION_RESULT]`, `[JUDGE_CODE_1–4]`, `[CODE_EXPIRY]`; paste the testing instructions into Devpost's testing field only.
+- [ ] Gallery: up to five screenshots (synthetic ones are in `docs/submission/gallery/`; real-data screenshots go on Devpost only). Video optional.
+- [ ] Built-with tags, team members, AI-assistance disclosure (Claude Code and Codex) reviewed.
+- [ ] On Oct 30 before 6 PM ET: rerun `node deploy/public-smoke.mjs <url>` and open the sample.
+- [ ] **Owner's final approval**, then submit before Oct 30, 11:45 PM ET.
+
 ## Owner-only fields and final actions
 
-- After the final acceptance run: fill [PUBLIC_URL], [RUN_DATE], [PRODUCTION_RESULT] and the access code(s), and add the public repository URL.
+- After the final acceptance run: fill https://p01--tessaloom--mpfcqkyl42yb.code.run, [RUN_DATE], [PRODUCTION_RESULT] and the access code(s), and add the public repository URL.
 - Gallery: up to five screenshots from [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Real-data screenshots are fine on Devpost but never in the repository ([rights review](DATA_RIGHTS_REVIEW.md)). A video is optional under the rules.
 - Confirm eligibility and the current Devpost form personally; review the AI-assistance disclosure (Claude Code and Codex).
 - Submit before **October 30, 2026, 11:45 PM ET** (October 31, 11:45 AM Beijing). Judging runs November 2–5.
