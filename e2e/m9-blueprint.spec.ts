@@ -224,9 +224,39 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   ).toBe(true);
   await snap(shared, info, "shared-view-mobile");
 
-  // Revocation is immediate.
-  await share.getByRole("button", { name: "Revoke" }).click();
-  await expect(share.getByRole("button", { name: "Revoke" })).toHaveCount(0);
+  // The owner can share the whole story instead: brief → discovery → evidence → blueprint.
+  await share.getByLabel(/The whole story/).check();
+  await share.getByRole("button", { name: "Create link" }).click();
+  await expect(share.getByTestId("share-url")).not.toHaveValue(url);
+  const storyUrl = await share.getByTestId("share-url").inputValue();
+  await expect(share.getByTestId("share-links")).toContainText("Whole story");
+  const reader = await visitor.newPage();
+  watchCsp(reader);
+  await reader.goto(storyUrl);
+  for (const heading of [
+    "The creative brief",
+    "Discovery across cultural worlds",
+    "Hypotheses tested against Qloo evidence",
+    "What this does not show",
+  ])
+    await expect(reader.getByRole("heading", { name: heading })).toBeVisible();
+  await expect(reader.getByTestId("evidence-appendix")).toContainText("E-1");
+  await expectFixtureBanner(reader);
+  expect(await reader.content()).not.toContain(projectUrl.split("/").at(-1)!);
+  await expectAccessible(reader);
+  await snap(reader, info, "shared-story");
+
+  // Revocation is immediate and per link: revoking the blueprint link keeps the story link.
+  const links = share.getByTestId("share-links").getByRole("listitem");
+  await links
+    .filter({ hasText: "Blueprint ·" })
+    .getByRole("button", { name: "Revoke" })
+    .click();
+  await expect(share.getByRole("button", { name: "Revoke" })).toHaveCount(1);
+  await reader.reload();
+  await expect(
+    reader.getByRole("heading", { name: "The creative brief" }),
+  ).toBeVisible();
   await shared.reload();
   await expect(
     shared.getByText("This link is no longer active."),

@@ -15,12 +15,15 @@ export function ShareDialog({
   scope,
   targetId,
   label,
+  allowStory = false,
   onClose,
 }: {
   projectId: string;
   scope: "project" | "experiment" | "blueprint";
   targetId: string;
   label: string;
+  /** Offer sharing the whole project story (brief → evidence → blueprint) as well. */
+  allowStory?: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -31,6 +34,9 @@ export function ShareDialog({
   const [created, setCreated] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [whole, setWhole] = useState(false);
+  const shareScope = allowStory && whole ? "project" : scope;
+  const shareTarget = allowStory && whole ? projectId : targetId;
   const load = useCallback(
     () =>
       void api
@@ -38,11 +44,17 @@ export function ShareDialog({
           `/api/v1/projects/${projectId}/share-links`,
         )
         .then((r) => {
-          setLinks(r.items.filter((l) => l.targetId === targetId));
+          setLinks(
+            r.items.filter(
+              (l) =>
+                l.targetId === targetId ||
+                (allowStory && l.scope === "project"),
+            ),
+          );
           setLoadedAt(Date.now());
         })
         .catch((e: Error) => setError(e.message)),
-    [projectId, targetId],
+    [projectId, targetId, allowStory],
   );
   useEffect(() => {
     ref.current?.showModal();
@@ -53,7 +65,7 @@ export function ShareDialog({
     try {
       const res = await api.post<{ url: string }>(
         `/api/v1/projects/${projectId}/share-links`,
-        { scope, targetId, expiresInDays: days },
+        { scope: shareScope, targetId: shareTarget, expiresInDays: days },
       );
       setCreated(`${window.location.origin}${res.url}`);
       setCopied(false);
@@ -95,9 +107,35 @@ export function ShareDialog({
         </Button>
       </div>
       <div className="space-y-4 px-5 py-4 text-sm">
+        {allowStory ? (
+          <fieldset className="space-y-1.5">
+            <legend className="text-xs font-semibold">What to share</legend>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="share-what"
+                checked={!whole}
+                onChange={() => setWhole(false)}
+              />
+              This blueprint
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="share-what"
+                checked={whole}
+                onChange={() => setWhole(true)}
+              />
+              The whole story — brief, Qloo discovery, tested hypotheses and the
+              blueprint
+            </label>
+          </fieldset>
+        ) : null}
         <p className="text-muted-foreground">
-          Anyone with the link can view this {scope} — no editing, no run
-          controls, no workspace access. You can revoke it at any time.
+          Anyone with the link can view{" "}
+          {shareScope === "project" ? "the project story" : `this ${scope}`} —
+          no editing, no run controls, no workspace access. You can revoke it at
+          any time.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs">
@@ -155,7 +193,7 @@ export function ShareDialog({
         ) : null}
         <section aria-labelledby="links-h">
           <h3 id="links-h" className="font-semibold">
-            Links for this {scope}
+            {allowStory ? "Links" : `Links for this ${scope}`}
           </h3>
           {!links?.length ? (
             <p className="mt-1 text-muted-foreground">None yet.</p>
@@ -170,6 +208,11 @@ export function ShareDialog({
                     className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2"
                   >
                     <span className="flex-1 text-xs">
+                      {allowStory
+                        ? l.scope === "project"
+                          ? "Whole story · "
+                          : "Blueprint · "
+                        : ""}
                       Created {l.createdAt.slice(0, 10)} ·{" "}
                       {l.revokedAt
                         ? `revoked ${l.revokedAt.slice(0, 10)}`
@@ -177,6 +220,9 @@ export function ShareDialog({
                           ? `expires ${l.expiresAt.slice(0, 10)}`
                           : "expired"}{" "}
                       · {l.viewCount} view{l.viewCount === 1 ? "" : "s"}
+                      <span className="block font-mono text-[10px] text-muted-foreground">
+                        Link ID {l.id}
+                      </span>
                     </span>
                     {active ? (
                       <Button
