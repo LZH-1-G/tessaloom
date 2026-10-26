@@ -1,0 +1,36 @@
+{
+  "name": "tessaloom-llm-limits",
+  "description": "Explicit zero LLM and Qloo budgets, Sonnet only (no secrets)",
+  "type": "config",
+  "secretType": "environment",
+  "priority": 10,
+  "restrictions": {
+    "restricted": true,
+    "nfObjects": [
+      {
+        "id": "tessaloom",
+        "type": "service"
+      }
+    ]
+  },
+  "secrets": {
+    "variables": {
+      "LLM_PROVIDER": "anthropic",
+      "LLM_MODEL": "claude-sonnet-5-5",
+      "LLM_FALLBACK_MODEL": "claude-sonnet-5-5",
+      "LLM_MODE": "standard",
+      "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
+      "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",
+      "DEEPSEEK_LIVE_APPROVED": "off",
+      "DEEPSEEK_MAX_REQUESTS": "0",
+      "GEMINI_MAX_REQUESTS": "0",
+      "GLOBAL_DAILY_LLM_USD": "0",
+      "WORKSPACE_DAILY_LLM_USD": "0",
+      "EXPERIMENT_LLM_USD": "0",
+      "GLOBAL_DAILY_QLOO_CALLS": "0",
+      "MAX_WORKING_RUNS": "1",
+      "MAX_ACTIVE_RUNS_PER_WORKSPACE": "1",
+      "WORKSPACE_DAILY_RUNS": "1"
+    }
+  }
+}

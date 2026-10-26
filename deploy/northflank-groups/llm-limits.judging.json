@@ -1,0 +1,36 @@
+{
+  "name": "tessaloom-llm-limits",
+  "description": "Judging caps, 4 USD per day, Sonnet only (no secrets)",
+  "type": "config",
+  "secretType": "environment",
+  "priority": 10,
+  "restrictions": {
+    "restricted": true,
+    "nfObjects": [
+      {
+        "id": "tessaloom",
+        "type": "service"
+      }
+    ]
+  },
+  "secrets": {
+    "variables": {
+      "LLM_PROVIDER": "anthropic",
+      "LLM_MODEL": "claude-sonnet-5-5",
+      "LLM_FALLBACK_MODEL": "claude-sonnet-5-5",
+      "LLM_MODE": "standard",
+      "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
+      "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",
+      "DEEPSEEK_LIVE_APPROVED": "off",
+      "DEEPSEEK_MAX_REQUESTS": "0",
+      "GEMINI_MAX_REQUESTS": "0",
+      "GLOBAL_DAILY_LLM_USD": "4.00",
+      "WORKSPACE_DAILY_LLM_USD": "1.00",
+      "EXPERIMENT_LLM_USD": "1.00",
+      "GLOBAL_DAILY_QLOO_CALLS": "400",
+      "MAX_WORKING_RUNS": "2",
+      "MAX_ACTIVE_RUNS_PER_WORKSPACE": "1",
+      "WORKSPACE_DAILY_RUNS": "6"
+    }
+  }
+}
