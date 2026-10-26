@@ -232,6 +232,16 @@ export function Dashboard() {
                   ? `ready (${status.qlooTransport})`
                   : "unavailable"}
               </p>
+              <p>
+                AI generation:{" "}
+                {status
+                  ? status.llmConfigured
+                    ? "ready"
+                    : status.llmConfigured === false
+                      ? "not configured (saved results stay readable)"
+                      : "unknown"
+                  : "…"}
+              </p>
             </div>
           </Card>
         </div>

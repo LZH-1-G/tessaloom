@@ -122,7 +122,9 @@ async function heartbeat() {
       harnessVersion: harnessVersion(),
       transport:
         env.QLOO_MODE === "live" ? "HARNESS_MCP" : (env.QLOO_MODE ?? null),
-      runConfig: runConfig(),
+      // `llmConfigured` lets the public status say when generation is unavailable; run
+      // creation parses RunConfig, which drops this extra key.
+      runConfig: { ...runConfig(), llmConfigured: gateway !== null },
     });
     if (lastHeartbeatError) log("worker_heartbeat_recovered");
     lastHeartbeatError = null;
