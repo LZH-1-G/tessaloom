@@ -112,8 +112,10 @@ export function ProjectRail({
 }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Experiment steps" className="lg:sticky lg:top-4">
-      <ol className="flex gap-1 overflow-x-auto lg:flex-col">
+    // min-w-0: as a grid item the nav would otherwise size the column to the scrolling rail.
+    // relative: keeps the absolutely positioned sr-only "unavailable" notes inside the scroller.
+    <nav aria-label="Experiment steps" className="min-w-0 lg:sticky lg:top-4">
+      <ol className="relative flex gap-1 overflow-x-auto lg:flex-col">
         {STEPS.map((step) => {
           const href = `/projects/${projectId}/${step.href}`;
           const blocked = step.disabled ?? reachable[step.href] ?? null;

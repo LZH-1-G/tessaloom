@@ -178,7 +178,7 @@ Unauthorized access returns **404**, not 403, to avoid confirming that a resourc
 |---|---|---|
 | Qloo credential exposed (commit, log, video, screenshot) | 1. Stop using the key: remove it from the worker secrets and stop the worker. 2. Per the kit's SECURITY.md, email **ian@qloo.com** to have it revoked, identifying the credential **by participant name only, never including the key**. 3. Purge it from git history if committed (`git filter-repo`) and force-push only with the owner's approval. | Record the event in DECISIONS.md (without the secret). Request a replacement through the kit's support channel. |
 | LLM key exposed | Revoke it in the provider console; rotate; check usage for abuse | Lower the global spend cap until resolved |
-| Quota exhaustion or abuse | The quota guard is already active; tighten rate limits; temporarily disable new live runs (feature flag `LIVE_RUNS_ENABLED=false`) | Samples remain available |
+| Quota exhaustion or abuse | The quota guard is already active; tighten rate limits; stop new runs with `RUN_ACCESS=off` (config group `tessaloom-run-access`, then restart; see [OPERATOR_RUNBOOK.md](submission/OPERATOR_RUNBOOK.md)) | Samples remain available |
 | Data integrity bug (wrong provenance) | Hide affected views behind a maintenance flag; fix; add a regression test | Disclose in the README's known limitations if it was public |
 | Vulnerability report | Acknowledge within 72 h during the event period | Fix, credit the reporter if they wish |
 
