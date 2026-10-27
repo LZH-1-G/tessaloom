@@ -21,7 +21,7 @@ locally on 2026-10-26 ([acceptance report](../CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTAN
 | Mode | AI | Cost | Permission needed | Status |
 | --- | --- | --- | --- | --- |
 | **Demo A** ([group](../../deploy/northflank-groups/llm-limits.demo-synthetic.json)) | Scripted stand-ins; the banner says "Scripted AI demo: no language model is called" | **$0** | none | Ready. The full journey was verified locally in a browser. |
-| **Demo B** ([group](../../deploy/northflank-groups/llm-limits.demo-gemini-flash.json)) | Real Gemini 3.8 Flash on synthetic data (the live-data gate stays off) | ≈ $0.11 per workflow; ≤ $2.00/day ledger cap | paid spend | Needs probe Exp. B and E2E-B first ([GEMINI_MIGRATION.md](../GEMINI_MIGRATION.md) §6) |
+| **Demo B** ([group](../../deploy/northflank-groups/llm-limits.demo-gemini-flash.json)) | Real Gemini 3.8 Flash on synthetic data (the live-data gate stays off) | $0.044 per measured workflow; ≤ $1.00/day ledger cap | paid spend | Synthetic workflow passed 2026-10-27 ([evidence](../evidence/gemini-3.8-flash-e2e-2026-10-27.md)); deployment needs approval |
 
 Both modes share the same mechanics:
 - `APP_ENV=staging`: synthetic data is refused under `production`, while HTTPS, secure cookies
@@ -91,9 +91,9 @@ under `APP_ENV=production`, so change the service environment **before** the gro
 5. `STATUS` should report `llmModel:"gemini-3.8-flash"`. Run one journey yourself and check
    `ADMIN "spend today"`.
 
-The ledger caps spend at **$2.00/day globally** and $0.50 per visitor workspace and per
-experiment. Through the judging window (Oct 30 – Nov 5, 7 days) the worst case is $14; about 18
-typical workflows fit in one day. If a single code or abuse burns the day's budget, runs answer
+The ledger caps spend at **$1.00/day globally** and $0.50 per visitor workspace and per
+experiment. A measured workflow costs $0.044 ([evidence](../evidence/gemini-3.8-flash-e2e-2026-10-27.md)),
+so about 22 fit in one day. The worst case from Oct 27 to Nov 5 is $10. If a single code or abuse burns the day's budget, runs answer
 "busy/paused" until the next UTC day.
 
 ## Rollback (any time; minutes)
