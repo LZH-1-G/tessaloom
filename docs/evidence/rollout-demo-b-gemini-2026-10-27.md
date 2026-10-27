@@ -44,3 +44,30 @@ service variables stayed `staging` / `synthetic`.
   `tessaloom-gemini` secret group.
 - **To the closed state:** see [rollout-d5359b4-demo-a](rollout-d5359b4-demo-a-2026-10-27.md).
 - **Stop all new runs immediately:** `ACCESS off`.
+
+## Final public acceptance (07:44–07:46 UTC, one owner-approved journey, $0.12 limit)
+
+The previous limited run could not be resumed: composing needs the owning workspace's browser
+cookie, which lived in the discarded test context. This was therefore one fresh journey, in a
+new headless browser with no cookies, on the public URL. It had a spend guard (cancel above
+$0.10 during exploration; compose only if $0.04 still fits under $0.12) and no retries.
+
+| Elapsed | Step |
+| --- | --- |
+| 0–28 s | project → example brief → Gemini interpretation → confirm → synthetic discovery |
+| 28–102 s | Gemini hypothesis generation and critique; the run reached the **selection gate** |
+| 111–138 s | top hypothesis selected → Gemini blueprint composition |
+| 138–155 s | checks (below) |
+
+- **Blueprint:** "Quiet Hearth Nocturne at Harbor Lights".
+- **Traceability:** "9 blocks · 4 citations, all resolve to stored evidence" (22% evidence-backed,
+  22% AI interpretation, 56% speculation).
+- **Composer:** "R6 blueprint composition → valid output (gemini-3.8-flash, 1 attempt)".
+- **Markdown export:** 4,700 characters, with the FIXTURE labels present.
+- **Read-only share link:** opens in a second fresh browser (HTTP 200) with the FIXTURE banner
+  and its expiry. The URL is a bearer link and is not recorded here.
+- **Added application-side spend:** **$0.0529**. Mid-run readings include open reservations,
+  which settle down. Spend today is now $0.1316.
+- **Provider outcomes:** no uncertain outcome and no retry.
+
+Screenshots: `test-results/public-final/` (not committed; fictional data only).

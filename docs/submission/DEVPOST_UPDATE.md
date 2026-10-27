@@ -87,20 +87,20 @@ the demo is rolled back to the $0 scripted mode, see the note at the end.
 
 ## Gallery (replace the images)
 
-Use the real-Gemini, synthetic-data screenshots from `test-results/flash-e2e-screenshots/`.
-They come from the same release build and configuration, run locally with fictional data only,
-labelled "FIXTURE":
+Upload the screenshots from the **live public site**, captured on 2026-10-27 (real Gemini 3.8
+Flash, fictional data only, labelled "FIXTURE"), in `test-results/public-final/`:
 
 | File | Caption |
 | --- | --- |
-| `1-intent.png` | Gemini interprets the brief into worlds and asks about anything ambiguous before searching. |
-| `2-hypotheses.png` | Competing hypotheses written by the agent; every claim is graded by fixed rules (supports, contradicts, neutral or insufficient), and a critic flags weak pairings. |
-| `3-evidence.png` | The evidence drawer: each claim, the rule that graded it, the values behind it, and a trace. |
-| `4-blueprint.png` | The composed blueprint with its traceability meter: evidence-backed, interpretation and speculation, with every citation resolving. |
+| `1-intent.png` | Gemini interprets the venue brief into cultural worlds and asks about anything ambiguous before searching. |
+| `2-discovery.png` | Discovery threads each interest into other worlds; items reached from more than one interest become cross-world bridges, scored for relevance, novelty and tension. |
+| `3-hypotheses.png` | Competing hypotheses written by the agent; every claim is graded by fixed rules, and a critic flags weak pairings. |
+| `4-evidence.png` | The evidence drawer: each claim, the rule that graded it, the values behind it, and a trace. |
+| `5-blueprint.png` | The composed blueprint, "Quiet Hearth Nocturne at Harbor Lights", with its traceability meter and all four citations resolving. |
+| `7-shared-read-only.png` | The read-only shared view with an expiry date, which anyone can open without an account. |
 
-Optionally add `3-discovery-collision-pool.png` from `test-results/devpost-screenshots/`. Do
-**not** upload the earlier real-data screenshots or the two videos: they show Qloo-derived
-names, and display permission is pending.
+Do **not** upload the earlier real-data screenshots or the two videos: they show Qloo-derived
+names, and display permission is pending. The video field is optional; leave it empty.
 
 ## If the demo is rolled back to Demo A ($0 scripted)
 
