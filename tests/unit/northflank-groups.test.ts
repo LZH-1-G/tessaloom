@@ -331,3 +331,56 @@ describe("prepared public judge demo group (not applied)", () => {
     ).toThrow("LLM_PROVIDER");
   });
 });
+
+describe("prepared paid judge demo group: Gemini 3.8 Flash on synthetic data (not applied)", () => {
+  const demo = {
+    ...base,
+    APP_ENV: "staging",
+    QLOO_MODE: "synthetic",
+    RUN_ACCESS: "open",
+  };
+  it("is inert until the owner approves paid use, and never sends live data", async () => {
+    const { createLlmGateway } = await import("../../apps/worker/src/llm");
+    const vars = load("demo-gemini-flash").secrets.variables;
+    const worker = parseWorkerEnv({ ...demo, ...vars });
+    expect(worker).toMatchObject({
+      LLM_PROVIDER: "gemini",
+      LLM_MODEL: "gemini-3.8-flash",
+      GEMINI_PAID_TIER_APPROVED: "off",
+      GEMINI_LIVE_DATA_APPROVED: "off",
+      GLOBAL_DAILY_LLM_USD: 2,
+      WORKSPACE_DAILY_LLM_USD: 0.5,
+      EXPERIMENT_LLM_USD: 0.5,
+    });
+    const keyed = { ...worker, GEMINI_API_KEY: "sentinel" };
+    expect(createLlmGateway(keyed, { record: async () => "id" })).toBeNull();
+    expect(
+      createLlmGateway(
+        {
+          ...keyed,
+          GEMINI_PAID_TIER_APPROVED: "on",
+          GEMINI_PRICING_VERIFIED_AT: new Date().toISOString(),
+        },
+        { record: async () => "id" },
+      )?.providerName,
+    ).toBe("gemini");
+    // Differs from the $0 demo only in provider, model, request cap, timeout and USD caps.
+    const free = load("demo-synthetic").secrets.variables;
+    expect(
+      Object.keys({ ...vars, ...free })
+        .filter((k) => vars[k] !== free[k])
+        .sort(),
+    ).toEqual(
+      [
+        "EXPERIMENT_LLM_USD",
+        "GEMINI_MAX_REQUESTS",
+        "GEMINI_TIMEOUT_MS",
+        "GLOBAL_DAILY_LLM_USD",
+        "LLM_FALLBACK_MODEL",
+        "LLM_MODEL",
+        "LLM_PROVIDER",
+        "WORKSPACE_DAILY_LLM_USD",
+      ].sort(),
+    );
+  });
+});

@@ -1,0 +1,41 @@
+{
+  "name": "tessaloom-llm-limits",
+  "description": "Prepared, not applied. Public judge demo with real Gemini 3.8 Flash (paid Standard) on synthetic Qloo data only: 2.00 USD per day global, 0.50 per workspace and experiment. Inert until the owner sets the paid-tier approval and pricing review (docs/submission/DEMO_DEPLOYMENT.md)",
+  "type": "config",
+  "secretType": "environment",
+  "priority": 10,
+  "restrictions": {
+    "restricted": true,
+    "nfObjects": [
+      {
+        "id": "tessaloom",
+        "type": "service"
+      }
+    ]
+  },
+  "secrets": {
+    "variables": {
+      "LLM_PROVIDER": "gemini",
+      "LLM_MODEL": "gemini-3.8-flash",
+      "LLM_FALLBACK_MODEL": "gemini-3.8-flash",
+      "LLM_MODE": "standard",
+      "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
+      "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",
+      "DEEPSEEK_LIVE_APPROVED": "off",
+      "DEEPSEEK_MAX_REQUESTS": "0",
+      "GEMINI_FREE_TIER_CONFIRMED": "off",
+      "GEMINI_DATA_SHARING_APPROVED": "off",
+      "GEMINI_PAID_TIER_APPROVED": "off",
+      "GEMINI_LIVE_DATA_APPROVED": "off",
+      "GEMINI_MAX_REQUESTS": "300",
+      "GLOBAL_DAILY_LLM_USD": "2.00",
+      "WORKSPACE_DAILY_LLM_USD": "0.50",
+      "EXPERIMENT_LLM_USD": "0.50",
+      "GLOBAL_DAILY_QLOO_CALLS": "2000",
+      "MAX_WORKING_RUNS": "4",
+      "MAX_ACTIVE_RUNS_PER_WORKSPACE": "1",
+      "WORKSPACE_DAILY_RUNS": "10",
+      "GEMINI_TIMEOUT_MS": "60000"
+    }
+  }
+}
