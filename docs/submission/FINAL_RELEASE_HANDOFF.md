@@ -11,7 +11,7 @@ ACTION** · **NOT COMPLETED** (with reason).
 
 | Item | Class | Evidence |
 | --- | --- | --- |
-| Deployed revision | COMPLETED AND VERIFIED | `deployedSHA` = `51be618`, deployment COMPLETED (restart 2026-10-26 12:55 UTC). Merges of PR #21 (`79d2d84`) and #23 (`7a815c0`) were built, not rolled out |
+| Deployed revision | COMPLETED AND VERIFIED | **`859cd9f`** (PR #24 merge) since 2026-10-27 02:21 UTC, owner-approved manual rollout; `buildSHA` = `deployedSHA`. Rollback target `51be618`. Smoke 7/7, render checks pass, 390 px overflow 107 → 0 px, no paid or Qloo run calls ([rollout evidence](../evidence/rollout-859cd9f-2026-10-27.md)) |
 | HTTPS, headers | COMPLETED AND VERIFIED | `deploy/public-smoke.mjs` 7/7; TLS verifies; HSTS `max-age=31536000; includeSubDomains`, nonce CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies |
 | Database, worker, Qloo | COMPLETED AND VERIFIED | `/api/health/ready` 200; status `workerOnline:true`, `qlooReady:true`, Harness 0.1.26; logs since the restart: 151 Qloo readiness probes, all `ready:true`, 0 stderr or error-level lines |
 | Run access and AI | COMPLETED AND VERIFIED | `RUN_ACCESS=off`; `tessaloom-llm-limits` closed set: Sonnet 5.5 only, every `*_LLM_USD` = 0, Qloo calls 0; 0 `ANTHROPIC*` names; status `llmConfigured:false`; `spend today` 0; 0 grants; 0 samples |
@@ -68,10 +68,11 @@ ACTION** · **NOT COMPLETED** (with reason).
 | Anthropic workspace, $15 limit, key in `tessaloom-anthropic` | REQUIRES USER ACTION | Runbook A |
 | Single paid acceptance (≈ $0.14, ≤ $0.50 application cap) | REQUIRES USER ACTION | Runbook B–D after explicit approval. Application accounting is an estimate, not a provider guarantee; the Console limit is the backstop |
 | Story sample, judge codes, `RUN_ACCESS=invite` | REQUIRES USER ACTION | Runbook E–F, by Oct 29 |
-| Deploy the mobile-layout fix | REQUIRES USER ACTION | After the PR's CI, an approved manual rollout of the merge commit (runtime CSS change only; rollback = redeploy `51be618`) |
+| Deploy the mobile-layout fix | COMPLETED AND VERIFIED | Rolled out 2026-10-27 02:21 UTC ([rollout evidence](../evidence/rollout-859cd9f-2026-10-27.md)); rollback target `51be618` |
 
 ## Rollback
 
 See the table at the end of [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md). In short: `RUN_ACCESS=off`
 stops new runs at once; `LIMITS closed` zeroes every budget; grants revoke immediately; the key
-can be revoked in the Console; `51be618` can be redeployed from Northflank.
+can be revoked in the Console; build `51be618` can be re-pinned (the command is in the rollout
+evidence).

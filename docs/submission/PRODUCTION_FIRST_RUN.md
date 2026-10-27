@@ -1,7 +1,7 @@
 # Production release and the final paid Claude acceptance
 
 **Status (2026-10-26): release, exposure and the zero-budget limits (§2.2) done; paid steps
-prepared, not executed.** Production serves `51be618` on a public URL with `RUN_ACCESS=off` and
+prepared, not executed.** Production serves `859cd9f` on a public URL with `RUN_ACCESS=off` and
 every LLM/Qloo budget pinned to `0`. No Anthropic key exists for this project, and no paid call
 has been made. Every step marked **OWNER** needs your explicit go-ahead. The paid
 Claude call is deliberately the **last** step.
@@ -16,8 +16,8 @@ public, read-only, real-data story sample.
 | Item | Observed (evidence) |
 | --- | --- |
 | Service | `default/tessaloom`, 1 instance, `nf-compute-20` |
-| Deployed commit | **`51be618`** (PR #22 merge), manual rollout, deployment COMPLETED 12:22 UTC, `deployedSHA` = `buildSHA` |
-| Previous releases (rollback) | `a37afc6` (PR #19), and `39c0fe5`, deployment `6aded5c0351e0f7052ed6dbd` |
+| Deployed commit | **`859cd9f`** (PR #24 merge), manual rollout 2026-10-27 02:21 UTC, `deployedSHA` = `buildSHA` ([evidence](../evidence/rollout-859cd9f-2026-10-27.md)). Before: `51be618` (PR #22), 2026-10-26 12:22 UTC |
+| Previous releases (rollback) | `51be618` (PR #22, first choice), `a37afc6` (PR #19), and `39c0fe5`, deployment `6aded5c0351e0f7052ed6dbd` |
 | Worker | `worker_queue_connection` verified (`databaseCreate: false`), `worker_queues_started` with `llm: "unconfigured"`, `qlooMode: "live"` |
 | Qloo readiness | `ready: true`, `endpointTrusted: true`, Harness `0.1.26` |
 | Public URL | **https://p01--tessaloom--mpfcqkyl42yb.code.run**, port `p01` public since ~12:24 UTC; public smoke 7/7 and Chromium/WebKit desktop/mobile checks pass |
