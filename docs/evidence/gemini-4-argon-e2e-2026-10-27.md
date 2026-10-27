@@ -22,6 +22,6 @@ Total requests: **2 generations** (no metadata calls). The application's worst-c
 $0.1748; actual billing is to be read in AI Studio.
 
 **Cause.** The adapter recorded no detail for this class of failure: a failed connection, a
-broken response body, a non-JSON body, or an HTTP 404. Commit `de9bc3a` (on
+broken response body, a non-JSON body, or an HTTP 404. Commit `07b1546` (on
 `claude/argon-probe`) now records which step failed, plus a system error code such as
 `ECONNRESET`, never response content. The latency was within the 120 s request timeout.
