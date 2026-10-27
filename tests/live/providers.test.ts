@@ -8,8 +8,10 @@ import { IntentFrame } from "../../packages/core/src";
 import {
   GeminiProvider,
   LlmGateway,
+  ProviderError,
   checkGeminiModel,
   geminiPrices,
+  type LlmProvider,
 } from "../../packages/llm-gateway/src";
 import { qlooChildEnv } from "../../packages/qloo-adapter/src/transports/env";
 
@@ -51,10 +53,30 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
     const thinking = process.env.GEMINI_THINKING_LEVEL;
     if (!apiKey || !model)
       throw new Error("Private Gemini key and account-verified model required");
+    // A hard local ceiling on the one reservation; above it nothing is sent.
+    const maxUsd = Number(process.env.LIVE_VALIDATION_MAX_USD);
+    if (!(maxUsd > 0 && maxUsd <= 0.06))
+      throw new Error("LIVE_VALIDATION_MAX_USD must be set, at most 0.06");
     const receipt = await claimReceipt("gemini");
+    // Everything below is recorded in the private receipt; never the key or the prompt.
+    const record: Record<string, unknown> = {
+      provider: "gemini",
+      model,
+      billingTier: paid ? "paid" : "free",
+      thinkingLevel: thinking ?? "model-default",
+      maxReservationUsd: maxUsd,
+      inputOrigin: "SYNTHETIC_LOCAL",
+      stage: "metadata",
+      actualBilledCost: "not verified against provider billing",
+    };
+    const save = () =>
+      writeFile(receipt, JSON.stringify(record, null, 2) + "\n", {
+        mode: 0o600,
+      });
     try {
-      const metadata = await checkGeminiModel({ apiKey, model });
-      const provider = new GeminiProvider({
+      record.metadata = await checkGeminiModel({ apiKey, model });
+      record.stage = "generation";
+      const inner = new GeminiProvider({
         apiKey,
         model,
         ...(paid
@@ -69,6 +91,36 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
         maxRequests: 1,
         timeoutMs: 120_000,
       });
+      // Pass-through that records what the provider actually returned, so a rejected
+      // serving model or truncation is still visible in the receipt.
+      const provider: LlmProvider = {
+        name: inner.name,
+        billing: inner.billing,
+        liveInputsApproved: inner.liveInputsApproved,
+        generate: async (request) => {
+          const started = performance.now();
+          try {
+            const response = await inner.generate(request);
+            record.provider_response = {
+              modelVersion: response.modelId,
+              stopReason: response.stopReason,
+              usage: response.usage,
+              latencyMs: Math.round(performance.now() - started),
+            };
+            return response;
+          } catch (error) {
+            const e = error as Partial<ProviderError>;
+            record.provider_error = {
+              kind: e.kind ?? "unknown",
+              status: e.status ?? null,
+              requestSent: e.requestSent ?? true,
+              retryable: e.retryable ?? null,
+              latencyMs: Math.round(performance.now() - started),
+            };
+            throw error;
+          }
+        },
+      };
       // This standalone probe has no DB/run; its one-call reservation is explicit and local.
       // Application experiments always use the DB SpendGuard; this probe is not an E2E run.
       let reserved = false;
@@ -80,17 +132,20 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
         retryTruncation: false,
         maxOutputTokensCeiling: 4000,
         spendGuard: {
-          reserve: async () => {
-            if (reserved)
+          reserve: async ({ upperBoundUsd }) => {
+            record.reservationUsd = upperBoundUsd;
+            if (reserved || upperBoundUsd > maxUsd)
               return {
                 ok: false as const,
                 code: "CAP",
-                message: "One generation only",
+                message: "One generation within the approved ceiling only",
               };
             reserved = true;
             return { ok: true as const, reservationId: "local-contract-probe" };
           },
-          settle: async () => {},
+          settle: async (_id, actualUsd) => {
+            record.settledUsd = actualUsd;
+          },
         },
       });
       // Locally invented brief: no Qloo data, names or IDs. Real R1 prompt and schema.
@@ -122,28 +177,24 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
           remainingOutputTokens: 4000,
         },
       });
-      await writeFile(
-        receipt,
-        JSON.stringify({
-          provider: "gemini",
-          billingTier: paid ? "paid" : "free",
-          thinkingLevel: thinking ?? "model-default",
-          metadata,
-          ok: result.ok,
-          reason: result.ok ? null : result.reason,
-          issueCodes: result.ok ? [] : (result.issues ?? []).map((i) => i.code),
-          attempts: result.attempts,
-          latencyMs: Math.round(performance.now() - started),
-          usage: result.usage,
-          estimatedCostUsd: result.costUsd,
-          modelId: result.modelId,
-          inputOrigin: "SYNTHETIC_LOCAL",
-          actualBilledCost: "not verified against provider billing",
-        }) + "\n",
-        { mode: 0o600 },
-      );
+      Object.assign(record, {
+        stage: "done",
+        ok: result.ok,
+        reason: result.ok ? null : result.reason,
+        issueCodes: result.ok ? [] : (result.issues ?? []).map((i) => i.code),
+        attempts: result.attempts,
+        latencyMs: Math.round(performance.now() - started),
+        usage: result.usage,
+        estimatedCostUsd: result.costUsd,
+        modelId: result.modelId,
+        // Synthetic output (Zod- and semantically validated when ok) for quality review.
+        output: result.ok ? result.value : null,
+      });
+      await save();
       expect(result.ok, result.ok ? "" : result.reason).toBe(true);
-    } catch {
+    } catch (error) {
+      record.failure ??= (error as Error).name;
+      await save().catch(() => {});
       throw new Error(
         "Gemini live contract failed; do not retry without reviewing the receipt and quota",
       );
