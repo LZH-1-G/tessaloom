@@ -20,16 +20,38 @@ first of six). Use the numbers from whichever run you record.
 | 2:25 | Share → The whole story; the read-only page on a phone | "Share the whole story read-only: brief, discovery, tested hypotheses and blueprint, with the limits stated." |
 | 2:40 | Closing frame | "Qloo supplies the taste signals; Claude agents reason over them; Tessaloom keeps the evidence and the imagination apart." |
 
-## Screenshots for the Devpost gallery (5)
+## Devpost gallery (captured 2026-10-26, kept outside the repository)
 
-1. Discovery canvas with the collision pool (real project).
-2. Hypothesis lab with one claim's evidence open.
-3. Evidence graph with a claim selected.
-4. Blueprint with the traceability meter and the evidence appendix.
-5. The read-only story on a 390 px phone.
+Five screenshots of the real local run (live Qloo data, Claude Sonnet 5.5 via the owner's
+subscription), taken from the stored results with **no worker, no Qloo call and no model call**:
+the web process alone served the local acceptance database. Desktop at 1440 × 900 with the
+status header cropped off (it shows "Qloo unavailable" when no worker runs), phone at 390 × 844.
+The files were handed to the owner, not committed.
 
-Take them at 1440 × 900 (desktop) and 390 × 844 (phone). Check each for codes, tokens, account
-names or browser chrome before uploading. Store them outside the repository.
+| File | Caption |
+| --- | --- |
+| `1-discovery-canvas.png` | Qloo threads *Spirited Away* and Joe Hisaishi into film, music, books and places; items reached from both interests become bridges. |
+| `2-hypothesis-evidence.png` | Each claim becomes a Qloo query graded by a fixed rule: "ranked 1 of 6 (top third)". A critic agent adds interpretation but cannot change a stance. |
+| `3-evidence-graph.png` | Cultural entities, hypotheses, claims and evidence in one graph, each labelled Qloo data, AI interpretation or creative speculation. |
+| `4-blueprint.png` | The composed plan with its traceability meter: 13% evidence-backed, 53% interpretation, 33% speculation; 7 citations, all resolving to stored evidence. |
+| `5-story-phone.png` | The read-only story on a phone: 93 candidate bridges, 3 taken forward, hypotheses tested against Qloo evidence. |
+
+**Redaction:** the evidence drawer and trace show the Qloo entity ID behind each grading
+(`/results/0/entity_id = "…"`). In `2-hypothesis-evidence.png` those pointer values are hidden;
+the rest of the page is unchanged. Do the same in any new capture until Qloo answers the
+[request](QLOO_PERMISSION_REQUEST.md). Never show access codes, share tokens, keys, terminals or
+browser profiles.
+
+## Video plan (optional under the rules; about 2:45)
+
+- **Footage:** the same local project as the gallery (web-only, no calls), or production once
+  the paid acceptance has created the public sample. Say on screen which one it is.
+- **Recording:** 1440 × 900 browser window, system notifications off, a fresh browser profile,
+  zoom 100%. Follow the table above; keep each screen still for a second before narrating.
+- **Avoid:** opening **Trace** on camera (Qloo IDs), the access-code dialog, the share-link
+  field and any terminal.
+- **Upload:** YouTube or Vimeo, unlisted, then paste the link in Devpost. Captions: auto plus a
+  quick check of entity names.
 
 ## Live demo order for judges
 

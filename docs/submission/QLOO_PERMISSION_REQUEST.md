@@ -3,7 +3,7 @@
 **Send to:** the Qloo Hackathon Discord `#api-help` channel (named in the
 [developer guide](https://docs.qloo.com/reference/qloo-llm-hackathon-developer-guide)), or the
 contact address on the [official rules](https://qloo.devpost.com/rules) page, section 14.
-**Status:** prepared 2026-10-26, **not sent**: sending needs the owner's account. Until a
+**Status:** prepared 2026-10-26, in-app ID disclosure added the same day, **not sent**: sending needs the owner's account. Until a
 reply arrives, fields marked "until confirmed" stay out of every public page and export.
 
 ---
@@ -32,9 +32,11 @@ during and after judging) and in **Devpost screenshots/video**?
    plus our generated text, with no IDs, scores or descriptions.
 
 Until we hear back, we are **not** showing publicly: popularity or affinity values, Qloo entity
-descriptions/disambiguation text, Qloo IDs, or any raw response. Inside the app, a signed-in
-visitor choosing between ambiguous entities does see Qloo's short description, as part of the
-API's normal use. Please tell us if that needs to change too.
+descriptions/disambiguation text, Qloo IDs, or any raw response. Inside the app (signed-in
+users only, including judges with an access code), two things are visible as part of the API's
+normal use: Qloo's short description when choosing between ambiguous entities, and, in each
+claim's evidence trace, the Qloo entity ID or tag URN that the grading came from. Please tell us
+if either needs to change.
 
 Also: judges will be able to run the agent with their own inputs during Nov 2–5 using capped
 access codes, which makes Qloo calls with our event key. Is that within the key's intended use
@@ -55,3 +57,4 @@ Code: https://github.com/LZH-1-G/tessaloom
 | Names fine, gradings not | Remove rationales from public payloads (`projectStory`, appendix) and keep stances only |
 | Display not permitted | Unfeature samples (`admin.mjs sample unfeature`); keep the interactive demo only |
 | Judge runs not OK on our key | Keep `RUN_ACCESS=off`; offer the read-only story plus the local fixture demo |
+| IDs not OK inside the app | Hide pointer values in the evidence drawer and trace dialog (small web change, CI, one manual rollout) |
