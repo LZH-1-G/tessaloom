@@ -1,3 +1,4 @@
+import { GEMINI_FLAT_PRICES } from "./providers/gemini-pricing";
 import type { ProviderUsage } from "./types";
 
 /**
@@ -12,26 +13,9 @@ export type PriceTable = Readonly<
   >
 >;
 export const PRICES: PriceTable = {
-  // Google standard text rates checked 2026-10-23. Used for conservative reservations
-  // even on an owner-confirmed Free project; never a reason to enable paid API access.
-  "gemini-3.5-flash-lite": {
-    input: 0.3,
-    cacheWrite: 0.3,
-    cacheRead: 0.03,
-    output: 2.5,
-  },
-  "gemini-2.5-flash-lite": {
-    input: 0.1,
-    cacheWrite: 0.1,
-    cacheRead: 0.01,
-    output: 0.4,
-  },
-  "gemini-2.5-flash": {
-    input: 0.3,
-    cacheWrite: 0.3,
-    cacheRead: 0.03,
-    output: 2.5,
-  },
+  // Gemini Paid Tier Standard rates (providers/gemini-pricing.ts). Scheduled-price models are
+  // left out here: the worker passes `geminiPrices`, which resolves the rate in effect per call.
+  ...GEMINI_FLAT_PRICES,
   "claude-opus-5-5": { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 },
   "claude-sonnet-5-5": {
     input: 2,

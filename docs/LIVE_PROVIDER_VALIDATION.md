@@ -122,6 +122,8 @@ Only counts, structural field names and category URNs are retained. Names/IDs/re
 
 ## Gemini integration
 
+> Superseded on 2026-10-27 for tiers, caps, models and pricing by [GEMINI_MIGRATION.md](GEMINI_MIGRATION.md) (explicit paid tier, live-data gate, dated price schedule). The history below is unchanged.
+
 The adapter uses Google's supported `generateContent` REST endpoint on the fixed host `generativelanguage.googleapis.com`, with `x-goog-api-key` authentication. No new dependency was needed. Anthropic and scripted adapters remain available.
 
 Capabilities and controls:

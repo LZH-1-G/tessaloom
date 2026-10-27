@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
+  GEMINI_MODELS,
+  GEMINI_PRICE_REVIEW,
+  GEMINI_PRICE_SCHEDULE,
   GeminiProvider,
   LlmGateway,
+  PRICES,
   checkGeminiModel,
+  estimateCostUsd,
+  geminiPrices,
+  geminiPricingApproved,
   type ProviderRequest,
   type LlmInvocationRecorder,
 } from "../../packages/llm-gateway/src";
@@ -82,7 +89,12 @@ const gatewayRequest = {
   schema: z.object({ answer: z.string() }),
   effort: "low" as const,
   maxOutputTokens: 1000,
-  ctx: { projectId: "p", runId: "r", remainingCalls: 3 },
+  ctx: {
+    projectId: "p",
+    runId: "r",
+    remainingCalls: 3,
+    inputOrigin: "synthetic" as const,
+  },
 };
 
 describe("Gemini REST provider (mock network only)", () => {
@@ -417,5 +429,549 @@ describe("Gemini gateway and worker wiring", () => {
     expect(() =>
       parseWebEnv({ ...base, GEMINI_API_KEY: "private-value" }),
     ).toThrow("GEMINI_API_KEY");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paid Tier: explicit approval, dated pricing, live-data gate (mock network only).
+
+const NOW = Date.parse("2026-10-27T12:00:00Z");
+const paid = (
+  overrides: Partial<ConstructorParameters<typeof GeminiProvider>[0]> = {},
+  payload: unknown = response(),
+) => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async () => new Response(JSON.stringify(payload)));
+  const provider = new GeminiProvider({
+    apiKey: "private-key-sentinel",
+    model,
+    paidTierApproved: true,
+    pricingVerifiedAt: "2026-10-27T09:00:00Z",
+    maxRequests: 4,
+    fetch: fetcher,
+    now: () => NOW,
+    ...overrides,
+  });
+  return { provider, fetcher };
+};
+
+describe("Gemini pricing (Paid Tier Standard, reviewed 2026-10-26)", () => {
+  it("prices every approved model with the published per-1M-token rates", () => {
+    expect(geminiPrices(NOW)).toEqual({
+      "gemini-3.5-flash-lite": {
+        input: 0.3,
+        cacheWrite: 0.3,
+        cacheRead: 0.03,
+        output: 2.5,
+      },
+      "gemini-3.1-flash-lite": {
+        input: 0.25,
+        cacheWrite: 0.25,
+        cacheRead: 0.025,
+        output: 1.5,
+      },
+      "gemini-3.6-flash": {
+        input: 0.75,
+        cacheWrite: 0.75,
+        cacheRead: 0.075,
+        output: 3.75,
+      },
+      "gemini-3.8-flash": {
+        input: 0.75,
+        cacheWrite: 0.75,
+        cacheRead: 0.075,
+        output: 3.75,
+      },
+      "gemini-2.5-flash-lite": {
+        input: 0.1,
+        cacheWrite: 0.1,
+        cacheRead: 0.01,
+        output: 0.4,
+      },
+      "gemini-2.5-flash": {
+        input: 0.3,
+        cacheWrite: 0.3,
+        cacheRead: 0.03,
+        output: 2.5,
+      },
+    });
+    for (const m of GEMINI_MODELS)
+      expect(Object.keys(GEMINI_PRICE_SCHEDULE)).toContain(m);
+  });
+  it("applies the announced 2027-01-01 Flash increase at the UTC boundary", () => {
+    const before = geminiPrices(Date.parse("2026-12-31T23:59:59.999Z"));
+    const after = geminiPrices(Date.parse("2027-01-01T00:00:00Z"));
+    for (const m of ["gemini-3.6-flash", "gemini-3.8-flash"]) {
+      expect(before[m]).toMatchObject({ input: 0.75, output: 3.75 });
+      expect(after[m]).toMatchObject({
+        input: 1.5,
+        cacheRead: 0.15,
+        output: 7.5,
+      });
+    }
+    expect(after["gemini-3.5-flash-lite"]).toEqual(
+      before["gemini-3.5-flash-lite"],
+    );
+  });
+  it("keeps scheduled-price models out of the clockless static table", () => {
+    expect(PRICES["gemini-3.5-flash-lite"]).toEqual(
+      geminiPrices(NOW)["gemini-3.5-flash-lite"],
+    );
+    expect(PRICES).not.toHaveProperty("gemini-3.6-flash");
+    expect(PRICES).not.toHaveProperty("gemini-3.8-flash");
+  });
+  it("computes the cost of a call: uncached input, cache hits and output including thinking", () => {
+    // 80 uncached × $0.30 + 20 cached × $0.03 + (10 + 5 thinking) × $2.50, per 1M tokens.
+    expect(
+      estimateCostUsd(
+        model,
+        {
+          inputTokens: 80,
+          cachedInputTokens: 20,
+          cacheWriteTokens: 0,
+          outputTokens: 15,
+        },
+        geminiPrices(NOW),
+      ),
+    ).toBeCloseTo(0.0000621, 12);
+  });
+  it("accepts a pricing review only from the review date, not in the future, for 90 days", () => {
+    expect(GEMINI_PRICE_REVIEW).toBe("2026-10-26");
+    expect(geminiPricingApproved("2026-10-26T00:00:00Z", NOW)).toBe(true);
+    expect(geminiPricingApproved("2026-10-25T23:59:59Z", NOW)).toBe(false);
+    expect(geminiPricingApproved("2026-10-28T00:00:00Z", NOW)).toBe(false);
+    expect(geminiPricingApproved("not a date", NOW)).toBe(false);
+    expect(
+      geminiPricingApproved(
+        "2026-10-27T00:00:00Z",
+        Date.parse("2027-01-25T00:00:00Z"),
+      ),
+    ).toBe(true);
+    expect(
+      geminiPricingApproved(
+        "2026-10-27T00:00:00Z",
+        Date.parse("2027-01-25T00:00:01Z"),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("Gemini paid tier provider", () => {
+  it.each([
+    { pricingVerifiedAt: undefined },
+    { pricingVerifiedAt: "2026-10-01T00:00:00Z" },
+    { freeTierConfirmed: true, dataSharingApproved: true },
+    { paidTierApproved: false },
+    { maxRequests: 5001 },
+    { apiKey: "" },
+  ])("fails closed before sending for %o", (options) => {
+    expect(() => paid(options)).toThrow();
+  });
+  it("never lets the free tier carry live data or a paid-sized budget", () => {
+    expect(() => setup({ liveInputsApproved: true })).toThrow();
+    expect(() => setup({ maxRequests: 51 })).toThrow();
+    expect(setup().provider).toMatchObject({
+      billing: "confirmed-free-tier",
+      liveInputsApproved: false,
+    });
+    expect(paid().provider.billing).toBeUndefined();
+    expect(paid().provider.liveInputsApproved).toBe(false);
+    expect(paid({ liveInputsApproved: true }).provider.liveInputsApproved).toBe(
+      true,
+    );
+  });
+  it("sends the same request shape as the free tier, with no tools or service-tier upgrade", async () => {
+    const { provider, fetcher } = paid();
+    await provider.generate(request);
+    const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+    expect(Object.keys(body).sort()).toEqual([
+      "contents",
+      "generationConfig",
+      "systemInstruction",
+    ]);
+    expect(body.generationConfig).toMatchObject({
+      responseMimeType: "application/json",
+      responseJsonSchema: request.jsonSchema,
+      thinkingConfig: { includeThoughts: false },
+    });
+  });
+  it("bills tool-use prompt tokens as input and reports thinking tokens", async () => {
+    const { provider } = paid(
+      {},
+      response({
+        usageMetadata: {
+          promptTokenCount: 100,
+          cachedContentTokenCount: 20,
+          toolUsePromptTokenCount: 7,
+          candidatesTokenCount: 10,
+          thoughtsTokenCount: 5,
+          totalTokenCount: 122,
+          serviceTier: "standard",
+        },
+      }),
+    );
+    expect((await provider.generate(request)).usage).toEqual({
+      inputTokens: 87,
+      cachedInputTokens: 20,
+      cacheWriteTokens: 0,
+      outputTokens: 15,
+      reasoningTokens: 5,
+    });
+  });
+  it.each(["priority", "SERVICE_TIER_PRIORITY", "flex"])(
+    "rejects a %s-tier response and latches paid calls off",
+    async (serviceTier) => {
+      const payload = response();
+      const { provider, fetcher } = paid(
+        {},
+        {
+          ...payload,
+          usageMetadata: { ...payload.usageMetadata, serviceTier },
+        },
+      );
+      await expect(provider.generate(request)).rejects.toMatchObject({
+        kind: "unknown",
+      });
+      await expect(provider.generate(request)).rejects.toMatchObject({
+        requestSent: false,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("latches off after an unexpected serving model, inconsistent usage or an invalid envelope", async () => {
+    for (const payload of [
+      response({ modelVersion: "gemini-4-argon" }),
+      response({
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 1,
+          totalTokenCount: 99,
+        },
+      }),
+      { unexpected: true },
+    ]) {
+      const { provider, fetcher } = paid({}, payload);
+      await provider.generate(request).catch(() => {});
+      await expect(provider.generate(request)).rejects.toMatchObject({
+        requestSent: false,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+  it("resets the paid request cap at the UTC day boundary only", async () => {
+    let now = Date.parse("2026-10-27T23:59:00Z");
+    const { provider, fetcher } = paid({ maxRequests: 1, now: () => now });
+    await provider.generate(request);
+    await expect(provider.generate(request)).rejects.toMatchObject({
+      kind: "rate_limited",
+      requestSent: false,
+    });
+    now = Date.parse("2026-10-28T00:00:01Z");
+    await provider.generate(request);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("pauses paid calls without sending once the pricing review expires", async () => {
+    let now = NOW;
+    const { provider, fetcher } = paid({ now: () => now });
+    await provider.generate(request);
+    now = Date.parse("2027-01-26T00:00:00Z");
+    await expect(provider.generate(request)).rejects.toMatchObject({
+      kind: "bad_request",
+      requestSent: false,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Gemini paid tier through the gateway", () => {
+  const gateway = (
+    provider: GeminiProvider,
+    spendGuard = guard(),
+    now = () => NOW,
+  ) =>
+    new LlmGateway({
+      provider,
+      primaryModel: model,
+      prices: () => geminiPrices(now()),
+      spendGuard,
+      recorder: recorder(),
+    });
+
+  it("reserves an upper bound first, then settles the actual paid cost", async () => {
+    const spendGuard = guard();
+    const result = await gateway(paid().provider, spendGuard).generate(
+      gatewayRequest,
+    );
+    expect(result).toMatchObject({ ok: true, attempts: 1 });
+    expect(result.costUsd).toBeCloseTo(0.0000621, 12);
+    const [[reserved]] = spendGuard.reserve.mock.calls as unknown as [
+      [{ upperBoundUsd: number }],
+    ];
+    expect(reserved.upperBoundUsd).toBeGreaterThan(result.costUsd);
+    expect(spendGuard.settle).toHaveBeenCalledWith(
+      "reservation",
+      result.costUsd,
+    );
+  });
+  it.each([undefined, "unknown" as const])(
+    "refuses %s (non-synthetic) inputs before reserving or sending",
+    async (inputOrigin) => {
+      const { provider, fetcher } = paid();
+      const spendGuard = guard();
+      const result = await gateway(provider, spendGuard).generate({
+        ...gatewayRequest,
+        ctx: { ...gatewayRequest.ctx, inputOrigin },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: "CONFIGURATION",
+        attempts: 0,
+        issues: [{ code: "DATA_SHARING_BLOCKED" }],
+      });
+      expect(spendGuard.reserve).not.toHaveBeenCalled();
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it("blocks live inputs on the free tier as well", async () => {
+    const { provider, fetcher } = setup();
+    const result = await gateway(provider).generate({
+      ...gatewayRequest,
+      ctx: { ...gatewayRequest.ctx, inputOrigin: "unknown" },
+    });
+    expect(result).toMatchObject({ ok: false, reason: "CONFIGURATION" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("sends live inputs only after explicit live-data approval", async () => {
+    const { provider, fetcher } = paid({ liveInputsApproved: true });
+    const result = await gateway(provider).generate({
+      ...gatewayRequest,
+      ctx: { ...gatewayRequest.ctx, inputOrigin: "unknown" },
+    });
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("prices reservation and settlement from one snapshot even across a price change", async () => {
+    const flash = "gemini-3.6-flash";
+    let now = Date.parse("2026-12-31T23:59:59Z");
+    const { provider } = paid(
+      { model: flash, now: () => now },
+      response({ modelVersion: flash }),
+    );
+    const spendGuard = guard();
+    spendGuard.reserve.mockImplementation(async () => {
+      now = Date.parse("2027-01-01T00:00:01Z"); // the clock moves during the call
+      return { ok: true as const, reservationId: "reservation" };
+    });
+    const result = await new LlmGateway({
+      provider,
+      primaryModel: flash,
+      prices: () => geminiPrices(now),
+      spendGuard,
+    }).generate(gatewayRequest);
+    // December rates: 80 × 0.75 + 20 × 0.075 + 15 × 3.75 per 1M tokens.
+    expect(result.costUsd).toBeCloseTo(0.00011775, 12);
+    const next = await new LlmGateway({
+      provider,
+      primaryModel: flash,
+      prices: () => geminiPrices(now),
+      spendGuard: guard(),
+    }).generate(gatewayRequest);
+    expect(next.costUsd).toBeCloseTo(0.0002355, 12);
+  });
+  it("rejects a scheduled-price model when no clock-aware price table is supplied", async () => {
+    const flash = "gemini-3.8-flash";
+    const { provider, fetcher } = paid(
+      { model: flash },
+      response({ modelVersion: flash }),
+    );
+    const result = await new LlmGateway({
+      provider,
+      primaryModel: flash,
+      spendGuard: guard(),
+    }).generate(gatewayRequest);
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "CONFIGURATION",
+      issues: [{ code: "UNPRICED_MODEL" }],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("Gemini paid tier worker configuration", () => {
+  const base = {
+    LLM_PROVIDER: "gemini" as const,
+    LLM_MODEL: model,
+    LLM_FALLBACK_MODEL: "claude-sonnet-5-5",
+    LLM_MODE: "standard" as const,
+    GEMINI_API_KEY: "sentinel",
+    GEMINI_MAX_REQUESTS: 200,
+  };
+  const reviewed = new Date().toISOString();
+
+  it("builds a paid gateway only with explicit approval and a current pricing review", () => {
+    expect(createLlmGateway(base, recorder())).toBeNull();
+    expect(
+      createLlmGateway(
+        { ...base, GEMINI_PAID_TIER_APPROVED: "on" },
+        recorder(),
+      ),
+    ).toBeNull();
+    expect(
+      createLlmGateway(
+        {
+          ...base,
+          GEMINI_PAID_TIER_APPROVED: "on",
+          GEMINI_PRICING_VERIFIED_AT: "2026-09-01T00:00:00Z",
+        },
+        recorder(),
+      ),
+    ).toBeNull();
+    expect(
+      createLlmGateway(
+        {
+          ...base,
+          GEMINI_PAID_TIER_APPROVED: "on",
+          GEMINI_FREE_TIER_CONFIRMED: "on",
+          GEMINI_PRICING_VERIFIED_AT: reviewed,
+        },
+        recorder(),
+      ),
+    ).toBeNull();
+    // Free tier: the paid-sized budget and live data are both refused.
+    expect(
+      createLlmGateway(
+        {
+          ...base,
+          GEMINI_FREE_TIER_CONFIRMED: "on",
+          GEMINI_DATA_SHARING_APPROVED: "on",
+        },
+        recorder(),
+      ),
+    ).toBeNull();
+    const gateway = createLlmGateway(
+      {
+        ...base,
+        GEMINI_PAID_TIER_APPROVED: "on",
+        GEMINI_PRICING_VERIFIED_AT: reviewed,
+        ANTHROPIC_API_KEY: "sentinel",
+      },
+      recorder(),
+    );
+    expect(gateway?.providerName).toBe("gemini");
+  });
+  it("records paid pricing context and never falls back to another provider", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(JSON.stringify(response())));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const rec = recorder();
+      const spendGuard = guard();
+      const gateway = createLlmGateway(
+        {
+          ...base,
+          LLM_MODE: "economy",
+          GEMINI_PAID_TIER_APPROVED: "on",
+          GEMINI_PRICING_VERIFIED_AT: reviewed,
+        },
+        rec,
+        undefined,
+        spendGuard,
+      )!;
+      const result = await gateway.generate(gatewayRequest);
+      expect(result).toMatchObject({ ok: true, fallbackUsed: false });
+      expect(result.costUsd).toBeGreaterThan(0);
+      expect(String(fetcher.mock.calls[0]![0])).toBe(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      );
+      expect(rec.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "gemini",
+          modelId: model,
+          inputExcerpt: expect.objectContaining({
+            billingTier: "paid",
+            serviceTier: "standard",
+            tariffSourceDate: GEMINI_PRICE_REVIEW,
+            pricingVerifiedAt: reviewed,
+            reasoningTokens: 5,
+          }),
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("validates tier, pricing and live-data combinations in worker configuration", () => {
+    const env = {
+      APP_ENV: "test",
+      DATABASE_URL: "postgresql://local:placeholder@localhost/test",
+      LLM_PROVIDER: "gemini",
+    };
+    expect(parseWorkerEnv(env)).toMatchObject({
+      GEMINI_PAID_TIER_APPROVED: "off",
+      GEMINI_LIVE_DATA_APPROVED: "off",
+      GEMINI_MAX_REQUESTS: 0,
+    });
+    for (const [bad, variable] of [
+      [
+        {
+          GEMINI_PAID_TIER_APPROVED: "on",
+          GEMINI_FREE_TIER_CONFIRMED: "on",
+          GEMINI_PRICING_VERIFIED_AT: reviewed,
+        },
+        "GEMINI_PAID_TIER_APPROVED",
+      ],
+      [{ GEMINI_PAID_TIER_APPROVED: "on" }, "GEMINI_PRICING_VERIFIED_AT"],
+      [
+        { GEMINI_LIVE_DATA_APPROVED: "on", GEMINI_FREE_TIER_CONFIRMED: "on" },
+        "GEMINI_LIVE_DATA_APPROVED",
+      ],
+      [
+        { GEMINI_FREE_TIER_CONFIRMED: "on", GEMINI_MAX_REQUESTS: "51" },
+        "GEMINI_MAX_REQUESTS",
+      ],
+      [{ GEMINI_MAX_REQUESTS: "5001" }, "GEMINI_MAX_REQUESTS"],
+    ] as const)
+      expect(() => parseWorkerEnv({ ...env, ...bad })).toThrow(variable);
+    expect(
+      parseWorkerEnv({
+        ...env,
+        GEMINI_PAID_TIER_APPROVED: "on",
+        GEMINI_PRICING_VERIFIED_AT: reviewed,
+        GEMINI_LIVE_DATA_APPROVED: "on",
+        GEMINI_MAX_REQUESTS: "1000",
+      }),
+    ).toMatchObject({ GEMINI_MAX_REQUESTS: 1000 });
+  });
+  it("refuses the free tier and the Claude subscription in production", () => {
+    const env = {
+      APP_ENV: "production",
+      DATABASE_URL:
+        "postgresql://local:placeholder@db.example.test/prod?sslmode=verify-full",
+      QLOO_MODE: "live",
+    };
+    expect(() =>
+      parseWorkerEnv({
+        ...env,
+        LLM_PROVIDER: "gemini",
+        GEMINI_FREE_TIER_CONFIRMED: "on",
+      }),
+    ).toThrow("GEMINI_FREE_TIER_CONFIRMED");
+    expect(() =>
+      parseWorkerEnv({ ...env, LLM_PROVIDER: "claude-subscription" }),
+    ).toThrow("LLM_PROVIDER");
+    expect(
+      parseWorkerEnv({
+        ...env,
+        LLM_PROVIDER: "gemini",
+        GEMINI_PAID_TIER_APPROVED: "on",
+        GEMINI_PRICING_VERIFIED_AT: reviewed,
+      }),
+    ).toMatchObject({
+      LLM_PROVIDER: "gemini",
+      GEMINI_LIVE_DATA_APPROVED: "off",
+    });
   });
 });

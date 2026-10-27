@@ -76,7 +76,9 @@ For the developer's own local testing only, `LLM_PROVIDER=claude-subscription` r
 official Claude Agent SDK on the developer's Claude Pro/Max login. It is refused outside
 development and test, never runs beside an API key, and is absent from the production image
 ([why and how](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). DeepSeek, Gemini and a scripted
-provider are also supported.
+provider are also supported. Gemini runs on an explicitly approved free or paid tier, and only
+sends live Qloo-derived inputs once that permission is approved
+([migration and rollout plan](docs/GEMINI_MIGRATION.md)).
 
 ## Technical highlights
 

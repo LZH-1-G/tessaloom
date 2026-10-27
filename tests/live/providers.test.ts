@@ -9,6 +9,7 @@ import {
   GeminiProvider,
   LlmGateway,
   checkGeminiModel,
+  geminiPrices,
 } from "../../packages/llm-gateway/src";
 import { qlooChildEnv } from "../../packages/qloo-adapter/src/transports/env";
 
@@ -34,12 +35,16 @@ async function claimReceipt(provider: string) {
 it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
   "opt-in Gemini contract: one metadata GET and one synthetic generation, zero retries",
   async () => {
+    // Exactly one tier. Paid: explicit billing approval for this one call and a current
+    // pricing review; the call costs well under one US cent at published rates.
+    const paid = process.env.GEMINI_PAID_TIER_APPROVED === "on";
     if (
-      process.env.GEMINI_FREE_TIER_CONFIRMED !== "on" ||
-      process.env.GEMINI_DATA_SHARING_APPROVED !== "on"
+      paid === (process.env.GEMINI_FREE_TIER_CONFIRMED === "on") ||
+      (!paid && process.env.GEMINI_DATA_SHARING_APPROVED !== "on") ||
+      (paid && !process.env.GEMINI_PRICING_VERIFIED_AT)
     )
       throw new Error(
-        "Confirm Free project, quota, and sharing of synthetic inputs first",
+        "Confirm exactly one tier: Free with quota and synthetic-input sharing, or approved Paid with a pricing review",
       );
     const apiKey = process.env.GEMINI_API_KEY;
     const model = process.env.LLM_MODEL;
@@ -51,8 +56,12 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
       const provider = new GeminiProvider({
         apiKey,
         model,
-        freeTierConfirmed: true,
-        dataSharingApproved: true,
+        ...(paid
+          ? {
+              paidTierApproved: true,
+              pricingVerifiedAt: process.env.GEMINI_PRICING_VERIFIED_AT,
+            }
+          : { freeTierConfirmed: true, dataSharingApproved: true }),
         maxRequests: 1,
       });
       // This standalone probe has no DB/run; its one-call reservation is explicit and local.
@@ -61,6 +70,7 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
       const gateway = new LlmGateway({
         provider,
         primaryModel: model,
+        prices: () => geminiPrices(),
         maxRepairs: 0,
         maxOutputTokensCeiling: 256,
         spendGuard: {
@@ -88,6 +98,7 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
         effort: "low",
         maxOutputTokens: 256,
         ctx: {
+          inputOrigin: "synthetic",
           projectId: "local-contract-probe",
           remainingCalls: 1,
           remainingOutputTokens: 256,
@@ -97,6 +108,7 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
         receipt,
         JSON.stringify({
           provider: "gemini",
+          billingTier: paid ? "paid" : "free",
           metadata,
           ok: result.ok,
           attempts: result.attempts,

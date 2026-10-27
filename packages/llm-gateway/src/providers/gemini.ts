@@ -5,14 +5,23 @@ import {
   type ProviderRequest,
   type ProviderResponse,
 } from "../types";
+import { GEMINI_PRICE_SCHEDULE, geminiPricingApproved } from "./gemini-pricing";
 
-// Public free-tier candidates, NOT evidence of access in a particular account.
-// Official pricing/models pages reviewed 2026-10-23. No automatic model selection.
+// Stable text models with structured output, from the official models page (updated
+// 2026-10-22). NOT evidence of access in a particular account; previews are excluded
+// because Google shuts them down. No automatic model selection.
 export const GEMINI_MODELS = [
   "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
+  // Legacy: served only to projects that used them before.
   "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
-] as const;
+] as const satisfies readonly (keyof typeof GEMINI_PRICE_SCHEDULE)[];
+/** Free tier: per worker lifetime. Paid tier: per UTC day, per worker process. */
+export const GEMINI_FREE_MAX_REQUESTS = 50;
+export const GEMINI_PAID_MAX_REQUESTS = 5000;
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const responseSchema = z.object({
@@ -40,8 +49,10 @@ const responseSchema = z.object({
     promptTokenCount: count,
     cachedContentTokenCount: count.optional(),
     candidatesTokenCount: count.optional(),
+    toolUsePromptTokenCount: count.optional(),
     thoughtsTokenCount: count.optional(),
     totalTokenCount: count,
+    serviceTier: z.string().optional(),
   }),
 });
 
@@ -49,14 +60,30 @@ export interface GeminiProviderOptions {
   apiKey: string;
   model: string;
   /** Owner confirms the key's project is Free, with billing disabled and nonzero quota. */
-  freeTierConfirmed: boolean;
+  freeTierConfirmed?: boolean;
   /** Owner confirms permission for minimized inputs under Google's unpaid-service terms. */
-  dataSharingApproved: boolean;
-  /** Hard cap across concurrent calls, repairs included, for this worker lifetime. */
+  dataSharingApproved?: boolean;
+  /**
+   * Owner explicitly approves Paid Tier billing for this key's project. Exclusive with
+   * `freeTierConfirmed`; requires a current `pricingVerifiedAt`.
+   */
+  paidTierApproved?: boolean;
+  /** When the owner last checked the price table against Google's page (ISO 8601). */
+  pricingVerifiedAt?: string;
+  /** Paid tier only: permission to send live, Qloo-derived inputs has been verified. */
+  liveInputsApproved?: boolean;
+  /**
+   * Hard cap across concurrent calls, repairs included: for the worker lifetime on the free
+   * tier, and per UTC day on the paid tier.
+   */
   maxRequests: number;
   timeoutMs?: number;
   fetch?: typeof fetch;
+  now?: () => number;
 }
+
+const localError = (message: string) =>
+  new ProviderError("bad_request", message, false, undefined, false);
 
 function assertModel(model: string) {
   if (!(GEMINI_MODELS as readonly string[]).includes(model))
@@ -197,27 +224,42 @@ export async function checkGeminiModel(options: {
 
 export class GeminiProvider implements LlmProvider {
   readonly name = "gemini";
-  readonly billing = "confirmed-free-tier" as const;
+  readonly billing?: "confirmed-free-tier";
+  readonly liveInputsApproved: boolean;
   private requests = 0;
+  private capDay: string | null = null;
+  private stopped = false;
+  private readonly paid: boolean;
   private readonly timeoutMs: number;
+  private readonly now: () => number;
 
   constructor(private readonly options: GeminiProviderOptions) {
     assertModel(options.model);
     this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.now = options.now ?? Date.now;
+    this.paid = options.paidTierApproved === true;
+    const free = options.freeTierConfirmed === true;
     if (
       !options.apiKey ||
-      !options.freeTierConfirmed ||
-      !options.dataSharingApproved ||
+      this.paid === free ||
+      (free &&
+        (!options.dataSharingApproved ||
+          options.liveInputsApproved ||
+          options.maxRequests > GEMINI_FREE_MAX_REQUESTS)) ||
+      (this.paid &&
+        !geminiPricingApproved(options.pricingVerifiedAt ?? "", this.now())) ||
       !Number.isSafeInteger(options.maxRequests) ||
       options.maxRequests < 1 ||
-      options.maxRequests > 50 ||
+      options.maxRequests > GEMINI_PAID_MAX_REQUESTS ||
       !Number.isSafeInteger(this.timeoutMs) ||
       this.timeoutMs < 1 ||
       this.timeoutMs > 120_000
     )
       throw new Error(
-        "Gemini requires private credentials, free-tier and data-sharing confirmation, and a bounded request budget",
+        "Gemini requires private credentials, exactly one confirmed billing tier (free with data-sharing confirmation, or paid with a current pricing review), and a bounded request budget",
       );
+    if (free) this.billing = "confirmed-free-tier";
+    this.liveInputsApproved = this.paid && options.liveInputsApproved === true;
   }
 
   async generate(request: ProviderRequest): Promise<ProviderResponse> {
@@ -249,6 +291,23 @@ export class GeminiProvider implements LlmProvider {
         undefined,
         false,
       );
+    if (
+      this.paid &&
+      !geminiPricingApproved(this.options.pricingVerifiedAt ?? "", this.now())
+    )
+      throw localError("Gemini pricing review expired; paid calls are paused");
+    if (this.stopped)
+      throw localError(
+        "Gemini paid calls latched off after an accounting fault",
+      );
+    // The paid cap is a daily circuit breaker; the free cap never resets in-process.
+    const day = this.paid
+      ? new Date(this.now()).toISOString().slice(0, 10)
+      : null;
+    if (day !== this.capDay) {
+      this.capDay = day;
+      this.requests = 0;
+    }
     if (this.requests >= this.options.maxRequests)
       throw new ProviderError(
         "rate_limited",
@@ -291,12 +350,14 @@ export class GeminiProvider implements LlmProvider {
         fetch: this.options.fetch ?? fetch,
       }),
     );
-    if (!parsed.success)
+    if (!parsed.success) {
+      if (this.paid) this.stopped = true;
       throw new ProviderError(
         "unknown",
         "Gemini response or usage is invalid",
         false,
       );
+    }
     const message = parsed.data;
     const candidate = message.candidates?.[0];
     const stop = candidate?.finishReason;
@@ -312,19 +373,32 @@ export class GeminiProvider implements LlmProvider {
       ].includes(stop ?? "");
     const usage = message.usageMetadata;
     const cached = usage.cachedContentTokenCount ?? 0;
-    const output =
-      (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
+    const toolPrompt = usage.toolUsePromptTokenCount ?? 0;
+    const thoughts = usage.thoughtsTokenCount ?? 0;
+    const output = (usage.candidatesTokenCount ?? 0) + thoughts;
+    const tier = usage.serviceTier?.toLowerCase().replace(/^service_tier_/, "");
     if (
       cached > usage.promptTokenCount ||
-      usage.totalTokenCount !== usage.promptTokenCount + output ||
+      usage.totalTokenCount !== usage.promptTokenCount + toolPrompt + output ||
+      (tier !== undefined && tier !== "standard" && tier !== "unspecified") ||
       (!blocked &&
         (usage.candidatesTokenCount === undefined || !message.modelVersion))
-    )
+    ) {
+      // Unknown billing: the gateway keeps the full reservation; stop further paid work.
+      if (this.paid) this.stopped = true;
       throw new ProviderError(
         "unknown",
         "Gemini usage is incomplete or inconsistent",
         false,
       );
+    }
+    // The gateway rejects an unexpected serving model and keeps the reservation.
+    if (
+      this.paid &&
+      message.modelVersion &&
+      message.modelVersion !== request.model
+    )
+      this.stopped = true;
     return {
       text: blocked
         ? ""
@@ -341,10 +415,12 @@ export class GeminiProvider implements LlmProvider {
             : "other",
       modelId: message.modelVersion ?? request.model,
       usage: {
-        inputTokens: usage.promptTokenCount - cached,
+        // Tool-use prompt tokens are billed as input (none are expected: no tools are sent).
+        inputTokens: usage.promptTokenCount - cached + toolPrompt,
         cachedInputTokens: cached,
         cacheWriteTokens: 0,
         outputTokens: output,
+        reasoningTokens: thoughts,
       },
       refusalCategory: blocked ? "provider_safety" : null,
     };

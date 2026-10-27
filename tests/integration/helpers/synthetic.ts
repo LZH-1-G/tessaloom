@@ -8,6 +8,7 @@ import {
   createLlmGateway,
 } from "../../../apps/worker/src/llm";
 import type { RunnerDeps } from "../../../apps/worker/src/orchestrator/runner";
+import type { RunConfig } from "../../../packages/core/src";
 import {
   confirmRun,
   experimentView,
@@ -16,7 +17,10 @@ import {
   type DbHandle,
   type PgBoss,
 } from "../../../packages/db/src";
-import { PromptRegistry } from "../../../packages/llm-gateway/src";
+import {
+  PromptRegistry,
+  type LlmGateway,
+} from "../../../packages/llm-gateway/src";
 import { drain, seedProject } from "./exploration";
 
 /**
@@ -76,7 +80,13 @@ export function briefFor(r: () => number) {
   };
 }
 
-export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
+export function syntheticHarness(
+  handle: DbHandle,
+  boss: PgBoss,
+  // A different LLM (e.g. Gemini over mocked HTTP) and the run config that names it.
+  options: { llm?: () => LlmGateway | null; runConfig?: RunConfig } = {},
+) {
+  const runConfig = options.runConfig ?? RUN_CONFIG;
   function deps(rawRetention: "off" | "on"): RunnerDeps {
     const qloo = createQlooAdapter(handle.db, {
       mode: "synthetic",
@@ -86,15 +96,17 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
       rateLimitPerMin: 100_000,
       rawRetention,
     });
-    const llm = createLlmGateway(
-      {
-        LLM_PROVIDER: "scripted",
-        LLM_MODEL: "scripted-demo",
-        LLM_FALLBACK_MODEL: "scripted-demo-fallback",
-        LLM_MODE: "standard",
-      },
-      createDbLlmRecorder(handle.db),
-    );
+    const llm = options.llm
+      ? options.llm()
+      : createLlmGateway(
+          {
+            LLM_PROVIDER: "scripted",
+            LLM_MODEL: "scripted-demo",
+            LLM_FALLBACK_MODEL: "scripted-demo-fallback",
+            LLM_MODE: "standard",
+          },
+          createDbLlmRecorder(handle.db),
+        );
     return { handle, boss, ports: buildPorts(qloo, llm), cancelPollMs: 50 };
   }
 
@@ -177,7 +189,7 @@ export function syntheticHarness(handle: DbHandle, boss: PgBoss) {
       projectId: project.id,
       briefVersionId: brief.id,
       mode: "fixture",
-      runConfig: RUN_CONFIG,
+      runConfig,
       ...(tension ? { variables: { collisionTension: tension } } : {}),
     });
     return {

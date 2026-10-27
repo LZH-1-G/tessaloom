@@ -6,5 +6,6 @@ export * from "./providers/anthropic";
 export * from "./providers/claude-subscription";
 export * from "./providers/scripted";
 export * from "./providers/gemini";
+export * from "./providers/gemini-pricing";
 export * from "./providers/deepseek";
 export * from "./providers/deepseek-pricing";

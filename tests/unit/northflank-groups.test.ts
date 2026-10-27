@@ -79,3 +79,45 @@ describe("prepared Northflank limit groups", () => {
     });
   }
 });
+
+describe("prepared Gemini limit group (not applied)", () => {
+  it("pins paid-capable Flash-Lite with acceptance caps, but stays inert without owner approvals", async () => {
+    const { createLlmGateway } = await import("../../apps/worker/src/llm");
+    const group = load("gemini-acceptance");
+    const vars = group.secrets.variables;
+    expect(group.name).toBe("tessaloom-llm-limits");
+    expect(group.description).not.toContain("=");
+    expect(group.restrictions).toMatchObject({
+      restricted: true,
+      nfObjects: [{ id: "tessaloom", type: "service" }],
+    });
+    expect(
+      Object.keys(vars).filter((k) =>
+        /KEY|SECRET|TOKEN|PEPPER|PASSWORD|DATABASE_URL|RUN_ACCESS/.test(k),
+      ),
+    ).toEqual([]);
+    // Same caps as the Anthropic acceptance set; only the provider changes.
+    const anthropic = load("acceptance").secrets.variables;
+    for (const key of Object.keys(anthropic).filter((k) =>
+      /_USD$|_QLOO_CALLS$|_RUNS/.test(k),
+    ))
+      expect(vars[key]).toBe(anthropic[key]);
+    const worker = parseWorkerEnv({ ...base, ...vars });
+    expect(worker).toMatchObject({
+      LLM_PROVIDER: "gemini",
+      LLM_MODEL: "gemini-3.5-flash-lite",
+      GEMINI_FREE_TIER_CONFIRMED: "off",
+      GEMINI_PAID_TIER_APPROVED: "off",
+      GEMINI_LIVE_DATA_APPROVED: "off",
+      GEMINI_MAX_REQUESTS: 60,
+    });
+    parseWebEnv({ ...base, ...vars });
+    // Even with a key, no approvals means no LLM: runs report it unconfigured.
+    expect(
+      createLlmGateway(
+        { ...worker, GEMINI_API_KEY: "sentinel" },
+        { record: async () => "id" },
+      ),
+    ).toBeNull();
+  });
+});

@@ -149,7 +149,13 @@ export const workerEnvSchema = z
     DEEPSEEK_PRICING_VERIFIED_AT: z.string().datetime().optional(),
     GEMINI_FREE_TIER_CONFIRMED: z.enum(["off", "on"]).default("off"),
     GEMINI_DATA_SHARING_APPROVED: z.enum(["off", "on"]).default("off"),
-    GEMINI_MAX_REQUESTS: z.coerce.number().int().min(0).max(50).default(0),
+    // Paid Tier: explicit billing approval plus the owner's dated check of the price table.
+    GEMINI_PAID_TIER_APPROVED: z.enum(["off", "on"]).default("off"),
+    GEMINI_PRICING_VERIFIED_AT: z.string().datetime().optional(),
+    // Verified permission to send live, Qloo-derived inputs to Gemini (paid tier only).
+    GEMINI_LIVE_DATA_APPROVED: z.enum(["off", "on"]).default("off"),
+    // Free tier: per worker lifetime, at most 50. Paid tier: per UTC day, per worker process.
+    GEMINI_MAX_REQUESTS: z.coerce.number().int().min(0).max(5000).default(0),
     GEMINI_TIMEOUT_MS: z.coerce
       .number()
       .int()
@@ -213,6 +219,53 @@ export const workerEnvSchema = z
         code: "custom",
         path: ["ANTHROPIC_API_KEY"],
         message: "Subscription mode must not run beside an API key",
+      });
+    if (
+      value.GEMINI_FREE_TIER_CONFIRMED === "on" &&
+      value.GEMINI_PAID_TIER_APPROVED === "on"
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["GEMINI_PAID_TIER_APPROVED"],
+        message: "Choose exactly one Gemini billing tier",
+      });
+    if (
+      value.GEMINI_FREE_TIER_CONFIRMED === "on" &&
+      value.GEMINI_MAX_REQUESTS > 50
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["GEMINI_MAX_REQUESTS"],
+        message: "The Gemini free tier is capped at 50 requests",
+      });
+    if (
+      value.GEMINI_PAID_TIER_APPROVED === "on" &&
+      !value.GEMINI_PRICING_VERIFIED_AT
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["GEMINI_PRICING_VERIFIED_AT"],
+        message: "Paid Gemini requires a dated pricing review",
+      });
+    // Free-tier inputs may be used by Google to improve its products.
+    if (
+      value.GEMINI_LIVE_DATA_APPROVED === "on" &&
+      value.GEMINI_PAID_TIER_APPROVED !== "on"
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["GEMINI_LIVE_DATA_APPROVED"],
+        message: "Live data may only be sent to the paid Gemini tier",
+      });
+    if (
+      value.APP_ENV === "production" &&
+      value.LLM_PROVIDER === "gemini" &&
+      value.GEMINI_FREE_TIER_CONFIRMED === "on"
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["GEMINI_FREE_TIER_CONFIRMED"],
+        message: "The Gemini free tier is not a production configuration",
       });
     // Scripted LLM output is test data; like fixtures it must never reach production users.
     if (value.APP_ENV === "production" && value.LLM_PROVIDER === "scripted") {
