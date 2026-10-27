@@ -32,15 +32,23 @@ passes acceptance, rollback means **returning to that safe closed state**.
 | 9 | Tool use and thought tokens | No tools are sent. `toolUsePromptTokenCount` would be billed as input, and thoughts as output. Text-only multi-turn without thought signatures is "not an error", though quality may degrade; this affects our single repair turn. | API reference, [thought signatures](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures) (updated 2026-10-13) |
 | 10 | Timeouts and rate limits | Google: "Set HTTP client timeouts to at least 20 minutes per call"; `high` is slowest to the first token. Paid Tier 1 = a linked active billing account, with a $250 billing cap. RPM/TPM are shown **only in AI Studio**. Tier 1 also has a **$10 per 10 minutes spend limit (429)**. Limits apply per project. | What's new, [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) |
 
-**The timeout conflict.** Google's 20-minute timeout guidance cannot be followed here:
-- A run step is expired and re-run by the queue after **600 s** (`RUN_STEP_EXPIRE_SECONDS`).
-- A step makes up to 3 provider attempts: the first, one truncation retry and one repair.
-- An exploration's active wall-clock budget is **420 s**.
+**The timeout conflict.** Google's 20-minute timeout guidance cannot be followed here.
+Tessaloom's real deadlines, all checked in code:
 
-The adapter therefore keeps a **120 s** per-request maximum, and a unit test pins
-3 × 120 s + 60 s below the queue expiry. A slower Argon call times out, is **not** retried
-(it may have been billed), and the run stops. Latency is therefore a pass/fail criterion of
-the paid acceptance.
+| Deadline | Value | Where | Effect when exceeded |
+| --- | --- | --- | --- |
+| Gemini request timeout | default 60 s; **maximum 120 s** (`GEMINI_TIMEOUT_MS`) | `packages/config/env.ts` | The request is aborted, reported as an unknown outcome, **never retried**, the reservation stays charged, and the run fails with `LLM_UNAVAILABLE` (a manual retry is the user's choice) |
+| Attempts per step | up to 3: the first, one ×1.5 truncation retry, one repair | gateway | Up to 3 × 120 s = 360 s of provider time in one step |
+| Queue job expiry | **600 s** (`RUN_STEP_EXPIRE_SECONDS`) | `packages/db/src/queue.ts` | The queue would re-run a step that is still in flight, a duplicate paid request. A unit test pins 3 × 120 s + 60 s < 600 s. |
+| Run active wall clock | exploration **420 s**, What-if 180 s, blueprint 180 s, revalidation 240 s (time paused at user gates is excluded) | `DEFAULT_BUDGETS` | Checked **at the start of each step**, so an in-flight call is never cut off; the run stops with `BUDGET:wallClockSeconds` at the next step |
+
+**What this means for Argon:**
+- An exploration makes about 5 LLM calls (R1, R3, R4, R3 revise, R4) plus Qloo work inside
+  420 s. Argon calls therefore need to average about **60–70 s or less**.
+- A blueprint (one R6 call) has 180 s.
+- `GEMINI_THINKING_LEVEL=low` is the only latency lever. Raising the 600 s queue expiry would
+  need a queue migration, which is out of scope before the deadline.
+- Latency is a pass/fail criterion of the paid acceptance.
 
 ## 2. Architecture comparison and recommendation
 
@@ -178,60 +186,119 @@ own small cap.
 
 ## 6. Paid acceptance: prepared, **not executed**
 
-Each step needs the owner's explicit approval of the exact experiment and its maximum.
+Each step needs the owner's explicit approval of the exact experiment and its maximum. Run the
+steps in order, and run each one once.
 
 **Shared settings for every step:**
 - Synthetic data only; `GEMINI_LIVE_DATA_APPROVED=off`.
-- A private key file outside the repository, mode `0600`, never echoed.
 - No production systems.
-- One receipt per probe, which refuses reuse.
+- The key lives only in `~/.config/tessaloom/gemini.env` (directory `0700`, file `0600`; the
+  only line is `GEMINI_API_KEY=…`). It is loaded inside a subshell, so it never appears in
+  command arguments, shell history or logs.
+- The commands use the repo's own binaries (`pnpm test:live` is
+  `vitest run --config vitest.live.config.ts`).
 
-| Step | What | Requests | Hard cap | Expected |
+| Step | What | Paid requests | **Maximum** | Expected |
 | --- | --- | --- | --- | --- |
-| 0 | Model availability: metadata GET for `gemini-4-argon` and `gemini-3.8-flash` (no tokens) | 2 GETs | $0 | $0 |
-| **Exp. A** | Argon contract probe: **real R1 prompt and IntentFrame schema**, invented brief, default thinking, zero retries | 1 GET + 1 generation | one R1 reservation, ≤ $0.06 | ≈ $0.02 |
-| **Exp. B** | The same probe on `gemini-3.8-flash` | 1 GET + 1 generation | ≤ $0.03 | ≈ $0.01 |
-| **E2E-A** | A local synthetic benchmark on Argon: one exploration + one blueprint through the real worker and DB ledger | ≤ 17 by run budgets | `GLOBAL_DAILY_LLM_USD=1.00` | ≈ $0.29 |
-| **E2E-B** | The same synthetic brief on 3.8 Flash | ≤ 17 | `GLOBAL_DAILY_LLM_USD=0.50` | ≈ $0.11 |
+| **Exp. A** | Argon contract probe: free metadata GET, then **one** generation on the real R1 prompt and IntentFrame schema, with an invented brief, default thinking, 4,000-token cap, zero retries | 1 | **$0.06** (one R1 reservation, Nov rates; $0.12 from Dec 1) | ≈ $0.02 |
+| **Exp. B** | The same probe on `gemini-3.8-flash` | 1 | **$0.03** | ≈ $0.01 |
+| **E2E-A** | One synthetic exploration + one blueprint on Argon through the real worker and DB ledger | ≤ 17 (run budgets) | **$1.00** (ledger caps) | ≈ $0.29 |
+| **E2E-B** | The same brief on 3.8 Flash | ≤ 17 | **$0.50** | ≈ $0.11 |
 
-**Total requested authorization: at most $1.59 of ledger spend (expected ≈ $0.43).**
+**Total maximum: $1.59. Expected: about $0.43.** Neither the $30 prepaid balance nor Google's
+limits are part of this authorization.
 
-**Probe command (Exp. A; Exp. B changes only `LLM_MODEL`):**
+### Exp. A / Exp. B: contract probes
 
-```
-LIVE_VALIDATION_APPROVED=yes LIVE_VALIDATION_PROVIDER=gemini \
-LIVE_VALIDATION_RECEIPT=/absolute/private/path/gemini-argon-receipt.json \
-GEMINI_PAID_TIER_APPROVED=on GEMINI_PRICING_VERIFIED_AT=<your review time, ISO 8601> \
-LLM_MODEL=gemini-4-argon pnpm test:live
+```bash
+mkdir -p ~/.config/tessaloom/receipts && chmod 700 ~/.config/tessaloom ~/.config/tessaloom/receipts
 ```
 
-Load `GEMINI_API_KEY` from the private file. The receipt records model metadata, `modelId`,
-ok/reason, attempts, latency, usage (thinking included) and the estimated cost.
+```bash
+( set -a; . ~/.config/tessaloom/gemini.env; set +a; LIVE_VALIDATION_APPROVED=yes LIVE_VALIDATION_PROVIDER=gemini LIVE_VALIDATION_RECEIPT="$HOME/.config/tessaloom/receipts/gemini-4-argon.json" GEMINI_PAID_TIER_APPROVED=on GEMINI_PRICING_VERIFIED_AT=2026-10-28T09:00:00Z LLM_MODEL=gemini-4-argon node_modules/.bin/vitest run --config vitest.live.config.ts )
+```
 
-**E2E benchmark.** Run the local stack with:
-- `APP_ENV=development`, `QLOO_MODE=synthetic`
-- `LLM_PROVIDER=gemini`, `LLM_MODEL=<model>`
-- `GEMINI_PAID_TIER_APPROVED=on`, `GEMINI_PRICING_VERIFIED_AT=…`, `GEMINI_MAX_REQUESTS=40`,
-  `GEMINI_TIMEOUT_MS=120000`
-- the cap in the table above
+For **Exp. B**, change two values: `LIVE_VALIDATION_RECEIPT=…/gemini-3.8-flash.json` and
+`LLM_MODEL=gemini-3.8-flash`. Set `GEMINI_PRICING_VERIFIED_AT` to the time you actually
+compared the prices.
 
-Then drive one brief (the same invented brief for both models) to a blueprint, and read
-`llm_invocations`: status, tokens, `reasoningTokens`, latency and cost per role. Also read the
-ledger (`spend today`), and compare with AI Studio the next day.
+**Stop conditions (probe):**
+- The receipt file already exists: the probe refuses to run. Never delete a receipt to run again.
+- After the run, `ok` is false, `modelId` differs from the model ID (the adapter would reject
+  every production call), `latencyMs` > 90,000, `usage.outputTokens` reaches 4,000 (truncated),
+  or the reason is `CONFIGURATION`/`INVALID_OUTPUT`.
+- If any of these happen, **stop**: do not retry, and do not run E2E for that model.
+- If you see any 429 (rate, spend or prepaid exhaustion): stop.
+
+### E2E-A / E2E-B: synthetic benchmarks
+
+This needs the release build (`pnpm build`) of this branch.
+
+This path was dry-run on 2026-10-27 with a **dummy key and no run**:
+- status `llmConfigured:true`, `llmModel:"gemini-4-argon"`;
+- the web process received no Gemini variables;
+- zero Gemini requests.
+
+```bash
+DATABASE_URL=postgresql://tessaloom:local-development-only@127.0.0.1:5432/tessaloom_e2e_gemini_argon node scripts/e2e-db.mjs
+```
+
+```bash
+( set -a; . ~/.config/tessaloom/gemini.env; set +a; TL_ROLE=all NODE_ENV=production APP_ENV=test PORT=3210 HOSTNAME=127.0.0.1 TRUSTED_PROXY_HOPS=1 QLOO_MODE=synthetic RUN_ACCESS=open DATABASE_URL=postgresql://tessaloom:local-development-only@127.0.0.1:5432/tessaloom_e2e_gemini_argon SESSION_SECRET=local-benchmark-session-secret-0123456789 SHARE_TOKEN_PEPPER=local-benchmark-share-pepper-0123456789 LLM_PROVIDER=gemini LLM_MODEL=gemini-4-argon LLM_FALLBACK_MODEL=gemini-4-argon LLM_MODE=standard GEMINI_PAID_TIER_APPROVED=on GEMINI_PRICING_VERIFIED_AT=2026-10-28T09:00:00Z GEMINI_LIVE_DATA_APPROVED=off GEMINI_MAX_REQUESTS=17 GEMINI_TIMEOUT_MS=120000 GLOBAL_DAILY_LLM_USD=1.00 WORKSPACE_DAILY_LLM_USD=1.00 EXPERIMENT_LLM_USD=1.00 GLOBAL_DAILY_QLOO_CALLS=200 MAX_WORKING_RUNS=1 MAX_ACTIVE_RUNS_PER_WORKSPACE=1 WORKSPACE_DAILY_RUNS=2 node scripts/start.mjs )
+```
+
+For **E2E-B**:
+- use database `tessaloom_e2e_gemini_flash` (in both commands);
+- set `LLM_MODEL` and `LLM_FALLBACK_MODEL` to `gemini-3.8-flash`;
+- set `GEMINI_TIMEOUT_MS=60000`;
+- set all three `*_LLM_USD` to `0.50`.
+
+The server listens on `127.0.0.1` only; `RUN_ACCESS=open` is therefore reachable only from this
+Mac.
+
+**Drive exactly one workflow** at <http://127.0.0.1:3210>, using the same invented brief for both
+models:
+- **Brief:** "Lantern Quay listening night"; a 40-seat cafe; interests "Neon Harbor Nights"
+  (movie) and "Velvet Static Radio" (artist); low budget; 120 minutes.
+- **Steps:** Interpret brief → Confirm & discover → confirm choices → tension 0.6 → Generate
+  hypotheses → select the top hypothesis → Compose blueprint.
+- **Then stop the stack** (Ctrl-C).
+
+**Measure** (read-only):
+
+```bash
+docker exec tessaloom-postgres-1 psql -U tessaloom -d tessaloom_e2e_gemini_argon -c "SELECT prompt_id, model_id, validation_status, stop_reason, input_tokens, cached_input_tokens, output_tokens, input_excerpt->>'reasoningTokens' AS thinking_tokens, latency_ms, estimated_cost_usd FROM llm_invocations ORDER BY created_at, id;" -c "SELECT model, status, count(*) AS attempts, sum(reserved_micros)/1e6 AS reserved_usd, sum(actual_micros)/1e6 AS settled_usd FROM llm_spend_reservations GROUP BY model, status ORDER BY status;"
+```
+
+The next day, compare the settled total with AI Studio usage.
+
+**Stop conditions (E2E). Stop the stack immediately, and never retry or restart to continue,
+when any of these happens:**
+- A run ends `FAILED` or `BUDGET:*`.
+- An invocation is `TRUNCATED`, or is still `INVALID` after its one repair.
+- A call's `latency_ms` exceeds 90,000.
+- `model_id` differs from the configured model.
+- Any `UNKNOWN` reservation appears (a possibly billed timeout or accounting fault).
+- Settled spend passes **$0.60 (Argon) or $0.25 (3.8 Flash)**, about twice the expected cost,
+  before the blueprint finishes.
+- Any 429.
+
+Start a second workflow only with a new approval.
 
 **Pass criteria to adopt Argon (Design A):**
 
 | Criterion | Requirement |
 | --- | --- |
-| Serving model | `modelId` is exactly `gemini-4-argon` (otherwise the adapter rejects every call) |
-| Schemas | All six accepted. No `400`; at most one repair per run. |
-| Truncation | No `TRUNCATED` outcome at the default caps. A truncation retry is acceptable only if rare. |
-| Latency | Every call ≤ 90 s (the timeout is 120 s); exploration active time ≤ 300 s of its 420 s |
-| Cost | Measured cost within the §5 estimates; the ledger matches AI Studio |
+| Serving model | `modelId` is exactly `gemini-4-argon` |
+| Schemas | All roles accepted. No `400`; at most one repair in the workflow. |
+| Truncation | No `TRUNCATED` outcome at the default caps |
+| Latency | Every call ≤ 90 s; exploration active time ≤ 300 s of its 420 s; R6 ≤ 120 s |
+| Cost | Measured cost within the §5 estimates; settled ledger matches AI Studio |
 | Quality | Owner review against 3.8 Flash on the same brief: bridge originality, claim/evidence grounding, critique accuracy, blueprint usefulness |
 
-If Argon misses latency or truncation, the only allowed variation is re-running E2E-A once with
-`GEMINI_THINKING_LEVEL=low`, which needs a new approval. Otherwise choose C.
+If Argon misses only latency or truncation, the one allowed variation is re-running E2E-A once
+with `GEMINI_THINKING_LEVEL=low`. That needs a new approval (maximum $1.00). Otherwise choose
+C (3.8 Flash).
 
 ## 7. Two separate Qloo permissions
 

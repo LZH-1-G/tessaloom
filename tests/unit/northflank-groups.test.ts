@@ -267,3 +267,67 @@ describe("prepared Gemini 4 Argon acceptance group (not applied)", () => {
     }
   });
 });
+
+describe("prepared public judge demo group (not applied)", () => {
+  const demo = {
+    ...base,
+    APP_ENV: "staging",
+    QLOO_MODE: "synthetic",
+    RUN_ACCESS: "open",
+  };
+  it("runs synthetic Qloo with scripted AI at $0 and holds no secrets", async () => {
+    const { createLlmGateway } = await import("../../apps/worker/src/llm");
+    const group = load("demo-synthetic");
+    const vars = group.secrets.variables;
+    expect(group.name).toBe("tessaloom-llm-limits");
+    expect(group.restrictions).toMatchObject({
+      restricted: true,
+      nfObjects: [{ id: "tessaloom", type: "service" }],
+    });
+    expect(
+      Object.keys(vars).filter((k) =>
+        /KEY|SECRET|TOKEN|PEPPER|PASSWORD|DATABASE_URL|RUN_ACCESS/.test(k),
+      ),
+    ).toEqual([]);
+    const worker = parseWorkerEnv({ ...demo, ...vars });
+    expect(worker).toMatchObject({
+      LLM_PROVIDER: "scripted",
+      QLOO_MODE: "synthetic",
+      GLOBAL_DAILY_LLM_USD: 0,
+      WORKSPACE_DAILY_LLM_USD: 0,
+      EXPERIMENT_LLM_USD: 0,
+      GEMINI_MAX_REQUESTS: 0,
+      GEMINI_LIVE_DATA_APPROVED: "off",
+    });
+    expect(parseWebEnv({ ...demo, ...vars })).toMatchObject({
+      MAX_WORKING_RUNS: 4,
+      MAX_ACTIVE_RUNS_PER_WORKSPACE: 1,
+      WORKSPACE_DAILY_RUNS: 10,
+    });
+    // A stray provider key on the service is ignored: scripted never calls a paid API.
+    expect(
+      createLlmGateway(
+        {
+          ...worker,
+          GEMINI_API_KEY: "sentinel",
+          ANTHROPIC_API_KEY: "sentinel",
+        },
+        { record: async () => "id" },
+      )?.providerName,
+    ).toBe("scripted");
+  });
+  it("is refused if the service is still production or still live (half-applied change fails loudly)", () => {
+    const vars = load("demo-synthetic").secrets.variables;
+    expect(() =>
+      parseWorkerEnv({ ...demo, ...vars, APP_ENV: "production" }),
+    ).toThrow();
+    expect(() =>
+      parseWorkerEnv({
+        ...demo,
+        ...vars,
+        APP_ENV: "production",
+        QLOO_MODE: "live",
+      }),
+    ).toThrow("LLM_PROVIDER");
+  });
+});

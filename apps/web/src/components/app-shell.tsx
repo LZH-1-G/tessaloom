@@ -34,6 +34,12 @@ export function ModeBanner({ status }: { status: SystemStatus | null }) {
         >
           <FlaskConical aria-hidden className="size-4" />
           FIXTURE — not real Qloo data
+          {status.llmModel?.startsWith("scripted") ? (
+            // "AI interpretation" labels below come from deterministic stand-ins here.
+            <span data-testid="scripted-ai-notice" className="font-normal">
+              · Scripted AI demo: no language model is called
+            </span>
+          ) : null}
         </div>
       ) : null}
       {status && !status.workerOnline ? (
