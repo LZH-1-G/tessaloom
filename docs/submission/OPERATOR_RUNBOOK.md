@@ -5,7 +5,7 @@ cap is in [PRODUCTION_FIRST_RUN.md](PRODUCTION_FIRST_RUN.md); this file is only 
 what to expect. Commands were checked on 2026-10-27 against production (read-only ones were run;
 write ones are marked **writes** and have **not** been run).
 
-**State on 2026-10-27:** `51be618` deployed; `RUN_ACCESS=off`; config group
+**State on 2026-10-27:** `859cd9f` deployed (02:21 UTC; rollback target `51be618`); `RUN_ACCESS=off`; config group
 `tessaloom-llm-limits` = closed set (Sonnet 5.5 only, every budget `0`, Qloo calls `0`); no
 `ANTHROPIC*` variable; `spend today` = `0`; 0 grants; 0 samples.
 
@@ -148,7 +148,7 @@ code that spends abnormally.
 | Spending looks wrong | `ACCESS off`, `LIMITS closed`, `RESTART`; `ADMIN "grant revoke <id>"` for each grant; revoke the key in the Console (works even if Northflank is unreachable) |
 | One code leaked or misused | `ADMIN "grant revoke <id>"` (immediate); issue a replacement only if needed |
 | Bad sample | `ADMIN "sample unfeature <Link ID>"` |
-| Code regression | Redeploy `51be618` from Northflank → Deployments (or revert the merge commit and redeploy). No migrations since `39c0fe5` |
+| Code regression | Re-pin build `51be618`: `northflank update service deployment --project default --service tessaloom --input '{"internal":{"id":"tessaloom","branch":"main","buildSHA":"51be618ed54371798db2a51f84ef83e305aba9eb"},"docker":{"configType":"default"}}'`. No migrations since `39c0fe5` |
 | Exposure must end | Port `p01` → private (`update service ports`, same definition, `public:false`) |
 
 Never delete `tessaloom-run-access`: an unset `RUN_ACCESS` means `invite` in production.
