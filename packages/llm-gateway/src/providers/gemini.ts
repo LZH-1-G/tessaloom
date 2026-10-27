@@ -194,6 +194,8 @@ async function requestJson(options: {
   const signal = options.signal
     ? AbortSignal.any([options.signal, timeout])
     : timeout;
+  // Which step failed, for a content-free diagnosis (never the body or headers).
+  let phase = "connection";
   try {
     signal.throwIfAborted();
     const response = await options.fetch(
@@ -214,6 +216,7 @@ async function requestJson(options: {
       throw httpError(response.status);
     }
     // Bound response memory; never log/persist the provider envelope or its error body.
+    phase = "response body";
     const reader = response.body?.getReader();
     if (!reader) throw new Error();
     const chunks: Uint8Array[] = [];
@@ -223,7 +226,10 @@ async function requestJson(options: {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > 2 * 1024 * 1024) throw new Error();
+        if (size > 2 * 1024 * 1024) {
+          phase = "response size";
+          throw new Error();
+        }
         chunks.push(value);
       }
     } finally {
@@ -235,6 +241,7 @@ async function requestJson(options: {
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
+    phase = "response JSON";
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (error) {
     if (error instanceof ProviderError) throw error;
@@ -246,9 +253,16 @@ async function requestJson(options: {
         "Gemini request cancelled or timed out",
         false,
       );
+    // Only a system error code (e.g. ECONNRESET, UND_ERR_SOCKET), never message text.
+    const code = [error, (error as { cause?: unknown })?.cause]
+      .map((e) => (e as { code?: unknown } | undefined)?.code)
+      .find(
+        (c): c is string =>
+          typeof c === "string" && /^[A-Z][A-Z0-9_]{2,40}$/.test(c),
+      );
     throw new ProviderError(
       "unavailable",
-      "Gemini connection or response failed",
+      `Gemini ${phase} failed${code ? ` (${code})` : ""}`,
       false,
     );
   }

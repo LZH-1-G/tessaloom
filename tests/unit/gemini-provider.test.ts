@@ -1228,3 +1228,75 @@ describe("duplicate paid requests", () => {
     expect(() => paid({ timeoutMs: 120_001 })).toThrow();
   });
 });
+
+describe("content-free diagnosis of failed Gemini requests", () => {
+  const fails = (fetcher: typeof fetch) =>
+    paid({ fetch: fetcher }).provider.generate(request);
+  it.each([
+    [
+      "connection",
+      (async () => {
+        throw Object.assign(new TypeError("fetch failed: private detail"), {
+          cause: Object.assign(new Error("socket private-key-sentinel"), {
+            code: "UND_ERR_SOCKET",
+          }),
+        });
+      }) as typeof fetch,
+      "Gemini connection failed (UND_ERR_SOCKET)",
+    ],
+    [
+      "body",
+      (async () =>
+        new Response(
+          new ReadableStream({
+            pull(c) {
+              c.error(
+                Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+              );
+            },
+          }),
+        )) as typeof fetch,
+      "Gemini response body failed (ECONNRESET)",
+    ],
+    [
+      "JSON",
+      (async () =>
+        new Response("<html>private payload</html>")) as typeof fetch,
+      "Gemini response JSON failed",
+    ],
+  ])(
+    "names the failing %s step without content",
+    async (_n, fetcher, message) => {
+      const error = await fails(fetcher).catch((e) => e);
+      expect(error).toMatchObject({
+        kind: "unavailable",
+        retryable: false,
+        requestSent: true,
+        message,
+      });
+      expect(error.message).not.toMatch(/private|sentinel|html/);
+    },
+  );
+  it("records the provider's message on the failed invocation", async () => {
+    const rec = recorder();
+    await new LlmGateway({
+      provider: paid({
+        fetch: (async () => new Response("", { status: 404 })) as typeof fetch,
+      }).provider,
+      primaryModel: model,
+      prices: () => geminiPrices(NOW),
+      spendGuard: guard(),
+      recorder: rec,
+    }).generate(gatewayRequest);
+    expect(rec.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validationErrors: expect.arrayContaining([
+          {
+            code: "PROVIDER_UNAVAILABLE",
+            message: "Gemini request failed (404)",
+          },
+        ]),
+      }),
+    );
+  });
+});

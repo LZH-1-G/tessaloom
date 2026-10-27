@@ -348,7 +348,7 @@ describe("prepared paid judge demo group: Gemini 3.8 Flash on synthetic data (no
       LLM_MODEL: "gemini-3.8-flash",
       GEMINI_PAID_TIER_APPROVED: "off",
       GEMINI_LIVE_DATA_APPROVED: "off",
-      GLOBAL_DAILY_LLM_USD: 2,
+      GLOBAL_DAILY_LLM_USD: 1,
       WORKSPACE_DAILY_LLM_USD: 0.5,
       EXPERIMENT_LLM_USD: 0.5,
     });

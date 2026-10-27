@@ -325,7 +325,8 @@ export class LlmGateway {
             validationErrors: [
               {
                 code: `PROVIDER_${pe.kind.toUpperCase()}`,
-                message: "Provider attempt failed",
+                // Provider messages carry no prompts or credentials (ProviderError).
+                message: pe.message,
               },
               ...(pe.requestSent
                 ? [
