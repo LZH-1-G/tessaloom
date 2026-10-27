@@ -194,3 +194,76 @@ describe("Gemini rollback paths (config groups replace each other wholesale)", (
     },
   );
 });
+
+describe("prepared Gemini 4 Argon acceptance group (not applied)", () => {
+  it("pins Argon, stays inert without approvals, and differs from the 3.8 set only in model, request cap, timeout and USD caps", async () => {
+    const { createLlmGateway } = await import("../../apps/worker/src/llm");
+    const group = load("gemini-argon-acceptance");
+    const vars = group.secrets.variables;
+    expect(group.name).toBe("tessaloom-llm-limits");
+    expect(group.restrictions).toMatchObject({
+      restricted: true,
+      nfObjects: [{ id: "tessaloom", type: "service" }],
+    });
+    const flash = load("gemini-acceptance").secrets.variables;
+    const changed = Object.keys({ ...vars, ...flash })
+      .filter((k) => vars[k] !== flash[k])
+      .sort();
+    expect(changed).toEqual(
+      [
+        "EXPERIMENT_LLM_USD",
+        "GEMINI_MAX_REQUESTS",
+        "GEMINI_TIMEOUT_MS",
+        "GLOBAL_DAILY_LLM_USD",
+        "LLM_FALLBACK_MODEL",
+        "LLM_MODEL",
+        "WORKSPACE_DAILY_LLM_USD",
+      ].sort(),
+    );
+    const worker = parseWorkerEnv({ ...base, ...vars });
+    expect(worker).toMatchObject({
+      LLM_MODEL: "gemini-4-argon",
+      GEMINI_PAID_TIER_APPROVED: "off",
+      GEMINI_LIVE_DATA_APPROVED: "off",
+      GEMINI_TIMEOUT_MS: 120_000,
+      EXPERIMENT_LLM_USD: 1,
+    });
+    expect(
+      createLlmGateway(
+        { ...worker, GEMINI_API_KEY: "sentinel" },
+        { record: async () => "id" },
+      ),
+    ).toBeNull();
+  });
+
+  it("lets one full-cap Argon workflow finish under the $1.00 experiment cap at November 2026 rates", async () => {
+    const { geminiPrices, upperBoundCostUsd, estimateCostUsd } =
+      await import("../../packages/llm-gateway/src");
+    const { MAX_OUTPUT } =
+      await import("../../packages/agent/src/steps/common");
+    const nov = geminiPrices(Date.parse("2026-11-02T00:00:00Z"));
+    const cap = Number(
+      load("gemini-argon-acceptance").secrets.variables.EXPERIMENT_LLM_USD,
+    );
+    // Exploration with one revision round, then a blueprint. Every call spends its full
+    // output cap (thinking included) on a conservative 32 KiB prompt; the ledger admits an
+    // attempt only while spent + its upper-bound reservation stays within the cap.
+    const prompt = 32 * 1024;
+    let spent = 0;
+    for (const role of ["R1", "R3", "R4", "R3", "R4", "R6"] as const) {
+      const out = MAX_OUTPUT[role];
+      const reserve = upperBoundCostUsd("gemini-4-argon", prompt, out, nov);
+      expect(spent + reserve, role).toBeLessThanOrEqual(cap);
+      spent += estimateCostUsd(
+        "gemini-4-argon",
+        {
+          inputTokens: prompt,
+          cachedInputTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: out,
+        },
+        nov,
+      );
+    }
+  });
+});

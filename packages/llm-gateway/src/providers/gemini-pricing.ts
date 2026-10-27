@@ -23,6 +23,12 @@ const flat = (input: number, cacheRead: number, output: number): Rate => ({
 export const GEMINI_PRICE_SCHEDULE: Readonly<
   Record<string, readonly { from: string; rate: Rate }[]>
 > = {
+  // Paid only (no free tier); implicit caching only. Announced increase: rates double
+  // on 2026-12-01.
+  "gemini-4-argon": [
+    { from: "2026-01-01", rate: flat(2, 0.1, 10) },
+    { from: "2026-12-01", rate: flat(4, 0.2, 20) },
+  ],
   "gemini-3.5-flash-lite": [{ from: "2026-01-01", rate: flat(0.3, 0.03, 2.5) }],
   "gemini-3.1-flash-lite": [
     { from: "2026-01-01", rate: flat(0.25, 0.025, 1.5) },

@@ -147,11 +147,13 @@ export class LlmGateway {
       reason: FailureReason,
       issues?: ValidationIssue[],
       salvage?: z.output<S>,
+      retryable?: boolean,
     ): GenerateResult<z.output<S>> => ({
       ok: false,
       reason,
       ...(issues ? { issues } : {}),
       ...(salvage !== undefined ? { salvage } : {}),
+      ...(retryable !== undefined ? { retryable } : {}),
       ...meta,
     });
 
@@ -368,9 +370,13 @@ export class LlmGateway {
           repairOfId = null;
           continue;
         }
-        return fail("UNAVAILABLE", [
-          { code: `PROVIDER_${pe.kind.toUpperCase()}`, message: pe.message },
-        ]);
+        // A sent request whose outcome is unknown may have been billed: never retried.
+        return fail(
+          "UNAVAILABLE",
+          [{ code: `PROVIDER_${pe.kind.toUpperCase()}`, message: pe.message }],
+          undefined,
+          pe.retryable || !pe.requestSent,
+        );
       }
       const latencyMs = Math.round(this.now() - started);
 

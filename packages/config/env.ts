@@ -156,6 +156,10 @@ export const workerEnvSchema = z
     GEMINI_LIVE_DATA_APPROVED: z.enum(["off", "on"]).default("off"),
     // Free tier: per worker lifetime, at most 50. Paid tier: per UTC day, per worker process.
     GEMINI_MAX_REQUESTS: z.coerce.number().int().min(0).max(5000).default(0),
+    // Explicit reasoning depth; unset = the model's default. Refused for models without it.
+    GEMINI_THINKING_LEVEL: z.enum(["low", "medium", "high"]).optional(),
+    // At most 120 s: a step makes up to 3 attempts and must finish inside the 600 s queue
+    // expiry, or the queue would run it again while a paid request may still be in flight.
     GEMINI_TIMEOUT_MS: z.coerce
       .number()
       .int()

@@ -11,6 +11,7 @@ import { GEMINI_PRICE_SCHEDULE, geminiPricingApproved } from "./gemini-pricing";
 // 2026-10-22). NOT evidence of access in a particular account; previews are excluded
 // because Google shuts them down. No automatic model selection.
 export const GEMINI_MODELS = [
+  "gemini-4-argon",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
   "gemini-3.6-flash",
@@ -19,6 +20,20 @@ export const GEMINI_MODELS = [
   "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
 ] as const satisfies readonly (keyof typeof GEMINI_PRICE_SCHEDULE)[];
+/** Paid tier only: Google offers Gemini 4 Argon on no free tier. */
+export const GEMINI_PAID_ONLY_MODELS: readonly string[] = ["gemini-4-argon"];
+/**
+ * Documented `thinkingLevel` values per model (thinking guide, 2026-10). Models not listed
+ * accept no override. "minimal" is never sent: 3.8 Flash and 4 Argon reject it.
+ */
+export const GEMINI_THINKING_LEVELS: Readonly<
+  Record<string, readonly ("low" | "medium" | "high")[]>
+> = {
+  "gemini-4-argon": ["low", "medium", "high"],
+  "gemini-3.8-flash": ["low", "medium", "high"],
+  "gemini-3.6-flash": ["low", "medium", "high"],
+  "gemini-3.5-flash-lite": ["low", "medium", "high"],
+};
 /** Free tier: per worker lifetime. Paid tier: per UTC day, per worker process. */
 export const GEMINI_FREE_MAX_REQUESTS = 50;
 export const GEMINI_PAID_MAX_REQUESTS = 5000;
@@ -72,6 +87,8 @@ export interface GeminiProviderOptions {
   pricingVerifiedAt?: string;
   /** Paid tier only: permission to send live, Qloo-derived inputs has been verified. */
   liveInputsApproved?: boolean;
+  /** Explicit reasoning depth; omitted = the model's documented default (3.8, 4: medium). */
+  thinkingLevel?: "low" | "medium" | "high";
   /**
    * Hard cap across concurrent calls, repairs included: for the worker lifetime on the free
    * tier, and per UTC day on the paid tier.
@@ -221,11 +238,13 @@ async function requestJson(options: {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (error) {
     if (error instanceof ProviderError) throw error;
+    // A deadline after sending leaves the outcome unknown: Google may still finish and bill
+    // the request, so it is never retried automatically (the reservation stays charged).
     if (signal.aborted)
       throw new ProviderError(
         "timeout",
         "Gemini request cancelled or timed out",
-        !options.signal?.aborted,
+        false,
       );
     throw new ProviderError(
       "unavailable",
@@ -301,6 +320,11 @@ export class GeminiProvider implements LlmProvider {
           options.maxRequests > GEMINI_FREE_MAX_REQUESTS)) ||
       (this.paid &&
         !geminiPricingApproved(options.pricingVerifiedAt ?? "", this.now())) ||
+      (free && GEMINI_PAID_ONLY_MODELS.includes(options.model)) ||
+      (options.thinkingLevel !== undefined &&
+        !GEMINI_THINKING_LEVELS[options.model]?.includes(
+          options.thinkingLevel,
+        )) ||
       !Number.isSafeInteger(options.maxRequests) ||
       options.maxRequests < 1 ||
       options.maxRequests > GEMINI_PAID_MAX_REQUESTS ||
@@ -376,13 +400,16 @@ export class GeminiProvider implements LlmProvider {
         parts: [{ text: message.content }],
       })),
       // Only fields every approved model accepts. Gemini 3+ does not support candidateCount
-      // or sampling parameters, and 3.8 Flash rejects thinkingLevel "minimal", so each model
-      // keeps its documented default thinking level (3.8 Flash: medium). Thought text is
-      // never requested; thinking tokens count toward maxOutputTokens and are billed.
+      // or sampling parameters; thinkingBudget is deprecated (a 400 beside thinkingLevel on
+      // 4 Argon). The thinking level is the model default unless explicitly configured.
+      // Thought text is never requested; thinking tokens count toward maxOutputTokens.
       generationConfig: {
         maxOutputTokens: request.maxOutputTokens,
         responseMimeType: "application/json",
         responseJsonSchema: geminiResponseSchema(request.jsonSchema),
+        ...(this.options.thinkingLevel
+          ? { thinkingConfig: { thinkingLevel: this.options.thinkingLevel } }
+          : {}),
       },
     };
     if (new TextEncoder().encode(JSON.stringify(body)).length > 128 * 1024)

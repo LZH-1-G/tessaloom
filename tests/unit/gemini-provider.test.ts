@@ -204,9 +204,11 @@ describe("Gemini REST provider (mock network only)", () => {
         );
       });
     const timed = setup({ fetch: hanging, timeoutMs: 10 });
+    // Sent but unanswered: possibly billed, so never retried automatically.
     await expect(timed.provider.generate(request)).rejects.toMatchObject({
       kind: "timeout",
-      retryable: true,
+      retryable: false,
+      requestSent: true,
     });
     const controller = new AbortController();
     const cancelled = setup({ fetch: hanging }).provider.generate({
@@ -469,6 +471,12 @@ const paid = (
 describe("Gemini pricing (Paid Tier Standard, reviewed 2026-10-26)", () => {
   it("prices every approved model with the published per-1M-token rates", () => {
     expect(geminiPrices(NOW)).toEqual({
+      "gemini-4-argon": {
+        input: 2,
+        cacheWrite: 2,
+        cacheRead: 0.1,
+        output: 10,
+      },
       "gemini-3.5-flash-lite": {
         input: 0.3,
         cacheWrite: 0.3,
@@ -1107,4 +1115,116 @@ describe("Gemini structured-output schema", () => {
       expect(body.generationConfig.responseJsonSchema).toEqual(sent);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Gemini 4 Argon (official ID verified 2026-10-27; paid only).
+
+describe("Gemini 4 Argon", () => {
+  const argon = "gemini-4-argon";
+  it("is paid-only: the free tier refuses it before any request", () => {
+    expect(() => setup({ model: argon })).toThrow();
+    expect(paid({ model: argon }).provider.billing).toBeUndefined();
+  });
+  it("doubles its rates on 2026-12-01 at the UTC boundary", () => {
+    expect(geminiPrices(Date.parse("2026-11-30T23:59:59.999Z"))[argon]).toEqual(
+      { input: 2, cacheWrite: 2, cacheRead: 0.1, output: 10 },
+    );
+    expect(geminiPrices(Date.parse("2026-12-01T00:00:00Z"))[argon]).toEqual({
+      input: 4,
+      cacheWrite: 4,
+      cacheRead: 0.2,
+      output: 20,
+    });
+    expect(PRICES).not.toHaveProperty(argon);
+  });
+  it("bills thinking as output at Argon rates (Nov 2026)", () => {
+    // 80 uncached × $2 + 20 cached × $0.10 + (10 + 5 thinking) × $10, per 1M tokens.
+    expect(
+      estimateCostUsd(
+        argon,
+        {
+          inputTokens: 80,
+          cachedInputTokens: 20,
+          cacheWriteTokens: 0,
+          outputTokens: 15,
+          reasoningTokens: 5,
+        },
+        geminiPrices(NOW),
+      ),
+    ).toBeCloseTo(0.000312, 12);
+  });
+  it.each([
+    [argon, "high", true],
+    [argon, "low", true],
+    ["gemini-3.8-flash", "medium", true],
+    ["gemini-3.1-flash-lite", "low", false],
+    ["gemini-2.5-flash", "low", false],
+  ] as const)(
+    "%s with thinkingLevel %s is accepted: %s",
+    async (m, level, ok) => {
+      const make = () =>
+        paid({ model: m, thinkingLevel: level }, response({ modelVersion: m }));
+      if (!ok) return expect(make).toThrow();
+      const { provider, fetcher } = make();
+      await provider.generate({ ...request, model: m });
+      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      expect(body.generationConfig.thinkingConfig).toEqual({
+        thinkingLevel: level,
+      });
+    },
+  );
+});
+
+describe("duplicate paid requests", () => {
+  const gw = (fetcher: typeof fetch) =>
+    new LlmGateway({
+      provider: paid({ fetch: fetcher, timeoutMs: 20 }).provider,
+      primaryModel: model,
+      prices: () => geminiPrices(NOW),
+      spendGuard: guard(),
+    });
+  it("reports a timed-out (possibly billed) request as not retryable", async () => {
+    const hanging: typeof fetch = async (_url, init) =>
+      new Promise((_resolve, reject) =>
+        init!.signal!.addEventListener("abort", () => reject(new Error("x")), {
+          once: true,
+        }),
+      );
+    expect(await gw(hanging).generate(gatewayRequest)).toMatchObject({
+      ok: false,
+      reason: "UNAVAILABLE",
+      retryable: false,
+      attempts: 1,
+    });
+  });
+  it.each([429, 500, 503])(
+    "reports an HTTP %s (no generation billed) as retryable",
+    async (status) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("", { status }));
+      expect(await gw(fetcher).generate(gatewayRequest)).toMatchObject({
+        ok: false,
+        reason: "UNAVAILABLE",
+        retryable: true,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("keeps every Gemini deadline inside the run-step queue expiry", async () => {
+    const { RUN_STEP_EXPIRE_SECONDS } =
+      await import("../../packages/db/src/queue");
+    const env = {
+      APP_ENV: "test",
+      DATABASE_URL: "postgresql://local:placeholder@localhost/test",
+    };
+    expect(() =>
+      parseWorkerEnv({ ...env, GEMINI_TIMEOUT_MS: "120001" }),
+    ).toThrow("GEMINI_TIMEOUT_MS");
+    // First attempt + one truncation retry + one repair, each at the maximum deadline,
+    // with a minute of margin for Qloo and database work in the same step.
+    expect(3 * 120 + 60).toBeLessThan(RUN_STEP_EXPIRE_SECONDS);
+    expect(() => paid({ timeoutMs: 120_001 })).toThrow();
+  });
 });

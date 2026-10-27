@@ -16,6 +16,11 @@ provider guarantee**: token counts come from the API response and prices from a 
 code. The Console workspace spend limit is the independent backstop, and even that can lag
 usage reporting. Never rely on one layer alone.
 
+**Provider.** These steps install an Anthropic key. The Gemini alternative (PR #26, not merged)
+has its own approval-gated acceptance in [GEMINI_MIGRATION.md](../GEMINI_MIGRATION.md). It also
+needs written permission to send Qloo-derived data to Google before production runs work. Until
+some provider passes acceptance, rollback means the closed state below, not another provider.
+
 ## Shorthands
 
 Run from the repository root with the Northflank CLI signed in.

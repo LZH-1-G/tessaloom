@@ -140,6 +140,8 @@ export type GenerateResult<T> =
       issues?: ValidationIssue[];
       /** INVALID_OUTPUT only: the schema-valid output whose semantic checks failed. */
       salvage?: T;
+      /** UNAVAILABLE only: false when the provider may have processed (and billed) it. */
+      retryable?: boolean;
     } & GenerateMeta);
 
 /** Persists one provider call (repairs and retries are separate rows linked by repairOfId). */

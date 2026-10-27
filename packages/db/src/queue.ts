@@ -6,6 +6,12 @@ import type { RawSql } from "./client";
 import { instrumentQueueDatabase } from "./queue-diagnostics";
 
 /** API_CONTRACTS §8 queues. */
+/**
+ * A run step that runs longer than this is expired and retried by the queue while it may
+ * still be calling a paid provider, so every provider deadline must fit well inside it.
+ */
+export const RUN_STEP_EXPIRE_SECONDS = 600;
+
 export const QUEUES = {
   runStep: "run.step",
   expirePausedRuns: "maintenance.expire-paused-runs",
@@ -93,7 +99,7 @@ export async function installQueues(connectionString: string): Promise<void> {
       policy: "exclusive",
       retryLimit: 2,
       retryDelay: 15,
-      expireInSeconds: 600,
+      expireInSeconds: RUN_STEP_EXPIRE_SECONDS,
       deleteAfterSeconds: 7 * 86_400,
     });
     await ensure(QUEUES.expirePausedRuns, {

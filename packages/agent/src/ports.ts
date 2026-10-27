@@ -202,6 +202,8 @@ export type LlmResult<T> = {
         | "CONFIGURATION";
       issues?: ValidationIssue[];
       salvage?: T;
+      /** UNAVAILABLE only: false = possibly billed, so the step must not be retried. */
+      retryable?: boolean;
     }
 );
 

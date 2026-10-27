@@ -114,6 +114,7 @@ export interface LlmSettings {
   GEMINI_LIVE_DATA_APPROVED?: "off" | "on";
   GEMINI_MAX_REQUESTS?: number;
   GEMINI_TIMEOUT_MS?: number;
+  GEMINI_THINKING_LEVEL?: "low" | "medium" | "high";
 }
 
 /**
@@ -229,6 +230,7 @@ export function createLlmGateway(
               }),
           maxRequests: settings.GEMINI_MAX_REQUESTS,
           timeoutMs: settings.GEMINI_TIMEOUT_MS,
+          thinkingLevel: settings.GEMINI_THINKING_LEVEL,
         });
       } catch {
         return null;
@@ -237,6 +239,7 @@ export function createLlmGateway(
       pricingContext = {
         billingTier: paid ? "paid" : "free",
         serviceTier: "standard",
+        thinkingLevel: settings.GEMINI_THINKING_LEVEL ?? "model-default",
         tariffSourceDate: GEMINI_PRICE_REVIEW,
         ...(paid
           ? { pricingVerifiedAt: settings.GEMINI_PRICING_VERIFIED_AT }

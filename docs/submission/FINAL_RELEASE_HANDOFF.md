@@ -68,6 +68,8 @@ ACTION** · **NOT COMPLETED** (with reason).
 | Anthropic workspace, $15 limit, key in `tessaloom-anthropic` | REQUIRES USER ACTION | Runbook A |
 | Single paid acceptance (≈ $0.14, ≤ $0.50 application cap) | REQUIRES USER ACTION | Runbook B–D after explicit approval. Application accounting is an estimate, not a provider guarantee; the Console limit is the backstop |
 | Story sample, judge codes, `RUN_ACCESS=invite` | REQUIRES USER ACTION | Runbook E–F, by Oct 29 |
+| Alternative provider: Gemini (4 Argon or 3.8 Flash), PR #26 | REQUIRES USER ACTION | Implemented and tested offline only; not merged or deployed. Paid probes need approval ([GEMINI_MIGRATION.md](../GEMINI_MIGRATION.md) "Paid acceptance") |
+| Sending Qloo-derived data to Google's Gemini API | BLOCKED BY EXTERNAL DEPENDENCY | No written organizer answer; absence of an answer is not permission. `GEMINI_LIVE_DATA_APPROVED` stays `off`, so production Gemini sends nothing |
 | Deploy the mobile-layout fix | COMPLETED AND VERIFIED | Rolled out 2026-10-27 02:21 UTC ([rollout evidence](../evidence/rollout-859cd9f-2026-10-27.md)); rollback target `51be618` |
 
 ## Rollback
