@@ -198,7 +198,7 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   expect(res?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
   expect(res?.headers()["referrer-policy"]).toBe("no-referrer");
   await expect(shared.getByTestId("readonly-badge")).toBeVisible();
-  await expectFixtureBanner(shared);
+  await expectFixtureBanner(shared, { inAppShell: false });
   await expect(shared.getByTestId("traceability-meter")).toContainText(
     "evidence-backed",
   );
@@ -241,7 +241,7 @@ test("E2E-10 + journey: What-if branch → blueprint from the branch → read-on
   ])
     await expect(reader.getByRole("heading", { name: heading })).toBeVisible();
   await expect(reader.getByTestId("evidence-appendix")).toContainText("E-1");
-  await expectFixtureBanner(reader);
+  await expectFixtureBanner(reader, { inAppShell: false });
   expect(await reader.content()).not.toContain(projectUrl.split("/").at(-1)!);
   await expectAccessible(reader);
   await snap(reader, info, "shared-story");

@@ -72,6 +72,11 @@ export interface LlmProvider {
    * "claude-subscription": the owner's own plan allowance (local personal use), no API charge.
    */
   readonly billing?: "confirmed-free-tier" | "claude-subscription";
+  /**
+   * Gemini only: the owner verified permission to send live (Qloo-derived) inputs. Without
+   * it the gateway refuses every input not attested as synthetic, before any reservation.
+   */
+  readonly liveInputsApproved?: boolean;
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 
@@ -135,6 +140,8 @@ export type GenerateResult<T> =
       issues?: ValidationIssue[];
       /** INVALID_OUTPUT only: the schema-valid output whose semantic checks failed. */
       salvage?: T;
+      /** UNAVAILABLE only: false when the provider may have processed (and billed) it. */
+      retryable?: boolean;
     } & GenerateMeta);
 
 /** Persists one provider call (repairs and retries are separate rows linked by repairOfId). */

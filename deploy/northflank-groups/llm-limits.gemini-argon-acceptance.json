@@ -1,0 +1,41 @@
+{
+  "name": "tessaloom-llm-limits",
+  "description": "Prepared, not applied. Gemini 4 Argon (paid Standard) acceptance caps, 1.00 USD per day: one full workflow at November 2026 rates. Inert until the owner adds the paid-tier approval, pricing review and live-data permission (docs/GEMINI_MIGRATION.md)",
+  "type": "config",
+  "secretType": "environment",
+  "priority": 10,
+  "restrictions": {
+    "restricted": true,
+    "nfObjects": [
+      {
+        "id": "tessaloom",
+        "type": "service"
+      }
+    ]
+  },
+  "secrets": {
+    "variables": {
+      "LLM_PROVIDER": "gemini",
+      "LLM_MODEL": "gemini-4-argon",
+      "LLM_FALLBACK_MODEL": "gemini-4-argon",
+      "LLM_MODE": "standard",
+      "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
+      "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",
+      "DEEPSEEK_LIVE_APPROVED": "off",
+      "DEEPSEEK_MAX_REQUESTS": "0",
+      "GEMINI_FREE_TIER_CONFIRMED": "off",
+      "GEMINI_DATA_SHARING_APPROVED": "off",
+      "GEMINI_PAID_TIER_APPROVED": "off",
+      "GEMINI_LIVE_DATA_APPROVED": "off",
+      "GEMINI_MAX_REQUESTS": "40",
+      "GEMINI_TIMEOUT_MS": "120000",
+      "GLOBAL_DAILY_LLM_USD": "1.00",
+      "WORKSPACE_DAILY_LLM_USD": "1.00",
+      "EXPERIMENT_LLM_USD": "1.00",
+      "GLOBAL_DAILY_QLOO_CALLS": "60",
+      "MAX_WORKING_RUNS": "1",
+      "MAX_ACTIVE_RUNS_PER_WORKSPACE": "1",
+      "WORKSPACE_DAILY_RUNS": "2"
+    }
+  }
+}

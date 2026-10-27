@@ -283,7 +283,7 @@ reply allows it, or accept that risk knowingly.
 | Judges can test free of charge until judging ends (Nov 2–5); credentials in testing instructions | Read-only story without a code; capped access codes for interactive runs | Codes pending the paid acceptance (§4–§5.2) |
 | Public repository with a detectable open-source license | MIT `LICENSE`; GitHub detects it | Verified |
 | English text description | This document | Ready |
-| Third-party APIs within their terms | Anthropic API key for public inference; subscription local-only and refused in production; Qloo data server-side only | Verified in code and tests |
+| Third-party APIs within their terms | An API key (Anthropic, or Gemini paid tier per [GEMINI_MIGRATION.md](../GEMINI_MIGRATION.md)) for public inference; subscription local-only and refused in production; Qloo data server-side only | Enforced in code and tests. **No provider key is installed in production yet**, so judges cannot run the agent until one is. Sending Qloo-derived data to Gemini also needs separate authorization |
 | Video | Optional | Prepared (two files; owner uploads) |
 
 ## Submission checklist (owner)

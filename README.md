@@ -14,13 +14,13 @@ Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/). Submission de
 
 ## Status
 
-| Area                                                                                                             | Status                                                                                     | Evidence                                                                                                                                                                                                            |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Full workflow with **live Qloo data and Claude** (brief → entity selection → discovery → hypotheses → blueprint) | **Verified locally**, 2026-10-26                                                           | [Acceptance report](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md): 5/5 Claude calls valid, 93 cross-world bridges, 5 hypotheses tested against live Qloo evidence, 15-block blueprint whose 7 citations all resolve |
-| Same workflow in production through the Anthropic API                                                            | **Prepared, not yet run**                                                                  | [Production runbook](docs/submission/PRODUCTION_FIRST_RUN.md) ($0.50 first-run guard)                                                                                                                               |
-| Production service (Northflank): database, queues, Qloo Harness readiness                                        | **Verified** (deployed `859cd9f`)                                                          | [Release handoff](docs/submission/FINAL_RELEASE_HANDOFF.md), [Qloo probe report](docs/QLOO_PROBE_AND_LIVE_ACCEPTANCE.md)                                                                                            |
-| Public demo URL                                                                                                  | **Live**: <https://p01--tessaloom--mpfcqkyl42yb.code.run> (agent runs are invitation-only) | Public smoke and Chromium/WebKit checks, 2026-10-26                                                                                                                                                                 |
-| Local demo without any keys (synthetic data, scripted AI)                                                        | **Verified**                                                                               | Quick start below; Chromium + WebKit journeys in CI                                                                                                                                                                 |
+| Area                                                                                                             | Status                                                                                                                                    | Evidence                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full workflow with **live Qloo data and Claude** (brief → entity selection → discovery → hypotheses → blueprint) | **Verified locally**, 2026-10-26                                                                                                          | [Acceptance report](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md): 5/5 Claude calls valid, 93 cross-world bridges, 5 hypotheses tested against live Qloo evidence, 15-block blueprint whose 7 citations all resolve |
+| Same workflow in production with live Qloo data and a paid AI API                                                | **Not running**: no provider key installed; sending Qloo-derived data to an AI provider awaits Qloo's written permission                  | [Gemini migration](docs/GEMINI_MIGRATION.md), [production runbook](docs/submission/PRODUCTION_FIRST_RUN.md)                                                                                                         |
+| Production service (Northflank): database, queues, Qloo Harness readiness                                        | **Verified** (deployed `859cd9f`)                                                                                                         | [Release handoff](docs/submission/FINAL_RELEASE_HANDOFF.md), [Qloo probe report](docs/QLOO_PROBE_AND_LIVE_ACCEPTANCE.md)                                                                                            |
+| Public demo URL                                                                                                  | **Live**: <https://p01--tessaloom--mpfcqkyl42yb.code.run>. Agent runs are switched off until the labelled synthetic judge demo is enabled | [Judge demo deployment](docs/submission/DEMO_DEPLOYMENT.md) (prepared; owner approval pending)                                                                                                                      |
+| Local demo without any keys (synthetic data, scripted AI)                                                        | **Verified**                                                                                                                              | Quick start below; Chromium + WebKit journeys in CI                                                                                                                                                                 |
 
 ## How it works
 
@@ -71,12 +71,18 @@ discovery, is Qloo-driven. The **LLM gateway** gives every call:
 - **Recorded invocations.** Role, prompt version, model, tokens, latency and validation status;
   no private reasoning is stored.
 
-Production uses **Claude Sonnet 5.5 through the Anthropic API** (`LLM_PROVIDER=anthropic`).
+Production is configured for **Claude Sonnet 5.5 through the Anthropic API**
+(`LLM_PROVIDER=anthropic`), but **no provider key is installed yet**: agent runs stay unavailable
+(`llmConfigured: false`, `RUN_ACCESS=off`, $0 budgets) until the owner adds a key and opens
+access. There is no automatic fallback to another provider.
 For the developer's own local testing only, `LLM_PROVIDER=claude-subscription` runs the
 official Claude Agent SDK on the developer's Claude Pro/Max login. It is refused outside
 development and test, never runs beside an API key, and is absent from the production image
 ([why and how](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). DeepSeek, Gemini and a scripted
-provider are also supported.
+provider are also supported. The proposed production alternative is Gemini on an explicitly
+approved paid tier: Gemini 4 Argon if paid acceptance confirms it, otherwise Gemini 3.8 Flash.
+It sends live Qloo-derived inputs only after transmission to Google is separately authorized
+([migration and rollout plan](docs/GEMINI_MIGRATION.md)).
 
 ## Technical highlights
 

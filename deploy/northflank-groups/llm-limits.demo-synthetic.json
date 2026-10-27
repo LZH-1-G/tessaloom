@@ -1,0 +1,40 @@
+{
+  "name": "tessaloom-llm-limits",
+  "description": "Prepared, not applied. Public judge demo: synthetic Qloo data and scripted AI stand-ins, no paid inference (every LLM budget 0). Requires service APP_ENV staging and QLOO_MODE synthetic (docs/submission/DEMO_DEPLOYMENT.md)",
+  "type": "config",
+  "secretType": "environment",
+  "priority": 10,
+  "restrictions": {
+    "restricted": true,
+    "nfObjects": [
+      {
+        "id": "tessaloom",
+        "type": "service"
+      }
+    ]
+  },
+  "secrets": {
+    "variables": {
+      "LLM_PROVIDER": "scripted",
+      "LLM_MODEL": "scripted-demo",
+      "LLM_FALLBACK_MODEL": "scripted-demo-fallback",
+      "LLM_MODE": "standard",
+      "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
+      "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",
+      "DEEPSEEK_LIVE_APPROVED": "off",
+      "DEEPSEEK_MAX_REQUESTS": "0",
+      "GEMINI_FREE_TIER_CONFIRMED": "off",
+      "GEMINI_DATA_SHARING_APPROVED": "off",
+      "GEMINI_PAID_TIER_APPROVED": "off",
+      "GEMINI_LIVE_DATA_APPROVED": "off",
+      "GEMINI_MAX_REQUESTS": "0",
+      "GLOBAL_DAILY_LLM_USD": "0",
+      "WORKSPACE_DAILY_LLM_USD": "0",
+      "EXPERIMENT_LLM_USD": "0",
+      "GLOBAL_DAILY_QLOO_CALLS": "2000",
+      "MAX_WORKING_RUNS": "4",
+      "MAX_ACTIVE_RUNS_PER_WORKSPACE": "1",
+      "WORKSPACE_DAILY_RUNS": "10"
+    }
+  }
+}

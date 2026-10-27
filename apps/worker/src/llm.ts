@@ -12,6 +12,8 @@ import {
   CLAUDE_SUBSCRIPTION_MODELS,
   GeminiProvider,
   GEMINI_MODELS,
+  GEMINI_PRICE_REVIEW,
+  geminiPrices,
   DeepSeekProvider,
   DEEPSEEK_MODELS,
   DEEPSEEK_PRICE_REVIEW,
@@ -107,8 +109,12 @@ export interface LlmSettings {
   GEMINI_API_KEY?: string;
   GEMINI_FREE_TIER_CONFIRMED?: "off" | "on";
   GEMINI_DATA_SHARING_APPROVED?: "off" | "on";
+  GEMINI_PAID_TIER_APPROVED?: "off" | "on";
+  GEMINI_PRICING_VERIFIED_AT?: string;
+  GEMINI_LIVE_DATA_APPROVED?: "off" | "on";
   GEMINI_MAX_REQUESTS?: number;
   GEMINI_TIMEOUT_MS?: number;
+  GEMINI_THINKING_LEVEL?: "low" | "medium" | "high";
 }
 
 /**
@@ -147,7 +153,7 @@ export function createLlmGateway(
   spendGuard?: SpendGuard,
 ): LlmGateway | null {
   let resolved = provider;
-  let prices: PriceTable | undefined;
+  let prices: PriceTable | (() => PriceTable) | undefined;
   let pricingContext: Record<string, unknown> | undefined;
   let models = {
     primary: settings.LLM_MODEL,
@@ -198,22 +204,47 @@ export function createLlmGateway(
     if (settings.LLM_PROVIDER === "scripted")
       resolved = createScriptedDemoProvider();
     else if (settings.LLM_PROVIDER === "gemini") {
+      // Exactly one explicitly approved billing tier; possession of a key enables nothing.
+      const paid = settings.GEMINI_PAID_TIER_APPROVED === "on";
       if (
         !settings.GEMINI_API_KEY ||
-        settings.GEMINI_FREE_TIER_CONFIRMED !== "on" ||
-        settings.GEMINI_DATA_SHARING_APPROVED !== "on" ||
+        paid === (settings.GEMINI_FREE_TIER_CONFIRMED === "on") ||
         !(GEMINI_MODELS as readonly string[]).includes(settings.LLM_MODEL) ||
         !settings.GEMINI_MAX_REQUESTS
       )
         return null;
-      resolved = new GeminiProvider({
-        apiKey: settings.GEMINI_API_KEY,
-        model: settings.LLM_MODEL,
-        freeTierConfirmed: true,
-        dataSharingApproved: true,
-        maxRequests: settings.GEMINI_MAX_REQUESTS,
-        timeoutMs: settings.GEMINI_TIMEOUT_MS,
-      });
+      try {
+        resolved = new GeminiProvider({
+          apiKey: settings.GEMINI_API_KEY,
+          model: settings.LLM_MODEL,
+          ...(paid
+            ? {
+                paidTierApproved: true,
+                pricingVerifiedAt: settings.GEMINI_PRICING_VERIFIED_AT,
+                liveInputsApproved: settings.GEMINI_LIVE_DATA_APPROVED === "on",
+              }
+            : {
+                freeTierConfirmed: true,
+                dataSharingApproved:
+                  settings.GEMINI_DATA_SHARING_APPROVED === "on",
+              }),
+          maxRequests: settings.GEMINI_MAX_REQUESTS,
+          timeoutMs: settings.GEMINI_TIMEOUT_MS,
+          thinkingLevel: settings.GEMINI_THINKING_LEVEL,
+        });
+      } catch {
+        return null;
+      }
+      prices = () => geminiPrices();
+      pricingContext = {
+        billingTier: paid ? "paid" : "free",
+        serviceTier: "standard",
+        thinkingLevel: settings.GEMINI_THINKING_LEVEL ?? "model-default",
+        tariffSourceDate: GEMINI_PRICE_REVIEW,
+        ...(paid
+          ? { pricingVerifiedAt: settings.GEMINI_PRICING_VERIFIED_AT }
+          : {}),
+      };
     } else if (settings.LLM_PROVIDER === "claude-subscription") {
       // Local personal use of the owner's own Claude Code login; never a deployed service.
       if (

@@ -4,11 +4,12 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
-import { z } from "zod";
+import { IntentFrame } from "../../packages/core/src";
 import {
   GeminiProvider,
   LlmGateway,
   checkGeminiModel,
+  geminiPrices,
 } from "../../packages/llm-gateway/src";
 import { qlooChildEnv } from "../../packages/qloo-adapter/src/transports/env";
 
@@ -32,17 +33,22 @@ async function claimReceipt(provider: string) {
 }
 
 it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
-  "opt-in Gemini contract: one metadata GET and one synthetic generation, zero retries",
+  "opt-in Gemini contract: one metadata GET and one synthetic R1 generation on the real prompt and schema, zero retries",
   async () => {
+    // Exactly one tier. Paid: explicit billing approval for this one call and a current
+    // pricing review. Worst case is one R1 reservation (about $0.06 on 4 Argon in Nov 2026).
+    const paid = process.env.GEMINI_PAID_TIER_APPROVED === "on";
     if (
-      process.env.GEMINI_FREE_TIER_CONFIRMED !== "on" ||
-      process.env.GEMINI_DATA_SHARING_APPROVED !== "on"
+      paid === (process.env.GEMINI_FREE_TIER_CONFIRMED === "on") ||
+      (!paid && process.env.GEMINI_DATA_SHARING_APPROVED !== "on") ||
+      (paid && !process.env.GEMINI_PRICING_VERIFIED_AT)
     )
       throw new Error(
-        "Confirm Free project, quota, and sharing of synthetic inputs first",
+        "Confirm exactly one tier: Free with quota and synthetic-input sharing, or approved Paid with a pricing review",
       );
     const apiKey = process.env.GEMINI_API_KEY;
     const model = process.env.LLM_MODEL;
+    const thinking = process.env.GEMINI_THINKING_LEVEL;
     if (!apiKey || !model)
       throw new Error("Private Gemini key and account-verified model required");
     const receipt = await claimReceipt("gemini");
@@ -51,9 +57,17 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
       const provider = new GeminiProvider({
         apiKey,
         model,
-        freeTierConfirmed: true,
-        dataSharingApproved: true,
+        ...(paid
+          ? {
+              paidTierApproved: true,
+              pricingVerifiedAt: process.env.GEMINI_PRICING_VERIFIED_AT,
+            }
+          : { freeTierConfirmed: true, dataSharingApproved: true }),
+        ...(thinking === "low" || thinking === "medium" || thinking === "high"
+          ? { thinkingLevel: thinking }
+          : {}),
         maxRequests: 1,
+        timeoutMs: 120_000,
       });
       // This standalone probe has no DB/run; its one-call reservation is explicit and local.
       // Application experiments always use the DB SpendGuard; this probe is not an E2E run.
@@ -61,8 +75,10 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
       const gateway = new LlmGateway({
         provider,
         primaryModel: model,
+        prices: () => geminiPrices(),
         maxRepairs: 0,
-        maxOutputTokensCeiling: 256,
+        retryTruncation: false,
+        maxOutputTokensCeiling: 4000,
         spendGuard: {
           reserve: async () => {
             if (reserved)
@@ -77,29 +93,47 @@ it.skipIf(process.env.LIVE_VALIDATION_PROVIDER !== "gemini")(
           settle: async () => {},
         },
       });
+      // Locally invented brief: no Qloo data, names or IDs. Real R1 prompt and schema.
+      const started = performance.now();
       const result = await gateway.generate({
         role: "R1",
         promptId: "r1.intent",
         input: {
-          synthetic: true,
-          task: "Return the JSON object {answer: ok}. This is locally invented test input with no Qloo data.",
+          brief: {
+            title: "Lantern Quay listening night",
+            challenge:
+              "A 40-seat cafe wants a monthly evening that mixes film and music fans.",
+            interests: [
+              { text: "Neon Harbor Nights", domainHint: "movie" },
+              { text: "Velvet Static Radio", domainHint: "artist" },
+            ],
+            venue: { type: "cafe", capacity: 40 },
+            constraints: { budgetBand: "low", durationMinutes: 120 },
+            goals: ["Attract new weekday visitors"],
+          },
         },
-        schema: z.object({ answer: z.literal("ok") }),
+        schema: IntentFrame,
         effort: "low",
-        maxOutputTokens: 256,
+        maxOutputTokens: 4000,
         ctx: {
+          inputOrigin: "synthetic",
           projectId: "local-contract-probe",
           remainingCalls: 1,
-          remainingOutputTokens: 256,
+          remainingOutputTokens: 4000,
         },
       });
       await writeFile(
         receipt,
         JSON.stringify({
           provider: "gemini",
+          billingTier: paid ? "paid" : "free",
+          thinkingLevel: thinking ?? "model-default",
           metadata,
           ok: result.ok,
+          reason: result.ok ? null : result.reason,
+          issueCodes: result.ok ? [] : (result.issues ?? []).map((i) => i.code),
           attempts: result.attempts,
+          latencyMs: Math.round(performance.now() - started),
           usage: result.usage,
           estimatedCostUsd: result.costUsd,
           modelId: result.modelId,

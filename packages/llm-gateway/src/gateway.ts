@@ -34,7 +34,8 @@ export type LlmMode = "standard" | "economy";
 
 export interface LlmGatewayOptions {
   provider: LlmProvider;
-  prices?: PriceTable;
+  /** A function is asked once per generate() call (scheduled price changes). */
+  prices?: PriceTable | (() => PriceTable);
   pricingContext?: Record<string, unknown>;
   retryTruncation?: boolean;
   primaryModel: string;
@@ -67,7 +68,7 @@ interface Attempt {
 export class LlmGateway {
   readonly prompts: PromptRegistry;
   private readonly provider: LlmProvider;
-  private readonly prices: PriceTable;
+  private readonly priceSource: () => PriceTable;
   private readonly pricingContext: Record<string, unknown>;
   private readonly retryTruncation: boolean;
   private readonly primaryModel: string;
@@ -82,7 +83,8 @@ export class LlmGateway {
 
   constructor(options: LlmGatewayOptions) {
     this.provider = options.provider;
-    this.prices = options.prices ?? PRICES;
+    const prices = options.prices ?? PRICES;
+    this.priceSource = typeof prices === "function" ? prices : () => prices;
     this.pricingContext = options.pricingContext ?? {};
     this.retryTruncation =
       options.provider.name === "deepseek"
@@ -145,11 +147,13 @@ export class LlmGateway {
       reason: FailureReason,
       issues?: ValidationIssue[],
       salvage?: z.output<S>,
+      retryable?: boolean,
     ): GenerateResult<z.output<S>> => ({
       ok: false,
       reason,
       ...(issues ? { issues } : {}),
       ...(salvage !== undefined ? { salvage } : {}),
+      ...(retryable !== undefined ? { retryable } : {}),
       ...meta,
     });
 
@@ -163,8 +167,23 @@ export class LlmGateway {
           message: "DeepSeek validation accepts verified synthetic inputs only",
         },
       ]);
+    if (
+      this.provider.name === "gemini" &&
+      this.provider.liveInputsApproved !== true &&
+      req.ctx.inputOrigin !== "synthetic"
+    )
+      return fail("CONFIGURATION", [
+        {
+          code: "DATA_SHARING_BLOCKED",
+          message:
+            "Gemini accepts verified synthetic inputs only until live-data permission is approved",
+        },
+      ]);
+    // One rate snapshot per call: every reservation and settlement below uses the same rates.
+    const prices = this.priceSource();
 
     let attempt = this.chooseModel(
+      prices,
       promptChars,
       req.maxOutputTokens,
       req.ctx.remainingUsd,
@@ -176,7 +195,7 @@ export class LlmGateway {
           message: "Remaining LLM budget is below one call",
         },
       ]);
-    if (!this.allowUnpriced && !hasPrice(attempt.model, this.prices))
+    if (!this.allowUnpriced && !hasPrice(attempt.model, prices))
       return fail("CONFIGURATION", [
         {
           code: "UNPRICED_MODEL",
@@ -203,7 +222,7 @@ export class LlmGateway {
             message: "Paid calls require spending reservations",
           },
         ]);
-      if (!this.allowUnpriced && !hasPrice(attempt.model, this.prices))
+      if (!this.allowUnpriced && !hasPrice(attempt.model, prices))
         return fail("CONFIGURATION", [
           {
             code: "UNPRICED_MODEL",
@@ -219,6 +238,7 @@ export class LlmGateway {
           { code: "OUTPUT_LIMIT", message: "Invalid output token limit" },
         ]);
       const budgetIssue = this.checkBudget(
+        prices,
         req,
         meta,
         attempt.model,
@@ -243,7 +263,7 @@ export class LlmGateway {
             attempt.model,
             this.provider.name === "deepseek" ? Math.max(bytes, 16_384) : bytes,
             maxTokens,
-            this.prices,
+            prices,
           ),
           maxOutputTokens: maxTokens,
         });
@@ -350,16 +370,20 @@ export class LlmGateway {
           repairOfId = null;
           continue;
         }
-        return fail("UNAVAILABLE", [
-          { code: `PROVIDER_${pe.kind.toUpperCase()}`, message: pe.message },
-        ]);
+        // A sent request whose outcome is unknown may have been billed: never retried.
+        return fail(
+          "UNAVAILABLE",
+          [{ code: `PROVIDER_${pe.kind.toUpperCase()}`, message: pe.message }],
+          undefined,
+          pe.retryable || !pe.requestSent,
+        );
       }
       const latencyMs = Math.round(this.now() - started);
 
       const servedBy = response.modelId || attempt.model;
       if (
         this.provider.name !== "scripted" &&
-        (!hasPrice(servedBy, this.prices) || servedBy !== attempt.model)
+        (!hasPrice(servedBy, prices) || servedBy !== attempt.model)
       ) {
         meta.usageComplete = false;
         await settle(null);
@@ -391,7 +415,7 @@ export class LlmGateway {
         (this.provider.name === "claude-subscription" &&
           this.provider.billing === "claude-subscription")
           ? 0
-          : estimateCostUsd(servedBy, response.usage, this.prices);
+          : estimateCostUsd(servedBy, response.usage, prices);
       await settle(costUsd);
       meta.usage = addUsage(meta.usage, response.usage);
       meta.costUsd += costUsd;
@@ -429,11 +453,9 @@ export class LlmGateway {
               ? {
                   billing: "claude-subscription",
                   notionalApiListUsd: Number(
-                    estimateCostUsd(
-                      servedBy,
-                      response.usage,
-                      this.prices,
-                    ).toFixed(6),
+                    estimateCostUsd(servedBy, response.usage, prices).toFixed(
+                      6,
+                    ),
                   ),
                 }
               : {}),
@@ -531,6 +553,7 @@ export class LlmGateway {
 
   /** Primary unless economy mode or the remaining budget only fits the fallback. */
   private chooseModel(
+    prices: PriceTable,
     promptChars: number,
     maxTokens: number,
     remainingUsd?: number,
@@ -540,12 +563,8 @@ export class LlmGateway {
       return { model: fallback, fallbackUsed: true, fallbackReason: "economy" };
     if (
       remainingUsd === undefined ||
-      worstCaseCostUsd(
-        this.primaryModel,
-        promptChars,
-        maxTokens,
-        this.prices,
-      ) <= remainingUsd
+      worstCaseCostUsd(this.primaryModel, promptChars, maxTokens, prices) <=
+        remainingUsd
     )
       return {
         model: this.primaryModel,
@@ -554,14 +573,14 @@ export class LlmGateway {
       };
     if (
       fallback &&
-      worstCaseCostUsd(fallback, promptChars, maxTokens, this.prices) <=
-        remainingUsd
+      worstCaseCostUsd(fallback, promptChars, maxTokens, prices) <= remainingUsd
     )
       return { model: fallback, fallbackUsed: true, fallbackReason: "budget" };
     return null;
   }
 
   private checkBudget<S extends z.ZodType>(
+    prices: PriceTable,
     req: GenerateRequest<S>,
     meta: GenerateMeta,
     model: string,
@@ -585,7 +604,7 @@ export class LlmGateway {
         promptChars +
         messages.slice(1).reduce((n, m) => n + m.content.length, 0);
       if (
-        meta.costUsd + worstCaseCostUsd(model, chars, maxTokens, this.prices) >
+        meta.costUsd + worstCaseCostUsd(model, chars, maxTokens, prices) >
         remainingUsd
       )
         return { code: "BUDGET_USD", message: "LLM cost budget exhausted" };

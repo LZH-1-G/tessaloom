@@ -878,7 +878,7 @@ describe("Gemini + PostgreSQL spend guard (mock HTTP, synthetic inputs only)", (
       schema: z.object({ answer: z.string().min(1) }),
       effort: "low" as const,
       maxOutputTokens: 256,
-      ctx: { projectId, runId },
+      ctx: { projectId, runId, inputOrigin: "synthetic" as const },
     };
     for (const access of ["invite", "off"] as const) {
       expect(await gateway(access).generate(request)).toMatchObject({

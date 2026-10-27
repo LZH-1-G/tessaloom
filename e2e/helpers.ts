@@ -24,10 +24,19 @@ export const test = base.extend({
 export { expect };
 
 /** TEST_PLAN §10: the FIXTURE banner must be visible in every E2E test. */
-export async function expectFixtureBanner(page: Page) {
+export async function expectFixtureBanner(
+  page: Page,
+  { inAppShell = true }: { inAppShell?: boolean } = {},
+) {
   await expect(page.getByTestId("fixture-banner")).toHaveText(
     /FIXTURE — not real Qloo data/,
   );
+  // E2E runs the scripted stand-ins: studio pages must not imply a language model ran.
+  // Read-only share pages render a stored artifact without the live system status.
+  if (inAppShell)
+    await expect(page.getByTestId("scripted-ai-notice")).toHaveText(
+      /Scripted AI demo: no language model is called/,
+    );
 }
 
 /**

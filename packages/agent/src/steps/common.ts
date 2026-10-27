@@ -99,10 +99,11 @@ export function failLlm(
         carry,
       );
     case "UNAVAILABLE":
+      // Retrying a request the provider may already have processed could pay for it twice.
       return fatal(
         "LLM_UNAVAILABLE",
         `${label}: the model provider is unavailable`,
-        { ...carry, transient: true },
+        { ...carry, transient: result.retryable !== false },
       );
     case "CONFIGURATION":
       return fatal(
