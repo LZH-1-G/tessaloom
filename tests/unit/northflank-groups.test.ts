@@ -81,7 +81,7 @@ describe("prepared Northflank limit groups", () => {
 });
 
 describe("prepared Gemini limit group (not applied)", () => {
-  it("pins paid-capable Flash-Lite with acceptance caps, but stays inert without owner approvals", async () => {
+  it("pins paid-capable Gemini 3.8 Flash with acceptance caps, but stays inert without owner approvals", async () => {
     const { createLlmGateway } = await import("../../apps/worker/src/llm");
     const group = load("gemini-acceptance");
     const vars = group.secrets.variables;
@@ -105,7 +105,8 @@ describe("prepared Gemini limit group (not applied)", () => {
     const worker = parseWorkerEnv({ ...base, ...vars });
     expect(worker).toMatchObject({
       LLM_PROVIDER: "gemini",
-      LLM_MODEL: "gemini-3.5-flash-lite",
+      LLM_MODEL: "gemini-3.8-flash",
+      LLM_FALLBACK_MODEL: "gemini-3.8-flash",
       GEMINI_FREE_TIER_CONFIRMED: "off",
       GEMINI_PAID_TIER_APPROVED: "off",
       GEMINI_LIVE_DATA_APPROVED: "off",
@@ -120,4 +121,76 @@ describe("prepared Gemini limit group (not applied)", () => {
       ),
     ).toBeNull();
   });
+});
+
+describe("Gemini 3.8 Flash reservations fit the prepared caps", () => {
+  it("admits the largest single attempt the code allows, even at 2027 rates", async () => {
+    const { geminiPrices, upperBoundCostUsd } =
+      await import("../../packages/llm-gateway/src");
+    const jan2027 = geminiPrices(Date.parse("2027-01-01T00:00:00Z"));
+    // 128 KiB provider input cap, 32k gateway output ceiling (thinking included).
+    const worst = upperBoundCostUsd(
+      "gemini-3.8-flash",
+      128 * 1024,
+      32_000,
+      jan2027,
+    );
+    expect(worst).toBeCloseTo(0.442752, 6);
+    for (const name of ["gemini-acceptance", "judging"]) {
+      const vars = load(name).secrets.variables;
+      for (const cap of [
+        "GLOBAL_DAILY_LLM_USD",
+        "WORKSPACE_DAILY_LLM_USD",
+        "EXPERIMENT_LLM_USD",
+      ])
+        expect(Number(vars[cap]), `${name} ${cap}`).toBeGreaterThan(worst);
+    }
+  });
+});
+
+describe("Gemini rollback paths (config groups replace each other wholesale)", () => {
+  const approved = {
+    GEMINI_PAID_TIER_APPROVED: "on",
+    GEMINI_PRICING_VERIFIED_AT: new Date().toISOString(),
+  };
+  const gateway = async (vars: Record<string, string>, keys: object) => {
+    const { createLlmGateway } = await import("../../apps/worker/src/llm");
+    return createLlmGateway(
+      { ...parseWorkerEnv({ ...base, ...vars }), ...keys },
+      { record: async () => "id" },
+    );
+  };
+
+  it("runs Gemini only with the key and owner approvals", async () => {
+    const vars = {
+      ...load("gemini-acceptance").secrets.variables,
+      ...approved,
+    };
+    expect(
+      (await gateway(vars, { GEMINI_API_KEY: "sentinel" }))?.providerName,
+    ).toBe("gemini");
+    // Gemini-only stop: zero requests leaves the LLM unconfigured.
+    expect(
+      await gateway(
+        { ...vars, GEMINI_MAX_REQUESTS: "0" },
+        { GEMINI_API_KEY: "sentinel" },
+      ),
+    ).toBeNull();
+  });
+  it.each(["closed", "acceptance", "judging"])(
+    "re-applying %s selects Anthropic, which is NOT a working fallback without an Anthropic key",
+    async (name) => {
+      const vars = load(name).secrets.variables;
+      // The Gemini key may still be on the worker; it is ignored, never used as a fallback.
+      expect(await gateway(vars, { GEMINI_API_KEY: "sentinel" })).toBeNull();
+      expect(
+        (
+          await gateway(vars, {
+            GEMINI_API_KEY: "sentinel",
+            ANTHROPIC_API_KEY: "sentinel",
+          })
+        )?.providerName,
+      ).toBe("anthropic");
+    },
+  );
 });

@@ -71,14 +71,17 @@ discovery, is Qloo-driven. The **LLM gateway** gives every call:
 - **Recorded invocations.** Role, prompt version, model, tokens, latency and validation status;
   no private reasoning is stored.
 
-Production uses **Claude Sonnet 5.5 through the Anthropic API** (`LLM_PROVIDER=anthropic`).
+Production is configured for **Claude Sonnet 5.5 through the Anthropic API**
+(`LLM_PROVIDER=anthropic`), but **no provider key is installed yet**: agent runs stay unavailable
+(`llmConfigured: false`, `RUN_ACCESS=off`, $0 budgets) until the owner adds a key and opens
+access. There is no automatic fallback to another provider.
 For the developer's own local testing only, `LLM_PROVIDER=claude-subscription` runs the
 official Claude Agent SDK on the developer's Claude Pro/Max login. It is refused outside
 development and test, never runs beside an API key, and is absent from the production image
 ([why and how](docs/CLAUDE_SUBSCRIPTION_LOCAL_ACCEPTANCE.md)). DeepSeek, Gemini and a scripted
-provider are also supported. Gemini runs on an explicitly approved free or paid tier, and only
-sends live Qloo-derived inputs once that permission is approved
-([migration and rollout plan](docs/GEMINI_MIGRATION.md)).
+provider are also supported. The proposed production alternative is Gemini 3.8 Flash on an
+explicitly approved paid tier. It sends live Qloo-derived inputs only after transmission to
+Google is separately authorized ([migration and rollout plan](docs/GEMINI_MIGRATION.md)).
 
 ## Technical highlights
 

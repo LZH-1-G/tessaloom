@@ -10,12 +10,22 @@ import {
   checkGeminiModel,
   estimateCostUsd,
   geminiPrices,
+  geminiResponseSchema,
+  toStructuredSchema,
   geminiPricingApproved,
   type ProviderRequest,
   type LlmInvocationRecorder,
 } from "../../packages/llm-gateway/src";
 import { createLlmGateway, effectiveModels } from "../../apps/worker/src/llm";
 import { parseWorkerEnv, parseWebEnv } from "../../packages/config/env";
+import {
+  BlueprintDraft,
+  ComparisonNarrative,
+  CritiqueReport,
+  HypothesisBatch,
+  HypothesisRevision,
+  IntentFrame,
+} from "../../packages/core/src";
 
 const model = "gemini-3.5-flash-lite";
 const request: ProviderRequest = {
@@ -116,10 +126,10 @@ describe("Gemini REST provider (mock network only)", () => {
     });
     const body = JSON.parse(init!.body as string);
     expect(body.contents[1].role).toBe("model");
-    expect(body.generationConfig).toMatchObject({
+    expect(body.generationConfig).toEqual({
+      responseMimeType: "application/json",
       responseJsonSchema: request.jsonSchema,
       maxOutputTokens: 1000,
-      candidateCount: 1,
     });
     expect(body).not.toHaveProperty("tools");
     expect(result).toMatchObject({
@@ -581,21 +591,28 @@ describe("Gemini paid tier provider", () => {
       true,
     );
   });
-  it("sends the same request shape as the free tier, with no tools or service-tier upgrade", async () => {
-    const { provider, fetcher } = paid();
-    await provider.generate(request);
-    const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
-    expect(Object.keys(body).sort()).toEqual([
-      "contents",
-      "generationConfig",
-      "systemInstruction",
-    ]);
-    expect(body.generationConfig).toMatchObject({
-      responseMimeType: "application/json",
-      responseJsonSchema: request.jsonSchema,
-      thinkingConfig: { includeThoughts: false },
-    });
-  });
+  it.each(GEMINI_MODELS)(
+    "%s: sends only fields Gemini 3 accepts (no candidateCount, sampling, thinking override, tools or service tier)",
+    async (m) => {
+      const { provider, fetcher } = paid(
+        { model: m },
+        response({ modelVersion: m }),
+      );
+      await provider.generate({ ...request, model: m });
+      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      expect(Object.keys(body).sort()).toEqual([
+        "contents",
+        "generationConfig",
+        "systemInstruction",
+      ]);
+      // Regression: Gemini 3+ does not support candidateCount; 3.8 Flash rejects "minimal".
+      expect(body.generationConfig).toEqual({
+        maxOutputTokens: 1000,
+        responseMimeType: "application/json",
+        responseJsonSchema: request.jsonSchema,
+      });
+    },
+  );
   it("bills tool-use prompt tokens as input and reports thinking tokens", async () => {
     const { provider } = paid(
       {},
@@ -974,4 +991,120 @@ describe("Gemini paid tier worker configuration", () => {
       GEMINI_LIVE_DATA_APPROVED: "off",
     });
   });
+});
+
+// ---------------------------------------------------------------------------
+// Structured output: only keywords Google documents for responseJsonSchema.
+
+const GEMINI_KEYWORDS = new Set([
+  "type",
+  "title",
+  "description",
+  "properties",
+  "required",
+  "additionalProperties",
+  "enum",
+  "format",
+  "minimum",
+  "maximum",
+  "items",
+  "prefixItems",
+  "minItems",
+  "maxItems",
+  "anyOf",
+]);
+function keywords(node: unknown, found = new Set<string>()): Set<string> {
+  if (Array.isArray(node)) node.forEach((item) => keywords(item, found));
+  else if (node && typeof node === "object")
+    for (const [key, value] of Object.entries(node)) {
+      found.add(key);
+      if (key === "properties")
+        Object.values(value as object).forEach((child) =>
+          keywords(child, found),
+        );
+      else if (key !== "enum" && key !== "required") keywords(value, found);
+    }
+  return found;
+}
+
+describe("Gemini structured-output schema", () => {
+  it("inlines local definitions, keeping sibling keywords", () => {
+    expect(
+      geminiResponseSchema({
+        $defs: { id: { type: "string", format: "uuid" } },
+        type: "object",
+        properties: {
+          a: { $ref: "#/$defs/id", description: "first" },
+          list: { type: "array", items: { $ref: "#/$defs/id" } },
+        },
+        required: ["a", "list"],
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        a: { type: "string", description: 'first {format: "uuid"}' },
+        list: {
+          type: "array",
+          items: { type: "string", description: '{format: "uuid"}' },
+        },
+      },
+      required: ["a", "list"],
+    });
+  });
+  it("keeps documented formats and property names that look like keywords", () => {
+    expect(
+      geminiResponseSchema({
+        type: "object",
+        properties: {
+          $ref: { type: "string", format: "date-time" },
+          format: { type: "string" },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        $ref: { type: "string", format: "date-time" },
+        format: { type: "string" },
+      },
+    });
+  });
+  it.each([
+    { $defs: { a: { $ref: "#/$defs/a" } }, $ref: "#/$defs/a" },
+    { type: "object", properties: { x: { $ref: "#/$defs/missing" } } },
+    { type: "object", properties: { x: { $ref: "https://example.test/s" } } },
+  ])(
+    "refuses cyclic, missing or remote references without sending",
+    async (schema) => {
+      expect(() => geminiResponseSchema(schema)).toThrow("reference");
+      const { provider, fetcher } = paid();
+      await expect(
+        provider.generate({ ...request, jsonSchema: schema }),
+      ).rejects.toMatchObject({ kind: "bad_request", requestSent: false });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    ["R1 intent", IntentFrame],
+    ["R3 generation", HypothesisBatch],
+    ["R4 critique", CritiqueReport],
+    ["R3 revision", HypothesisRevision],
+    ["R5 comparison", ComparisonNarrative],
+    ["R6 blueprint", BlueprintDraft],
+  ] as const)(
+    "%s schema reaches Gemini with documented keywords only and stays small",
+    async (_role, schema) => {
+      const structured = toStructuredSchema(schema);
+      const sent = geminiResponseSchema(structured);
+      for (const key of keywords(sent))
+        expect(GEMINI_KEYWORDS, key).toContain(key);
+      const text = JSON.stringify(sent);
+      expect(text).not.toContain('"format":"uuid"');
+      expect(text.length).toBeLessThan(16_384);
+      // The request carries the normalized schema, not the original.
+      const { provider, fetcher } = paid();
+      await provider.generate({ ...request, jsonSchema: structured });
+      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      expect(body.generationConfig.responseJsonSchema).toEqual(sent);
+    },
+  );
 });

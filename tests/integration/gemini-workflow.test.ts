@@ -28,7 +28,11 @@ import {
   type LlmSpendLimits,
   type PgBoss,
 } from "../../packages/db/src";
-import { PromptRegistry, geminiPrices } from "../../packages/llm-gateway/src";
+import {
+  GEMINI_PRICE_SCHEDULE,
+  PromptRegistry,
+  geminiPrices,
+} from "../../packages/llm-gateway/src";
 import { startBoss } from "./helpers/exploration";
 import { syntheticHarness } from "./helpers/synthetic";
 import { createTestDatabase } from "./helpers/test-db";
@@ -39,7 +43,7 @@ import { createTestDatabase } from "./helpers/test-db";
  * ledger. The mock answers each prompt with the deterministic scripted outputs, wrapped in
  * the generateContent envelope, so every role (R1, R3, R4, R5, R6) crosses the Gemini adapter.
  */
-const MODEL = "gemini-3.5-flash-lite";
+const MODEL = "gemini-3.8-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const OPEN: LlmSpendLimits = {
   access: "open",
@@ -260,7 +264,9 @@ describe("complete workflow on paid Gemini (synthetic Qloo, mocked Gemini HTTP)"
     // Ledger micro-USD = recorded tokens × published per-1M rates (nothing cached here),
     // within one micro of rounding per call.
     const rate = geminiPrices()[MODEL]!;
-    expect(rate).toMatchObject({ input: 0.3, output: 2.5 });
+    expect(GEMINI_PRICE_SCHEDULE[MODEL]!.map((e) => e.rate)).toContainEqual(
+      rate,
+    );
     const expected = explored.reduce(
       (n, r) => n + r.input_tokens * rate.input + r.output_tokens * rate.output,
       0,

@@ -1,6 +1,6 @@
 {
   "name": "tessaloom-llm-limits",
-  "description": "Prepared, not applied. Gemini 3.5 Flash-Lite acceptance caps, 0.50 USD per day. Inert until the owner adds the paid-tier approval, pricing review and live-data permission (docs/GEMINI_MIGRATION.md)",
+  "description": "Prepared, not applied. Gemini 3.8 Flash (paid Standard) acceptance caps, 0.50 USD per day. Inert until the owner adds the paid-tier approval, pricing review and live-data permission (docs/GEMINI_MIGRATION.md)",
   "type": "config",
   "secretType": "environment",
   "priority": 10,
@@ -16,8 +16,8 @@
   "secrets": {
     "variables": {
       "LLM_PROVIDER": "gemini",
-      "LLM_MODEL": "gemini-3.5-flash-lite",
-      "LLM_FALLBACK_MODEL": "gemini-3.5-flash-lite",
+      "LLM_MODEL": "gemini-3.8-flash",
+      "LLM_FALLBACK_MODEL": "gemini-3.8-flash",
       "LLM_MODE": "standard",
       "CLAUDE_SUBSCRIPTION_LOCAL_APPROVED": "off",
       "CLAUDE_SUBSCRIPTION_MAX_REQUESTS": "0",

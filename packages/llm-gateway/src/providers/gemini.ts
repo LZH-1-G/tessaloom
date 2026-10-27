@@ -85,6 +85,59 @@ export interface GeminiProviderOptions {
 const localError = (message: string) =>
   new ProviderError("bad_request", message, false, undefined, false);
 
+const GEMINI_STRING_FORMATS = new Set(["date-time", "date", "time"]);
+
+/**
+ * Gemini-safe copy of a structured-output schema. Google documents neither `$defs`/`$ref`
+ * nor formats beyond date-time/date/time, so local definitions are inlined (a cycle fails
+ * closed before sending) and other formats move into the description, like the strict
+ * transform does for other constraints. The gateway's Zod parse still enforces them all.
+ */
+export function geminiResponseSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const defs = (schema.$defs ?? {}) as Record<string, unknown>;
+  const visit = (node: unknown, seen: readonly string[]): unknown => {
+    if (Array.isArray(node)) return node.map((item) => visit(item, seen));
+    if (!node || typeof node !== "object") return node;
+    const { $ref, ...rest } = node as Record<string, unknown>;
+    delete rest.$defs; // inlined below; never sent
+    if ($ref !== undefined) {
+      const name =
+        typeof $ref === "string" && $ref.startsWith("#/$defs/")
+          ? $ref.slice("#/$defs/".length)
+          : null;
+      if (!name || !Object.hasOwn(defs, name) || seen.includes(name))
+        throw localError("Unsupported Gemini response schema reference");
+      return visit({ ...(defs[name] as object), ...rest }, [...seen, name]);
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rest))
+      out[key] =
+        key === "properties" && value && typeof value === "object"
+          ? Object.fromEntries(
+              Object.entries(value).map(([name, child]) => [
+                name,
+                visit(child, seen),
+              ]),
+            )
+          : visit(value, seen);
+    if (
+      typeof out.format === "string" &&
+      !GEMINI_STRING_FORMATS.has(out.format)
+    ) {
+      const note = `{format: ${JSON.stringify(out.format)}}`;
+      out.description =
+        typeof out.description === "string"
+          ? `${out.description} ${note}`
+          : note;
+      delete out.format;
+    }
+    return out;
+  };
+  return visit(schema, []) as Record<string, unknown>;
+}
+
 function assertModel(model: string) {
   if (!(GEMINI_MODELS as readonly string[]).includes(model))
     throw new ProviderError(
@@ -322,13 +375,14 @@ export class GeminiProvider implements LlmProvider {
         role: message.role === "assistant" ? "model" : "user",
         parts: [{ text: message.content }],
       })),
+      // Only fields every approved model accepts. Gemini 3+ does not support candidateCount
+      // or sampling parameters, and 3.8 Flash rejects thinkingLevel "minimal", so each model
+      // keeps its documented default thinking level (3.8 Flash: medium). Thought text is
+      // never requested; thinking tokens count toward maxOutputTokens and are billed.
       generationConfig: {
-        candidateCount: 1,
         maxOutputTokens: request.maxOutputTokens,
         responseMimeType: "application/json",
-        responseJsonSchema: request.jsonSchema,
-        // No chain-of-thought requested. Thinking usage, when returned, is still accounted.
-        thinkingConfig: { includeThoughts: false },
+        responseJsonSchema: geminiResponseSchema(request.jsonSchema),
       },
     };
     if (new TextEncoder().encode(JSON.stringify(body)).length > 128 * 1024)
