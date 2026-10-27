@@ -127,6 +127,10 @@ Keep `SESSION_SECRET` and `SHARE_TOKEN_PEPPER` unchanged; changing the pepper in
 and shares. [`northflank.anthropic.env.example`](../../deploy/northflank.anthropic.env.example) shows
 the same values as a whole environment for reference; do not apply it as a runtime-env body.
 
+> **Executable steps:** [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md) holds the exact commands,
+> expected outputs, stop conditions and rollback for §3–§5, tested read-only against production
+> on 2026-10-27. This file keeps the reasoning; where the two differ, the operator runbook wins.
+
 ## 3. Anthropic Console and key (OWNER, only when approving the final step)
 
 Precondition: §2.2 done, `printenv GLOBAL_DAILY_LLM_USD` → `0`.

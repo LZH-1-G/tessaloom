@@ -1,4 +1,4 @@
-# Demo outline and video script (about 2:45)
+# Demo outline, video and gallery
 
 **Source of footage.** Record the real Spirited Away + Joe Hisaishi project: the local
 acceptance database now, or production after the final acceptance run. Real Qloo results may
@@ -42,16 +42,28 @@ the rest of the page is unchanged. Do the same in any new capture until Qloo ans
 [request](QLOO_PERMISSION_REQUEST.md). Never show access codes, share tokens, keys, terminals or
 browser profiles.
 
-## Video plan (optional under the rules; about 2:45)
+## Produced videos (2026-10-27, kept outside the repository)
 
-- **Footage:** the same local project as the gallery (web-only, no calls), or production once
-  the paid acceptance has created the public sample. Say on screen which one it is.
-- **Recording:** 1440 × 900 browser window, system notifications off, a fresh browser profile,
-  zoom 100%. Follow the table above; keep each screen still for a second before narrating.
-- **Avoid:** opening **Trace** on camera (Qloo IDs), the access-code dialog, the share-link
-  field and any terminal.
-- **Upload:** YouTube or Vimeo, unlisted, then paste the link in Devpost. Captions: auto plus a
-  quick check of entity names.
+| File | What it is |
+| --- | --- |
+| `tessaloom-demo.mp4` | 1:43, 1440 × 900, H.264 + AAC. Eight narrated segments (macOS voice) with on-screen subtitles: brief → entities → discovery (bridges only) → hypothesis lab and evidence drawer → evidence graph → blueprint and traceability meter → read-only story → closing |
+| `tessaloom-mobile-story.mp4` | 0:27, phone format (390 pt wide), the read-only story scrolled with short captions; no audio |
+
+**How they were made (no new calls).** The web process alone served the saved local run
+(`APP_ENV=development`, no worker, no model key), so no Qloo or model call was possible.
+Chromium's screencast captured timestamped frames while a script followed the storyboard; macOS
+`say` produced the narration; a small AVFoundation program wrote H.264 and placed each narration
+segment at its scene's start. A chip on every frame reads *"Saved local run · live Qloo data
+(retrieved 2026-10-26) · Claude Sonnet 5.5 · no new calls while recording"*.
+
+**Checked before delivery:** Qloo pointer IDs are hidden in the evidence drawer and **Trace** is
+never opened; no access code, share-link field, token or terminal appears; the "worker offline"
+banner and status dot of the offline recording setup are hidden, and the chip says so. The
+narration distinguishes Qloo data ("That ranking is Qloo data") from AI interpretation and
+creative speculation.
+
+**Publishing:** both files show Qloo-derived names. Upload them (unlisted) only once Qloo's reply
+allows it, or with that risk accepted knowingly; a video is optional under the rules.
 
 ## Live demo order for judges
 
