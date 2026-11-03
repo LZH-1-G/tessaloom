@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 RUN npm install --global pnpm@10.34.7
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -10,7 +10,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 WORKDIR /app
 RUN node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major !== 22 || minor < 19) process.exit(1)' \
     && apt-get update && apt-get install -y --no-install-recommends tini ca-certificates \
